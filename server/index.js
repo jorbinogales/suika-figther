@@ -91,12 +91,17 @@ app.get('/api/news', (req, res) => {
   }
 });
 
+// the id of the build being served: clients compare it with the one they were built with and reload when it differs
+app.get('/api/version', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try { res.json(JSON.parse(fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../dist/version.json'), 'utf8'))); } catch (e) { res.json({ id: 'dev' }); }
+});
 app.use('/api', (req, res) => res.status(404).json({ error: 'No encontrado' }));
 // production: the same process serves the built game (npm run build -> dist/); in development Vite does it
 const DIST = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../dist');
 if (fs.existsSync(path.join(DIST, 'index.html'))) {
   app.use('/assets', express.static(path.join(DIST, 'assets'), { maxAge: '7d' }));
-  app.use(express.static(DIST, { maxAge: '5m' }));
+  app.use(express.static(DIST, { maxAge: 0, etag: true, setHeaders: (res, f) => { if (/\.html$|version\.json$/.test(f)) res.set('Cache-Control', 'no-cache, no-store, must-revalidate'); } }));
 }
 app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ error: err.type === 'entity.parse.failed' ? 'JSON no válido' : 'Error del servidor' });

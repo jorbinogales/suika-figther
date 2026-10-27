@@ -79,7 +79,7 @@ export class NetGame {
   onDmg(src, t, dmg, type, dot) { if (this.role === 'host' && !dot) this.ev.push(['d', t.nid, r1(dmg), Math.max(0, TYPES.indexOf(type)), t.isNexus ? 2 : t.isTower ? 1 : 0]); }
   onDie(v, killer) { if (this.role === 'host') this.ev.push(['k', v.nid, killer?.nid ?? -1]); }
   onWave(n) { if (this.role === 'host') this.ev.push(['w', n]); }
-  onRewind(lines, dur) { if (this.role === 'host') this.ev.push(['r', r2(dur), lines.map(l => [l.team, l.pts.filter((p, i) => i % 3 === 0 || i === l.pts.length - 1).flat()])]); }
+  onRewind(lines, dur, owner, back) { if (this.role === 'host') this.ev.push(['r', r2(dur), owner.nid, back, lines.map(l => [l.team, l.pts.filter((p, i) => i % 3 === 0 || i === l.pts.length - 1).flat()])]); }
   onShell(sx, sy, tx, ty) { if (this.role === 'host') this.ev.push(['s', r1(sx), r1(sy), r1(tx), r1(ty)]); }
   flush() { if (this.ev.length) { this.send(null, { k: 'ev', l: this.ev }); this.ev = []; } }
 
@@ -213,7 +213,8 @@ export class NetGame {
       if (e[1] === 0) w.audio.voice('v_minions', 1, 'ann_minions', { title: '¡MINIONS DESPLEGADOS!', sub: 'La primera oleada avanza por el carril', team: 2 });
       w.audio.play('minion_yell', { at: { x: 260, y: w.laneY }, vol: 0.5, gap: 200 });
     } else if (e[0] === 'r') {   // Jorbi's rewind trails
-      w.showRewind(e[2].map(([team, flat]) => ({ team, pts: Array.from({ length: flat.length / 2 }, (_, i) => [flat[i * 2], flat[i * 2 + 1]]) })), e[1]);
+      w.announceRewind(this.fighter(e[2]) || w.player, e[3], e[1]);
+      w.showRewind(e[4].map(([team, flat]) => ({ team, pts: Array.from({ length: flat.length / 2 }, (_, i) => [flat[i * 2], flat[i * 2 + 1]]) })), e[1]);
     } else if (e[0] === 's') {
       const [, sx, sy, tx, ty] = e, shell = w.add.circle(sx, sy, 7, 0x333333).setDepth(100000);
       w.tweens.add({ targets: shell, x: tx, y: { value: ty - 8, ease: 'Sine.In' }, scale: 1.8, duration: 800, onComplete: () => { shell.destroy(); w.vfx('shockwave', tx, ty, { scale: 3, below: true }); w.vfx('spark', tx, ty - 20, { scale: 4, tint: 0xffb020 }); w.audio.play('explosion', { at: { x: tx, y: ty }, vol: 0.8, gap: 60 }); } });

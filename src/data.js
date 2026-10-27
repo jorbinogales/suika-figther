@@ -80,8 +80,8 @@ CHAMPIONS.jorbi = {
           desc: 'Pasiva: cada tercer ataque básico es un golpe fuerte que causa daño crítico.',
           critMult: [1.8, 2.3, 2.8] },
     ult: { name: '15 Minutos más', icon: 'jorbi_ult', cd: [80, 70, 60], mana: [100, 100, 100], windup: 0.9, dur: 1.4,
-           desc: 'Retrocede la partida 5 segundos: los súbditos vivos y los campeones vivos, aliados y enemigos, regresan a donde estaban hace 5 segundos (se muestra el camino que recorrieron). Al terminar, los aliados ganan un escudo y velocidad de movimiento y los enemigos quedan ralentizados durante unos segundos.',
-           rewind: 5, travel: 1.3, buffTime: [2.5, 3, 3.5], shield: [90, 140, 190], shieldHpPct: 0.06, speedBoost: [0.3, 0.35, 0.4], slow: [0.4, 0.5, 0.6] },
+           desc: 'Retrocede la partida 5 segundos (10 en rango 2 y 15 en rango 3) y avisa a todos los jugadores: los súbditos vivos y los campeones vivos, aliados y enemigos, regresan a donde estaban (se muestra el camino que recorrieron). Al terminar, los aliados ganan un escudo y velocidad de movimiento y los enemigos quedan ralentizados durante unos segundos.',
+           rewind: [5, 10, 15], travel: [1.3, 1.8, 2.3], buffTime: [2.5, 3, 3.5], shield: [90, 140, 190], shieldHpPct: 0.06, speedBoost: [0.3, 0.35, 0.4], slow: [0.4, 0.5, 0.6] },
   },
 };
 

@@ -55,7 +55,7 @@ export class Hud extends Phaser.Scene {
     this.g = this.add.graphics().setDepth(1);        // dark fills behind the art + bars/minimap
     this.top = this.add.graphics().setDepth(3);      // overlays above icons (cooldown sweep, highlights)
     // the scene object survives restarts but its display objects do not: forget every pooled object / texture of the previous match
-    this.fogImg = null; this.stImgs = {}; this.itImgs = {}; this.bnImgs = {}; this.blindImg = null; this.blindTex = null; this.blindWas = false; if (this.textures.exists('blindmask')) this.textures.remove('blindmask');
+    this.fogImg = null; this.glowG = null; this.hgImg = null; this.stImgs = {}; this.itImgs = {}; this.bnImgs = {}; this.blindImg = null; this.blindTex = null; this.blindWas = false; if (this.textures.exists('blindmask')) this.textures.remove('blindmask');
     this.txt = {}; this.icons = []; this.pimg = {}; this.panels = {}; this.iconRects = []; this.upRects = []; this.helpRect = null;
     this.tipG = this.add.graphics().setDepth(6);
     this.redG = this.add.graphics().setDepth(0.5);   // red screen tint while dead
@@ -144,6 +144,18 @@ export class Hud extends Phaser.Scene {
     if (A.control && A.control.mode === 'ctrl') this.T('ctrlT', `CONTROLANDO a ${A.control.target.def.name.toUpperCase()} · ${A.control.t.toFixed(1)}s`, W / 2, 90 * u, { size: 18 * u, bold: true, color: '#33ff88', origin: [0.5, 0], stroke: 4 });
 
     this.drawBanner(A, u, W);
+    {   // Jorbi's "15 Minutos más": golden glow around every player's screen while it lasts, and an hourglass announcement
+      const G = A.rwGlow, gg = this.glowG || (this.glowG = this.add.graphics().setDepth(0.6)); gg.clear();
+      if (G) {
+        const k = Math.min(1, G.t / 0.8, (G.T - G.t) / 0.25 + 0.15), pulse = 0.8 + 0.2 * Math.sin(this.time.now / 160);
+        for (let i = 0; i < 14; i++) gg.lineStyle(26, 0xffc933, 0.075 * (14 - i) / 14 * k * pulse).strokeRect(i * 11 - 6, i * 11 - 6, W - i * 22 + 12, H - i * 22 + 12);
+        if (G.hg > 0) {
+          const hk = Math.min(1, G.hg / 0.5, (2.6 - G.hg) / 0.25), sz = 150 * u, y0 = 250 * u;
+          if (this.textures.exists('hourglass')) { this.hgImg = this.hgImg?.scene ? this.hgImg : this.add.image(0, 0, 'hourglass').setDepth(8); this.hgImg.setVisible(true).setPosition(W / 2, y0).setDisplaySize(sz, sz).setAlpha(hk).setAngle(Math.min(180, (2.6 - G.hg) * 150)); }
+          else this.T('hgTxt', '⌛', W / 2, y0, { size: 90 * u, origin: [0.5, 0.5], color: '#ffd23f', depth: 8 }).setAlpha(hk);
+        } else this.hgImg?.setVisible(false);
+      } else this.hgImg?.setVisible(false);
+    }
 
     // ---- dead: red screen + respawn countdown at the top ----
     if (!p.alive) {

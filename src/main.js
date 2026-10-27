@@ -3,7 +3,9 @@ import { Boot, Arena } from './world.js';
 import { Hud } from './hud.js';
 import { Menu } from './menu.js';
 import { Launcher } from './launcher.js';
+import { watchVersion } from './version.js';
 
+watchVersion();
 // phones / tablets: index.html shows a notice instead (window.__mobileBlocked)
 if (!window.__mobileBlocked) new Phaser.Game({
   type: Phaser.AUTO, width: '100%', height: '100%', pixelArt: true, backgroundColor: '#1b2a14',

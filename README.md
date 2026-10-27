@@ -11,3 +11,4 @@ MOBA-brawler en pixel art (Phaser 4 + Vite) con launcher, cuentas y salas online
 ## Créditos de arte
 - Terreno base y decorado: *Free Top-Down RPG 32x32 Tile Set* de Mixel (itch.io/mixelslime).
 - Árboles, arbustos, rocas, flores y hongos del bosque: *Top Down Forest Pack* de Brendon Bancer (brendon-bancer.itch.io/topdownpackforestpack).
+- Interfaz del launcher: *Sci-Fi HUD Kit Lite* de Willosuna (itch.io/willosuna), pixel art gratuito para uso comercial.

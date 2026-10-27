@@ -59,3 +59,6 @@ Las cuentas viven en `server/data/devbrawl.db` (SQLite). Haz copia de esa carpet
 - Variables útiles: `PORT` (3001 por defecto), `JWT_SECRET`, `DB_PATH`.
 - Las partidas online las simula el navegador del anfitrión; el servidor solo gestiona cuentas, salas y reenvía mensajes, así que consume muy poco.
 - En móviles el juego muestra un aviso de que no está disponible.
+
+## Actualizaciones forzadas (caché)
+Cada `npm run build` genera un id (`dist/version.json`). El juego abierto lo compara con `/api/version` al cargar, cada minuto y al volver a la pestaña; si el id cambió, borra la caché del navegador y recarga solo (en el launcher al instante, durante una partida al volver al launcher). El `index.html` se sirve siempre sin caché y los archivos de `assets/` llevan hash, así que tras `git pull && npm ci && npm run build && pm2 restart suika` todos los jugadores pasan a la nueva versión sin hacer nada.

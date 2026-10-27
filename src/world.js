@@ -26,6 +26,8 @@ const CROPS = {
 const TREES_BIG = ['tree1', 'tree2', 'tree3'], BUSHES = ['bushA', 'bushB', 'bushC', 'bushD', 'bushE'];
 const ROCKS = ['rockA', 'rockB', 'rockC', 'rockD', 'rockE', 'rockF'];
 const MAP_SCALE = 2;
+const YR = 0.75;   // the map is seen at an angle: ground areas are ellipses squashed to this ratio, not perfect circles
+const eDist = (ax, ay, bx, by) => Math.hypot(ax - bx, (ay - by) / YR);   // distance measured in that ellipse metric
 const FOREST = ['wall1', 'wall2', 'wall3', 'tree1', 'tree2', 'tree3', 'tree4', 'bush1', 'bush2', 'trunk1', 'stone1', 'stone2', 'stone3', 'stone4', 'flower1', 'flower2', 'flower3', 'mush1', 'mush2', 'mush3', 'mush4', 'mush5', 'mush6'];
 const CHAMP_ORDER = ['leandro', 'xeviche', 'jorbi', 'axel', 'julio', 'luis', 'eliud', 'hector'];   // TAB cycles through these
 
@@ -493,7 +495,7 @@ export class Arena extends Phaser.Scene {
     const spec = aimSpec(p.key, key, Math.max(1, p.ranks[key]), p), c = spec.color, spin = (this.time.now * 0.012) % 360;
     const img = (id, tex) => this.aimObj(id, () => this.add.image(0, 0, tex).setDepth(99990)).setVisible(true);
     const tech = p.key === 'luis';   // Luis uses circuit/HUD-style indicators instead of magic runes
-    const ring = (id, x, y, r, a = 0.9) => tech ? this.techRing(x, y, r, c, a) : img(id, 'aim_ring').setPosition(x, y).setDisplaySize(r * 2.04, r * 2.04).setTint(c).setAlpha(a).setAngle(spin);
+    const ring = (id, x, y, r, a = 0.9) => tech ? this.techRing(x, y, r, c, a) : img(id, 'aim_ring').setPosition(x, y).setDisplaySize(r * 2.04, r * 2.04 * YR).setTint(c).setAlpha(a);
     const cap = (id, x, y, size) => img(id, 'aim_cap').setPosition(x, y).setDisplaySize(size, size).setTint(c).setAlpha(0.95);
     if (spec.type === 'line') {
       const ex = p.x + p.ax * spec.range, ey = p.y + p.ay * spec.range;
@@ -572,7 +574,8 @@ export class Arena extends Phaser.Scene {
 
   // technological range indicator: thin outer circle, rotating dashed arcs, tick marks, crosshair with corner brackets
   techRing(x, y, r, c, a = 0.9) {
-    const g = this.aimG, t = this.time.now / 1000;
+    const g = this.aimG, t = this.time.now / 1000, ox = x, oy = y; x = 0; y = 0;
+    g.save(); g.translateCanvas(ox, oy); g.scaleCanvas(1, YR);   // drawn as a circle, shown as the ground ellipse
     g.lineStyle(2, c, a * 0.9).strokeCircle(x, y, r);
     g.fillStyle(c, 0.07 * a).fillCircle(x, y, r);
     for (let i = 0; i < 6; i++) { const s0 = t * 0.9 + i * Math.PI / 3; g.lineStyle(5, c, a).beginPath().arc(x, y, r - 7, s0, s0 + 0.42, false).strokePath(); }
@@ -581,12 +584,13 @@ export class Arena extends Phaser.Scene {
     g.lineStyle(2, c, a * 0.8).lineBetween(x - k, y, x - k * 0.35, y).lineBetween(x + k * 0.35, y, x + k, y).lineBetween(x, y - k, x, y - k * 0.35).lineBetween(x, y + k * 0.35, x, y + k);
     const bk = Math.min(r * 0.5, 46);
     [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(([sx, sy]) => g.lineStyle(3, c, a).beginPath().moveTo(x + sx * bk, y + sy * (bk - 12)).lineTo(x + sx * bk, y + sy * bk).lineTo(x + sx * (bk - 12), y + sy * bk).strokePath());
+    g.restore();
   }
 
   // persistent ground decal for an active area effect (fades out)
   zoneDecal(x, y, r, color, life) {
     if (!this.textures.exists('zone') || !this.inView(x, y, r)) return;
-    const d = this.add.image(x, y, 'zone').setDepth(y - 3).setTint(color).setAlpha(0).setDisplaySize(r * 2.1, r * 2.1);
+    const d = this.add.image(x, y, 'zone').setDepth(y - 3).setTint(color).setAlpha(0).setDisplaySize(r * 2.1, r * 2.1 * YR);
     this.tweens.add({ targets: d, alpha: 0.9, duration: 150 });
     this.tweens.add({ targets: d, alpha: 0, angle: 40, delay: life * 1000 - 400, duration: 400, onComplete: () => d.destroy() });
   }
@@ -597,7 +601,7 @@ export class Arena extends Phaser.Scene {
     const d = dist(t, f) || 1, r = Math.min(d, max);
     return { x: f.x + (t.x - f.x) / d * r, y: f.y + (t.y - f.y) / d * r };
   }
-  enemiesNear(team, x, y, r) { return this.fighters.filter(t => t.alive && t.team !== team && Math.hypot(t.x - x, t.y - y) <= r); }
+  enemiesNear(team, x, y, r) { return this.fighters.filter(t => t.alive && t.team !== team && eDist(t.x, t.y, x, y) <= r); }
 
   // tires are solid: nobody walks through them, anyone caught under a new wall is pushed out
   resolveSolids(f) {
@@ -747,21 +751,21 @@ export class Arena extends Phaser.Scene {
   }
 
   /* ---------- Jorbi's "15 Minutos más": rewind ---------- */
-  recordHistory(dt) {   // positions of every minion / champion for the last ~6 s (10 samples per second); only the simulating side keeps it
+  recordHistory(dt) {   // positions of every minion / champion for the last ~16 s (10 samples per second); only the simulating side keeps it
     this.histT = (this.histT || 0) - dt; if (this.histT > 0 || this.net?.role === 'client') return; this.histT = 0.1;
     const d = new Map(); this.fighters.forEach(f => { if (f.alive && (f.isChamp || f.isMinion)) d.set(f.nid, [Math.round(f.x), Math.round(f.y)]); });
-    (this.hist ||= []).push({ t: this.gameT, d }); while (this.hist.length && this.gameT - this.hist[0].t > 6) this.hist.shift();
+    (this.hist ||= []).push({ t: this.gameT, d }); while (this.hist.length && this.gameT - this.hist[0].t > 16) this.hist.shift();
   }
   startRewind(owner, a, rank) {
     if (this.net?.role === 'client') return;
-    const now = this.gameT, dur = a.travel, lines = [], units = this.fighters.filter(f => f.alive && !f.away && (f.isChamp || f.isMinion) && !f.owner);
+    const now = this.gameT, back = rk(a.rewind, rank), dur = rk(a.travel, rank), lines = [], units = this.fighters.filter(f => f.alive && !f.away && (f.isChamp || f.isMinion) && !f.owner);
     for (const f of units) {
-      const path = []; for (const h of this.hist || []) { if (now - h.t > a.rewind + 0.05) continue; const e = h.d.get(f.nid); if (e) path.push(e); }
+      const path = []; for (const h of this.hist || []) { if (now - h.t > back + 0.05) continue; const e = h.d.get(f.nid); if (e) path.push(e); }
       if (path.length < 2) continue; path.push([Math.round(f.x), Math.round(f.y)]);
       f.rw = { path, t: 0, dur }; f.pending = null; f.stunT = 0; f.state = 'idle';
       lines.push({ team: f.team, pts: path });
     }
-    this.showRewind(lines, dur); this.net?.onRewind(lines, dur);
+    this.announceRewind(owner, back, dur); this.showRewind(lines, dur); this.net?.onRewind(lines, dur, owner, back);
     this.after(dur + 0.05, () => this.finishRewind(owner, a, rank, units));
   }
   finishRewind(owner, a, rank, units) {
@@ -773,6 +777,12 @@ export class Arena extends Phaser.Scene {
       else { f.slow(sl, t); this.vfx('spark', f.x, f.cy, { scale: 3, tint: 0x66aaff }); }
     });
     this.castCtx = null; this.audio.play('ui_upgrade', { at: owner, vol: 0.8, gap: 0 });
+  }
+  // announcement on every player's screen
+  announceRewind(owner, back, dur = 1.5) {
+    this.rwGlow = { t: dur + 3, T: dur + 3, hg: 2.6 };   // golden screen glow while the effect lasts + the hourglass on every screen
+    this.showBanner({ title: `${owner.def.name.toUpperCase()} USÓ SU RELOJ`, sub: `La partida retrocede ${back} segundos`, team: owner.baseTeam, face: this.faceOf(owner), kind: 'streak', big: 3 }, 3200);
+    this.audio.play('ui_announce', { vol: 0.8, gap: 0 });
   }
   showRewind(lines, dur) { this.rwTrail = { lines, t: 0, dur: dur + 1.4 }; }
   drawRewind(dt) {
@@ -1092,7 +1102,7 @@ export class Arena extends Phaser.Scene {
 
   /* ---------- world API used by fighters ---------- */
   enemiesOf(f) { return this.fighters.filter(t => t.alive && !t.away && t.team !== f.team); }
-  enemiesWithin(f, r) { return this.enemiesOf(f).filter(t => dist(t, f) <= r); }
+  enemiesWithin(f, r) { return this.enemiesOf(f).filter(t => eDist(t.x, t.y, f.x, f.y) <= r); }
   meleeHits(f, reach) {
     return this.enemiesOf(f).filter(t => {
       const d = dist(t, f);
@@ -1231,7 +1241,7 @@ export class Arena extends Phaser.Scene {
 
   vfx(name, x, y, { scale = 3, alpha = 1, tint = null, below = false } = {}) {
     if (!this.inView(x, y, 260)) return null;   // effects outside the camera are never seen: do not even create them
-    const s = this.add.sprite(x, y, 'vfx_' + name).setScale(scale).setDepth(below ? y - 2 : y + 2).setAlpha(alpha);
+    const s = this.add.sprite(x, y, 'vfx_' + name).setScale(scale, name === 'shockwave' ? scale * YR : scale).setDepth(below ? y - 2 : y + 2).setAlpha(alpha);
     if (tint) s.setTint(tint);
     s.play({ key: 'vfx_' + name, repeat: 0 });
     s.once('animationcomplete', () => s.destroy());
@@ -1259,9 +1269,9 @@ export class Arena extends Phaser.Scene {
   // cacti ring the zone and fill it (outer ring first, then the inside), then fade
   cacti(cx, cy, radius) {
     const pts = [], ringN = Math.round(radius * 0.108), fillN = Math.round(radius * 0.085);
-    for (let i = 0; i < ringN; i++) { const a = (i / ringN) * Math.PI * 2 + Math.random() * 0.2; pts.push({ x: cx + Math.cos(a) * radius * 0.96, y: cy + Math.sin(a) * radius * 0.96 * 0.9, ring: true }); }
+    for (let i = 0; i < ringN; i++) { const a = (i / ringN) * Math.PI * 2 + Math.random() * 0.2; pts.push({ x: cx + Math.cos(a) * radius * 0.96, y: cy + Math.sin(a) * radius * 0.96 * YR, ring: true }); }
     for (let i = 0, tries = 0; i < fillN && tries < 300; tries++) {
-      const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * radius * 0.78, q = { x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r * 0.9 };
+      const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * radius * 0.78, q = { x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r * YR };
       if (pts.every(o => Math.hypot(o.x - q.x, o.y - q.y) > 40)) { pts.push(q); i++; }
     }
     pts.forEach((q, i) => {
@@ -1374,6 +1384,7 @@ export class Arena extends Phaser.Scene {
     this.drawAim();
     this.drawRangeHint();
     this.drawRewind(dt);
+    if (this.rwGlow) { this.rwGlow.t -= dt; this.rwGlow.hg -= dt; if (this.rwGlow.t <= 0) this.rwGlow = null; }
     this.updateFog(dt);
     this.net?.post(dt);
   }
@@ -1390,8 +1401,8 @@ export class Arena extends Phaser.Scene {
       }
       if (z.kind === 'infect') {   // Leandro's contracts: a green infected area that poisons everyone inside
         if (z.t <= 0) { z.decal?.destroy(); return false; }
-        if (this.textures.exists('zone')) z.decal ||= this.add.image(z.x, z.y, 'zone').setTint(0x7dff4a).setAlpha(0.7).setDepth(z.y - 3).setDisplaySize(z.r * 2.1, z.r * 1.7);
-        z.decal?.setAngle(z.decal.angle + dt * 22).setAlpha(Math.min(0.7, z.t * 0.7));
+        if (this.textures.exists('zone')) z.decal ||= this.add.image(z.x, z.y, 'zone').setTint(0x7dff4a).setAlpha(0.7).setDepth(z.y - 3).setDisplaySize(z.r * 2.1, z.r * 2.1 * YR);
+        z.decal?.setAlpha(Math.min(0.7, z.t * 0.7));
         z.tick += dt;
         if (z.tick >= 0.5) {
           z.tick -= 0.5; this.vfx('poison_cloud', z.x + Phaser.Math.Between(-z.r * 0.6, z.r * 0.6), z.y + Phaser.Math.Between(-z.r * 0.4, z.r * 0.4) - 10, { scale: 2.2, alpha: 0.7, below: true });
@@ -1424,14 +1435,14 @@ export class Arena extends Phaser.Scene {
       }
       if (z.kind === 'malware') {   // infected zone: stays for a while, anyone enemy that walks in is affected
         if (z.t <= 0) { z.decal?.destroy(); z.icon?.destroy(); return false; }
-        if (this.textures.exists('zone')) z.decal ||= this.add.image(z.x, z.y, 'zone').setTint(z.col).setAlpha(0.75).setDepth(z.y - 3).setDisplaySize(z.r * 2.1, z.r * 2.1);
-        z.decal?.setAngle(z.decal.angle + dt * 18).setAlpha(Math.min(0.75, z.t * 0.5));
+        if (this.textures.exists('zone')) z.decal ||= this.add.image(z.x, z.y, 'zone').setTint(z.col).setAlpha(0.75).setDepth(z.y - 3).setDisplaySize(z.r * 2.1, z.r * 2.1 * YR);
+        z.decal?.setAlpha(Math.min(0.75, z.t * 0.5));
         const itex = 'laptop_' + z.type;
         if (this.textures.exists(itex)) { z.icon ||= this.add.image(z.x, z.y - 40, itex).setDepth(z.y + 50); z.icon.setPosition(z.x, z.y - 55 + Math.sin(this.time.now / 300) * 6).setDisplaySize(86, 70).setAlpha(Math.min(1, z.t)); }
         this.fighters.forEach(f => {
           if (!f.alive || f.away || f.isTower || f.team === o.team) return;
           const cd = (z.cd.get(f) || 0) - dt;
-          if (Math.hypot(f.x - z.x, f.y - z.y) <= z.r) { if (cd <= 0) { z.apply(f, !z.first.has(f)); z.first.add(f); z.cd.set(f, 1.0); } else z.cd.set(f, cd); }
+          if (eDist(f.x, f.y, z.x, z.y) <= z.r) { if (cd <= 0) { z.apply(f, !z.first.has(f)); z.first.add(f); z.cd.set(f, 1.0); } else z.cd.set(f, cd); }
           else z.cd.set(f, Math.max(0, cd));
         });
         return true;
@@ -1445,16 +1456,16 @@ export class Arena extends Phaser.Scene {
           if (!o.away && !o.hiddenFor(this.player)) {
             g.setDepth(o.y + 40);
             const N = Math.round(z.r * 0.55), cols = [0xffffff, 0x33ff88, 0x0a1a10, 0x9affc8, 0x000000];
-            for (let n = 0; n < N; n++) { const a = Math.random() * 6.283, d = Math.sqrt(Math.random()) * z.r, sz = Phaser.Math.Between(3, 8); g.fillStyle(cols[Math.random() * cols.length | 0], 0.35 + Math.random() * 0.4).fillRect(o.x + Math.cos(a) * d, o.y + Math.sin(a) * d * 0.85, sz, Math.random() < 0.3 ? 2 : sz); }
+            for (let n = 0; n < N; n++) { const a = Math.random() * 6.283, d = Math.sqrt(Math.random()) * z.r, sz = Phaser.Math.Between(3, 8); g.fillStyle(cols[Math.random() * cols.length | 0], 0.35 + Math.random() * 0.4).fillRect(o.x + Math.cos(a) * d, o.y + Math.sin(a) * d * YR, sz, Math.random() < 0.3 ? 2 : sz); }
             for (let n = 0; n < 4; n++) { const a = Math.random() * 6.283; g.fillStyle(0x33ff88, 0.4).fillRect(o.x + Math.cos(a) * z.r * 0.5 - 30, o.y + Math.sin(a) * z.r * 0.45, Phaser.Math.Between(30, 90), 3); }
           }
         }
-        this.fighters.forEach(f => { if (f.alive && f.isChamp && f.team !== o.team && !z.free.has(f) && dist(f, o) <= z.r) { f.silenceT = Math.max(f.silenceT, 0.3); this.markSrc(f, 'silence'); } });
+        this.fighters.forEach(f => { if (f.alive && f.isChamp && f.team !== o.team && !z.free.has(f) && eDist(f.x, f.y, o.x, o.y) <= z.r) { f.silenceT = Math.max(f.silenceT, 0.3); this.markSrc(f, 'silence'); } });
         return true;
       }
       if (z.kind === 'puddle') {
         if (z.t <= 0) { z.decal?.destroy(); return false; }
-        z.decal ||= this.add.image(z.x, z.y, this.textures.exists('ink_blot') ? 'ink_blot' : 'zone').setTint(0x4a2cc0).setAlpha(0.85).setDepth(-899).setDisplaySize(z.r * 2.1, z.r * 1.7);
+        z.decal ||= this.add.image(z.x, z.y, this.textures.exists('ink_blot') ? 'ink_blot' : 'zone').setTint(0x4a2cc0).setAlpha(0.85).setDepth(-899).setDisplaySize(z.r * 2.1, z.r * 2.1 * YR);
         this.fighters.filter(f => f.alive && f.team !== o.team && !f.isTower).forEach(f => {
           if (Math.hypot(f.x - z.x, (f.y - z.y) / 0.8) > z.r) { z.inside.delete(f); return; }
           f.slow(z.slow, 0.15);
@@ -1466,12 +1477,12 @@ export class Arena extends Phaser.Scene {
       if (z.t <= 0 || !o.alive) { z.decal?.destroy(); return false; }
       if (this.textures.exists('zone')) {
         z.decal ||= this.add.image(o.x, o.y, 'zone').setTint(0x5dff8a).setAlpha(0.8);
-        z.decal.setPosition(o.x, o.y).setDepth(o.y - 3).setDisplaySize(z.r * 2.1, z.r * 2.1).setAngle(z.decal.angle + dt * 25);
+        z.decal.setPosition(o.x, o.y).setDepth(o.y - 3).setDisplaySize(z.r * 2.1, z.r * 2.1 * YR);
       }
       z.tick += dt;
       if (z.tick >= 0.5) {
         z.tick -= 0.5;
-        this.fighters.filter(f => f.alive && f.isChamp && f.team === o.team && dist(f, o) <= z.r).forEach(f => {
+        this.fighters.filter(f => f.alive && f.isChamp && f.team === o.team && eDist(f.x, f.y, o.x, o.y) <= z.r).forEach(f => {
           const h = Math.min(z.hps * 0.5, f.maxHp - f.hp); if (h > 0.4) { f.hp += h; this.float(f.x + Phaser.Math.Between(-12, 12), f.y - f.def.height - 6, `+${Math.round(h)}`, '#5dff8a'); }
         });
         this.vfx('heal', o.x + Phaser.Math.Between(-z.r * 0.7, z.r * 0.7), o.y + Phaser.Math.Between(-z.r * 0.3, z.r * 0.3) - 20, { scale: 2, alpha: 0.8, below: true });

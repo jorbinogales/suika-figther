@@ -125,3 +125,18 @@ label.l{display:block;font-size:12px;letter-spacing:.2em;color:var(--mut);margin
   .chip{font-size:13px}.btn{font-size:12px;letter-spacing:.08em}.ctab{padding:4px 7px 4px 4px}.ctab span{display:none}.ctab i{font-size:12px}
   .row{flex-wrap:wrap}.mbtn{min-width:0}#tip{max-width:86vw}
 }
+/* ---- sci-fi UI kit: "Sci-Fi HUD Kit Lite" by Willosuna (pixel art, free for commercial use) ---- */
+.panel,.btn,.vol input[type=range]{image-rendering:pixelated}
+.panel{background:none;border:0;border-image:url(assets/ui/scifi/panel_9slice.png) 9 fill / 36px stretch;clip-path:none;box-shadow:none;padding:50px 34px 32px}
+.panel.info,.panel.chat{padding-top:44px}
+.btn{border:0;border-image:url(assets/ui/scifi/button_cyan_normal.png) 6 fill / 24px stretch;clip-path:none;background:none;padding:14px 26px;color:#eaffff;text-shadow:0 2px 0 #052233;font-weight:900}
+.btn:hover:not(:disabled){border-image-source:url(assets/ui/scifi/button_cyan_hover.png);background:none;box-shadow:none;transform:translateY(-1px);filter:brightness(1.15)}
+.btn:active:not(:disabled){border-image-source:url(assets/ui/scifi/button_cyan_pressed.png);transform:none}
+.btn.go{filter:hue-rotate(-95deg) saturate(1.1)}.btn.go:hover:not(:disabled){filter:hue-rotate(-95deg) saturate(1.1) brightness(1.15)}
+.btn.warn{filter:hue-rotate(150deg) saturate(1.3)}.btn.ghost{filter:grayscale(.55) brightness(.9);color:#eaffff}
+.btn.go,.btn.warn,.btn.ghost,.btn.mbtn,.btn.mbtn.on{background:none!important}
+.btn.mbtn:not(.on){filter:grayscale(.7) brightness(.85)}.btn.mbtn.red{filter:hue-rotate(150deg) saturate(1.4)}
+.btn.big{padding:20px 28px}.btn.sm{padding:10px 16px}.btn.big small{color:#bfeaff}.btn:disabled{filter:grayscale(1) brightness(.6)}
+.chip,.ctab{clip-path:none}.team h4{white-space:normal}
+.abi,.cc{border-image:none}.pl.me{box-shadow:0 0 0 1px var(--cy) inset}
+@media(max-width:900px){.panel{padding:42px 20px 24px;border-image-width:28px}}
