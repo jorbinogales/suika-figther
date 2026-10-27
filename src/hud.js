@@ -302,7 +302,10 @@ export class Hud extends Phaser.Scene {
     const btn = (id, label, x, y, w, h, fn, col = 0x1d3a5c) => {
       if (this.input.activePointer.x >= x && this.input.activePointer.x <= x + w && this.input.activePointer.y >= y && this.input.activePointer.y <= y + h) { if (this.hovBtn !== id) { this.hovBtn = id; A.audio.play('ui_hover', { gap: 0, vol: 0.5 }); } } else if (this.hovBtn === id) this.hovBtn = null;
       const over = this.input.activePointer.x >= x && this.input.activePointer.x <= x + w && this.input.activePointer.y >= y && this.input.activePointer.y <= y + h;
-      ov.fillStyle(over ? 0x2e6aa8 : col).fillRect(x, y, w, h).lineStyle(2, 0x3fd0ff, 0.9).strokeRect(x, y, w, h);
+      const danger = col === 0x5c1d1d, rad = Math.min(7 * u, h / 2), bord = danger ? 0xff7a7a : 0x3fd0ff;
+      if (over) ov.lineStyle(2, bord, 0.35).strokeRoundedRect(x - 2 * u, y - 2 * u, w + 4 * u, h + 4 * u, rad + 2 * u);
+      ov.fillStyle(over ? (danger ? 0x8a2b2b : 0x1d7fc4) : col, 0.97).fillRoundedRect(x, y, w, h, rad).lineStyle(2, over ? (danger ? 0xffa0a0 : 0x8ae2ff) : bord, over ? 1 : 0.8).strokeRoundedRect(x, y, w, h, rad);
+      ov.lineStyle(1, 0xffffff, over ? 0.35 : 0.18).lineBetween(x + 10 * u, y + 2.5 * u, x + w - 10 * u, y + 2.5 * u);
       this.T('b' + id, label, x + w / 2, y + h / 2, { size: h * 0.45, bold: true, origin: [0.5, 0.5], depth: 22 });
       this.btns.push({ x, y, w, h, fn });
     };
@@ -311,27 +314,37 @@ export class Hud extends Phaser.Scene {
     if (!this.overlay) {
       const mb = { x: 12, y: 44 * u, w: 92 * u, h: 26 * u }; this.boxes.push(mb);
       const over = this.input.activePointer.x >= mb.x && this.input.activePointer.x <= mb.x + mb.w && this.input.activePointer.y >= mb.y && this.input.activePointer.y <= mb.y + mb.h;
-      o.fillStyle(over ? 0x2e6aa8 : 0x0f2038).fillRect(mb.x, mb.y, mb.w, mb.h).lineStyle(2, 0x3fd0ff, 0.9).strokeRect(mb.x, mb.y, mb.w, mb.h);
+      o.fillStyle(over ? 0x1d7fc4 : 0x0a1a30, 0.95).fillRoundedRect(mb.x, mb.y, mb.w, mb.h, 6 * u).lineStyle(2, over ? 0x8ae2ff : 0x3fd0ff, over ? 1 : 0.8).strokeRoundedRect(mb.x, mb.y, mb.w, mb.h, 6 * u);
       this.T('menuBtn', '☰ MENÚ (Esc)', mb.x + mb.w / 2, mb.y + mb.h / 2, { size: 11 * u, bold: true, origin: [0.5, 0.5], stroke: 2 });
       this.btns.push({ ...mb, fn: () => A.togglePause() });
     } else {
       this.boxes.push({ x: 0, y: 0, w: W, h: H });
-      ov.fillStyle(0x000000, 0.62).fillRect(0, 0, W, H);
+      ov.fillStyle(0x020812, 0.68).fillRect(0, 0, W, H);
       const pw = 380 * u, px0 = W / 2 - pw / 2, bh = 46 * u;
+      // panel de cristal tech oscuro (estilo B) detrás del contenido
+      const pW = Math.min(pw + 52 * u, W - 16 * u), pX = W / 2 - pW / 2, pTop = finished ? H / 2 - 184 * u : H / 2 - 200 * u, pH = finished ? 268 * u : 408 * u;
+      ov.lineStyle(2, 0x3fd0ff, 0.22).strokeRoundedRect(pX - 3 * u, pTop - 3 * u, pW + 6 * u, pH + 6 * u, 14 * u);
+      ov.fillStyle(0x0a1a30, 0.94).fillRoundedRect(pX, pTop, pW, pH, 12 * u).lineStyle(2, 0x3fd0ff, 0.65).strokeRoundedRect(pX, pTop, pW, pH, 12 * u);
+      ov.lineStyle(1, 0x8ae2ff, 0.35).lineBetween(pX + 14 * u, pTop + 2.5 * u, pX + pW - 14 * u, pTop + 2.5 * u);
       if (finished) {
         const win = A.over.winner === A.player.baseTeam;
         this.T('ovTitle', win ? '¡VICTORIA!' : 'DERROTA', W / 2, H / 2 - 120 * u, { size: 64 * u, bold: true, color: win ? '#7dff9a' : '#ff6a6a', origin: [0.5, 0.5], stroke: 8, depth: 22 });
         this.T('ovSub', win ? 'El nexo enemigo ha caído' : 'Tu nexo ha sido destruido', W / 2, H / 2 - 60 * u, { size: 18 * u, color: '#cfe3ff', origin: [0.5, 0.5], stroke: 4, depth: 22 });
         btn('leave', 'VOLVER AL MENÚ', px0, H / 2 - 10 * u, pw, bh, () => this.leave());
       } else {
-        this.T('ovTitle', 'PAUSA', W / 2, H / 2 - 150 * u, { size: 48 * u, bold: true, color: '#ffe066', origin: [0.5, 0.5], stroke: 6, depth: 22 });
+        this.T('ovTitle', 'PAUSA', W / 2, H / 2 - 150 * u, { size: 48 * u, bold: true, color: '#eaf7ff', origin: [0.5, 0.5], stroke: 6, depth: 22 });
+        ov.fillStyle(0x3fd0ff, 0.9).fillRoundedRect(W / 2 - 34 * u, H / 2 - 121 * u, 68 * u, 3 * u, 2 * u);
         btn('resume', 'CONTINUAR', px0, H / 2 - 100 * u, pw, bh, () => A.togglePause());
         // volume bars (click or drag): the filled part is the current level
         [['music', 'MÚSICA', 0x3fd0ff], ['sfx', 'EFECTOS', 0x7dff9a], ['voice', 'VOZ ANUNCIADOR', 0xffd23f]].forEach(([k, label, col], n) => {
           const y = H / 2 + 80 * u + n * 34 * u, lw = 150 * u, bx = px0 + lw, bw = pw - lw - 56 * u, bhh = 16 * u;
           this.T('vl' + k, label, px0, y + bhh / 2, { size: 12 * u, bold: true, color: '#cfe3ff', origin: [0, 0.5], stroke: 3, depth: 22 });
-          ov.fillStyle(0x070a12, 1).fillRect(bx, y, bw, bhh).fillStyle(col, 0.9).fillRect(bx, y, bw * vol[k], bhh).fillStyle(0xffffff, 0.25).fillRect(bx, y, bw * vol[k], bhh * 0.35).lineStyle(2, 0x3fd0ff, 0.9).strokeRect(bx, y, bw, bhh);
-          ov.fillStyle(0xffffff, 1).fillRect(bx + bw * vol[k] - 2 * u, y - 3 * u, 4 * u, bhh + 6 * u);
+          const trad = bhh / 2;
+          ov.lineStyle(2, col, 0.28).strokeRoundedRect(bx - 2 * u, y - 2 * u, bw + 4 * u, bhh + 4 * u, trad + 2 * u);
+          ov.fillStyle(0x08182e, 1).fillRoundedRect(bx, y, bw, bhh, trad);
+          if (vol[k] > 0) { ov.fillStyle(col, 0.95).fillRoundedRect(bx, y, Math.max(bhh, bw * vol[k]), bhh, trad); ov.fillStyle(0xffffff, 0.28).fillRoundedRect(bx + 2 * u, y + 2 * u, Math.max(0, bw * vol[k] - 4 * u), bhh * 0.32, 2 * u); }
+          ov.lineStyle(1, 0x3fd0ff, 0.45).strokeRoundedRect(bx, y, bw, bhh, trad);
+          ov.fillStyle(0xeaf7ff, 1).fillRoundedRect(bx + bw * vol[k] - 3 * u, y - 3 * u, 6 * u, bhh + 6 * u, 3 * u).lineStyle(1, col, 0.9).strokeRoundedRect(bx + bw * vol[k] - 3 * u, y - 3 * u, 6 * u, bhh + 6 * u, 3 * u);
           this.T('vp' + k, `${Math.round(vol[k] * 100)}%`, bx + bw + 8 * u, y + bhh / 2, { size: 12 * u, bold: true, color: '#fff', origin: [0, 0.5], stroke: 3, depth: 22 });
           this.volBars.push({ x: bx - 4 * u, y: y - 8 * u, w: bw + 8 * u, h: bhh + 16 * u, bx, bw, key: k });
         });
