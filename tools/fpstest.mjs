@@ -1,0 +1,11 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader', '--mute-audio'], defaultViewport: { width: 1280, height: 720 } });
+const p = await b.newPage(); p.on('pageerror', e => console.log('[pageerror]', e.message));
+await p.goto('http://localhost:5173/#mode=5&keep=1', { waitUntil: 'load' }); await new Promise(r => setTimeout(r, 14000));
+const fps = () => p.evaluate(`new Promise(res => { let n = 0, t0 = performance.now(); const f = () => { n++; if (performance.now() - t0 > 6000) res(Math.round(n / ((performance.now() - t0) / 1000) * 10) / 10); else requestAnimationFrame(f); }; requestAnimationFrame(f); })`);
+await p.evaluate(`(() => { const a = window.__arena; a.handleInput = () => {}; a.player.ai = true; a.audio.play = () => {}; a.audio.playAll = () => {}; a.audio.voice = () => {}; })()`);
+await new Promise(r => setTimeout(r, 25000));
+console.log('units', await p.evaluate(`window.__arena.fighters.length`), 'fps with glow on every unit:', await fps());
+await p.evaluate(`window.__arena.fighters.forEach(f => { if (!f.isTower) { try { f.spr.renderFilters = false; } catch (e) {} } })`);
+console.log('fps with glow only on towers/nexus:', await fps());
+await b.close();

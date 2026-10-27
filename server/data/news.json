@@ -24,7 +24,9 @@
       "La pantalla de práctica y entrenamiento ahora tiene el mismo diseño que la selección de campeones del launcher (pestañas por tipo, habilidades con tooltip, equipos).",
       "El launcher usa los mismos sonidos de interfaz que tenía el menú de entrenamiento.",
       "El juego muestra un aviso cuando se abre desde un dispositivo móvil: no está disponible para móviles.",
-      "La interfaz del launcher se adapta al ancho de la pantalla."
+      "La interfaz del launcher se adapta al ancho de la pantalla.",
+      "Rendimiento: se quitó el brillo por sprite (muy costoso) y se reemplazó por anillos de equipo en el suelo; las partidas con muchas unidades van mucho más fluidas.",
+      "Las comunicaciones del servidor ahora van comprimidas, usando menos ancho de banda en salas llenas."
     ]
   },
   {

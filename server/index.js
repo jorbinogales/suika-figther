@@ -276,7 +276,8 @@ const handlers = {
 
 // ---------- WebSocket ----------
 const server = http.createServer(app);
-const wss = new WebSocketServer({ noServer: true, maxPayload: 70 * 1024 });
+// snapshots are ~4 KB of repetitive JSON at 15 Hz per player: permessage-deflate cuts that to a third at negligible CPU
+const wss = new WebSocketServer({ noServer: true, maxPayload: 70 * 1024, perMessageDeflate: { threshold: 400, zlibDeflateOptions: { level: 3 }, serverNoContextTakeover: true, clientNoContextTakeover: true, concurrencyLimit: 8 } });
 
 server.on('upgrade', (req, socket, head) => {
   const url = new URL(req.url, 'http://x');

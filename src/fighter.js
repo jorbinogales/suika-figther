@@ -844,13 +844,15 @@ export class Fighter {
 
   flash() { this.spr.setTint(0xff5555); this.w.after(0.08, () => { this.spr.clearTint(); this.tintBot(); }); }
 
-  // colored outline: green = champion in use, blue = ally, red = enemy
+  // team marker: green = champion in use, blue = ally, red = enemy. A ground ring (cheap); the per-sprite WebGL glow filter it replaced
+  // cost 2-4x the frame time once a few dozen units were on screen (the main cause of lag in big matches).
   outline() {
     const me = this.w.player;
     if (!me || this.outlined) return;
     this.outlined = true;
-    const color = this === me ? 0x3ddc84 : this.team === me.baseTeam ? 0x3b82f6 : 0xff3b3b;
-    try { this.spr.enableFilters(); this.spr.filters.internal.addGlow(color, 6, 0, 1, false, 10, 4); } catch (e) { /* canvas renderer: no filters */ }
+    if (this.ring) return;   // champions already have their ring (buildSprite)
+    const col = this.team === me.baseTeam ? 0x3b82f6 : 0xff3b3b, wd = this.isTower ? (this.def.radius || 40) * 2.1 : this.def.height * 0.6;
+    this.ring = this.w.add.ellipse(this.x, this.y, wd, wd * (this.isTower ? 0.5 : 0.4), col, 0.14).setStrokeStyle(2, col, 0.75);
   }
 
   // blinded player: only units inside the (blurred) vision area can be seen
@@ -869,7 +871,9 @@ export class Fighter {
     spr.setDepth(this.y).setAlpha(this.alive ? 1 : this.isTower && !this.dirFrames ? 0.35 : 0.92);
     if (this.ring) {
       const me = this.w.player, col = this === me ? 0x3ddc84 : this.team === me.baseTeam ? 0x3b82f6 : 0xff3b3b, sel = this.w.selected === this;
-      this.ring.setPosition(this.x, this.y).setDepth(this.y - 3).setVisible(this.alive && !this.hiddenFor(me)).setStrokeStyle(sel ? 5 : 3, col, sel ? 1 : 0.85).setFillStyle(col, sel ? 0.22 : 0.1);
+      this.ring.setPosition(this.x, this.y).setDepth(this.y - 3).setVisible(this.alive && !this.hiddenFor(me));
+      const rk = col * 4 + (sel ? 1 : 0) + (this.isChamp ? 2 : 0);
+      if (rk !== this.ringKey) { this.ringKey = rk; this.isChamp ? this.ring.setStrokeStyle(sel ? 5 : 3, col, sel ? 1 : 0.85).setFillStyle(col, sel ? 0.22 : 0.1) : this.ring.setStrokeStyle(sel ? 3 : 2, col, sel ? 1 : 0.75).setFillStyle(col, sel ? 0.25 : 0.14); }   // restyle only when something changed
     }
     this.shadow.setPosition(this.x, this.y).setDepth(this.y - 1).setAlpha(this.alive ? 0.45 : 0.25);
     if (this.away || this.invis || (this.antivirus && this.owner?.invis)) { const hid = this.hiddenFor(this.w.player), al = hid ? 0 : 0.4; spr.setAlpha(al); this.shadow.setAlpha(al * 0.45); }
