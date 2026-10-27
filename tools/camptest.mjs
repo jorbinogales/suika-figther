@@ -1,0 +1,12 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--enable-unsafe-swiftshader', '--use-gl=angle', '--mute-audio'], defaultViewport: { width: 1280, height: 720 } });
+const p = await b.newPage(); p.on('pageerror', e => console.log('[pageerror]', e.message));
+await p.goto('http://localhost:5173/#mode=3&keep=1&noai=1&nofog=1', { waitUntil: 'load' }); await new Promise(r => setTimeout(r, 14000));
+console.log(await p.evaluate(`(() => { const a = window.__arena, f = a.player; a.handleInput = () => {}; a.audio.play = () => {}; a.audio.playAll = () => {}; a.audio.voice = () => {}; const step = n => { for (let i = 0; i < n; i++) a.update(a.time.now + i * 16, 16.7); };
+  const c = a.camps[3]; f.ai = false; f.x = c.x; f.y = c.y; const out = {}; a.champs.forEach(q => { if (q !== f) { q.x = 100; q.y = 100; q.ai = false; } });
+  step(60 * 4); out.half = [c.owner, +c.prog[0].toFixed(2)]; a.cameras.main.stopFollow(); a.cameras.main.centerOn(c.x, c.y - 80); window.__shotpos = true;
+  step(60 * 6); out.captured = [c.owner, +c.prog[0].toFixed(2)];
+  step(60 * 5.5); out.ships = a.ships.length; const m0 = a.fighters.filter(q => q.path).length; step(60 * 3); out.reinf = a.fighters.filter(q => q.path).length; out.dropping = a.fighters.filter(q => q.drop).length;
+  const mm = a.fighters.find(q => q.path); out.pathPts = mm && mm.path.length; const x0 = mm && mm.x; f.x = 900; f.y = 700; step(60 * 12); out.moved = mm && Math.round(mm.x - x0); out.minionPos = mm && [Math.round(mm.x), Math.round(mm.y), mm.alive];
+  return JSON.stringify(out); })()`));
+await p.screenshot({ path: 'D:/mycowork/game/shot_camp.png' }); await b.close();

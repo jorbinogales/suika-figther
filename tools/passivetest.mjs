@@ -1,0 +1,17 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--enable-unsafe-swiftshader', '--use-gl=angle', '--mute-audio'], defaultViewport: { width: 1280, height: 720 } });
+const p = await b.newPage(); p.on('pageerror', e => console.log('[pageerror]', e.message));
+await p.goto('http://localhost:5173/#char=leandro&train=1&keep=1&noai=1&nofog=1', { waitUntil: 'load' }); await new Promise(r => setTimeout(r, 12000));
+console.log(await p.evaluate(`(() => { const a = window.__arena, x = a.player, e = a.enemy; a.handleInput = () => {}; a.audio.play = () => {}; a.audio.playAll = () => {}; const step = n => { for (let i = 0; i < n; i++) a.update(a.time.now + i * 16, 16.7); };
+  const give = ids => { x.inv.fill(null); ids.forEach((id, i) => { x.inv[i] = { id, cd: 0, charges: 0 }; }); x.recomputeItems(); x.hp = x.maxHp; };
+  const out = {}; e.maxHp = e.hp = 99999; e.x = x.x + 150; e.y = x.y; e.ai = false;
+  give(['tarjeta_grafica', 'filtro_spam', 'garras_vampiricas', 'firewall_magico']); step(90);
+  out.burnDamage = Math.round(99999 - e.hp); out.enemyAtkSlow = e.atkSlow; out.mshield = Math.round(x.mshield);
+  a.damage(e, x, 300, 'magic'); out.afterMagicHit = Math.round(x.hp) + '/' + Math.round(x.maxHp);
+  give(['punio_acero']); const hp0 = e.hp; for (let i = 0; i < 4; i++) { a.basicDmg = true; a.damage(x, e, 100, 'physical'); a.basicDmg = false; } out.punchBonus = Math.round(hp0 - e.hp);
+  give(['servidor_redundante']); x.hp = x.maxHp * 0.5; a.damage(e, x, 220, 'true'); out.backup = Math.round(x.hp);
+  give(['bate_servidor']); a.basicDmg = true; a.damage(x, e, 50, 'physical'); a.basicDmg = false; out.slowed = e.slows.length;
+  give(['nucleo_ia']); x.combatT = 5; x.coreT = 0.1; step(20); out.coreShield = Math.round(x.shieldHp);
+  give(['botas_hipersonicas']); const sp0 = x.speed; x.in = { mx: 1, my: 0, run: true }; step(200); out.bootsSpeedGain = Math.round(x.speed - sp0 > 0 ? (x.speed / sp0 - 1) * 100 : 0) + '%';
+  give(['garras_vampiricas', 'filtro_spam', 'tarjeta_grafica']); x.in = { mx: 0, my: 0, run: false }; x.hp = x.maxHp * 0.3; step(10); return JSON.stringify(out); })()`));
+await new Promise(r => setTimeout(r, 600)); await p.screenshot({ path: 'D:/mycowork/game/shot_passive.png' }); await b.close();

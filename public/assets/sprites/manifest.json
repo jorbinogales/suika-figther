@@ -246,6 +246,8 @@
   "minion_red_ranged",
   "package",
   "package_open",
+  "ship_human",
+  "ship_robot",
   "spear",
   "spear_stuck",
   "tire",
@@ -272,6 +274,11 @@
   "cdr",
   "hpRegen",
   "manaRegen"
+ ],
+ "flags": [
+  "blue",
+  "neutral",
+  "red"
  ],
  "items": [
   "teclado_mecanico",

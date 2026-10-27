@@ -104,6 +104,16 @@ def main():
             cell = cell.crop(bb); k = min(56 / cell.width, 56 / cell.height)
             icon = Image.new("RGBA", (64, 64)); r = cell.resize((max(1, round(cell.width * k)), max(1, round(cell.height * k))), Image.LANCZOS)
             icon.paste(r, ((64 - r.width) // 2, (64 - r.height) // 2), r); icon.save(pub / "items" / f"{xid}.png"); got.append(xid)
+    # capture flags: art/raw/flags/flag_<name>.png = strip of 6 cells of 256px -> public/assets/flags/<name>.png (6 frames of 128px, no crop so frames stay aligned)
+    fgot = []
+    if (RAW / "flags").exists():
+        (pub / "flags").mkdir(parents=True, exist_ok=True)
+        for fp in sorted((RAW / "flags").glob("flag_*.png")):
+            sh = Image.open(fp).convert("RGB"); n = max(1, sh.width // sh.height); cw = sh.width // n
+            out = Image.new("RGBA", (128 * n, 128))
+            for i in range(n): out.paste(key(sh.crop((i * cw, 0, (i + 1) * cw, sh.height))).resize((128, 128), Image.LANCZOS), (i * 128, 0))
+            out.save(pub / "flags" / (fp.stem[5:] + ".png")); fgot.append(fp.stem[5:])
+    extra["flags"] = fgot
     extra["items"] = got
     # class icons: art/raw/classes/sheet.png (3x2 cells) -> public/assets/classes/<id>.png
     cls_ids = ["todos", "ai", "hacker", "cyber", "soporte", "programador"]; cgot = []

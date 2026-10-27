@@ -43,3 +43,16 @@ The silhouette outside the banner is also flat #FF00FF. No other magenta, no tex
 - art/raw/ui/hud_banner_blue_l.png, hud_banner_red_l.png, hud_banner_gold_l.png: identical to the originals but WITHOUT the right portrait frame: the right end is closed with the same ornate wing/blade ending (a symmetrical flared end, matching the left wing silhouette) and the dark center area extends to it. Keep ONLY the left hole: KILLER PORTRAIT 108 x 108 at x=18, y=16 (flat #FF00FF, nothing inside).
 - art/raw/ui/hud_banner_gold_plain.png: gold ornate banner with NO holes at all: both ends are the same flared wing ending (no portrait frames), a clean dark center for text. Used for announcer-only messages (welcome, minions, victory).
 Outside the silhouette is flat #FF00FF. No text.
+
+## Marcador de partida (2 módulos nuevos) — mismo estilo HUD (marcos biselados pesados, píxeles duros, sin blur)
+Agujeros = rectángulos limpios planos #FF00FF, sin nada dentro; la silueta exterior también magenta. Sin texto (el juego escribe los números).
+
+### art/raw/ui/hud_kda.png — 380 x 64 (pestaña COLGADA del borde superior, centrada en la pantalla: kills / muertes / asistencias del jugador)
+Forma de pestaña/placa que cuelga: borde superior recto (pegado al borde de la pantalla), laterales y base con chaflanes, remaches y luz cian tenue. Tres agujeros en una fila:
+- KILLS 104x32 en x=22,y=16 · MUERTES 104x32 en x=138,y=16 · ASISTENCIAS 104x32 en x=254,y=16
+(entre agujeros, pequeños símbolos grabados NO magenta: una espada junto al primero, una calavera junto al segundo, una mano/estrella junto al tercero)
+
+### art/raw/ui/hud_score.png — 440 x 64 (marcador de equipos, esquina superior derecha)
+Placa alargada. Mitad izquierda con acentos AZULES (equipo militar), mitad derecha con acentos ROJOS (equipo robot), centro neutro metálico. Tres agujeros en una fila:
+- KILLS AZUL 110x34 en x=24,y=15 · TIEMPO (centro) 130x34 en x=155,y=15 · KILLS ROJO 110x34 en x=306,y=15
+(entre los agujeros, símbolos grabados no magenta: un casco azul a la izquierda, un reloj en el centro, un cráneo robot rojo a la derecha)

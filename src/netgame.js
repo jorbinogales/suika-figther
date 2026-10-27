@@ -89,6 +89,8 @@ export class NetGame {
   onDie(v, killer) { if (this.role === 'host') this.ev.push(['k', v.nid, killer?.nid ?? -1]); }
   onWave(n) { if (this.role === 'host') this.ev.push(['w', n]); }
   onRewind(lines, dur, owner, back) { if (this.role === 'host') this.ev.push(['r', r2(dur), owner.nid, back, lines.map(l => [l.team, l.pts.filter((p, i) => i % 3 === 0 || i === l.pts.length - 1).flat()])]); }
+  onShip(i, team) { if (this.role === 'host') this.ev.push(['sh', i, team]); }
+  onCamp() { if (this.role === 'host') this.ev.push(['cc']); }
   onShell(sx, sy, tx, ty) { if (this.role === 'host') this.ev.push(['s', r1(sx), r1(sy), r1(tx), r1(ty)]); }
   flush() { if (this.ev.length) { this.send(null, { k: 'ev', l: this.ev }); this.ev = []; } }
 
@@ -106,9 +108,9 @@ export class NetGame {
     if (this.w.control?.mode === 'remote' && this.w.control.target === f) o.ch = r2(this.w.control.t);   // shows 'controlled' on that player's screen
     if (f.recall) o.rc = r2(f.recall.t); if (f.protein) o.pr = r2(f.protein.t);
     if (f.isChamp) {
-      o.m = r1(f.mana); o.lv = f.level; o.xp = r1(f.xp); o.gd = r1(f.gold); o.pt = f.points;
+      o.kd = [f.kills, f.deaths, f.assists]; o.m = r1(f.mana); o.lv = f.level; o.xp = r1(f.xp); o.gd = r1(f.gold); o.pt = f.points;
       o.rk = ABILITY_KEYS.map(a => f.ranks[a]); o.cd = [...ABILITY_KEYS.map(a => r2(f.cds[a])), r2(f.cds.basic)];
-      o.pm = PERM_KEYS.map(k => f.perm[k] || 0);
+      o.pm = PERM_KEYS.map(k => f.perm[k] || 0); o.ms = f.mshield > 0 ? 1 : 0; o.mt = f.moveT > 2 ? 1 : 0;
       o.inv = f.inv.map(s => (s ? [s.id, r1(s.cd), s.charges] : 0)); o.dc = f.dashCharges; o.ss = f.setupStacks; o.rg = r1(f.rage);
       if (f.potions.length) o.po = f.potions.map(p => r2(p.t));
       if (f.hen) o.hen = [r1(f.henHp), r1(f.henMax)];
@@ -121,7 +123,7 @@ export class NetGame {
   sendSnap() {
     const w = this.w;
     const c = w.control;
-    this.send(null, { k: 'snap', f: w.fighters.map(f => this.packF(f)), m: w.mortars.map(m => [r1(m.x), r1(m.y)]), g: r1(w.gameT), ctl: c ? [c.luis.nid, c.target.nid, r2(c.t)] : 0 });
+    this.send(null, { k: 'snap', f: w.fighters.map(f => this.packF(f)), m: w.mortars.map(m => [r1(m.x), r1(m.y)]), g: r1(w.gameT), ctl: c ? [c.luis.nid, c.target.nid, r2(c.t)] : 0, cp: (w.camps || []).map(k => [k.owner ?? -1, r2(k.prog[0]), r2(k.prog[1]), k.contested ? 1 : 0, r1(k.spawnT)]), wv: r1(w.waveT) });
   }
 
   /* ======================= CLIENT ======================= */
@@ -149,9 +151,12 @@ export class NetGame {
     return f;
   }
   applySnap(s) {
-    const w = this.w, seen = new Set();
+    const w = this.w, seen = new Set(); if (s.g != null) w.gameT = s.g;
+    if (this.role === 'client') w.waveT = Math.max(0, (w.waveT ?? 0));
     for (const o of s.f) { let f = w.byNid.get(o.i); if (!f) f = this.spawnFor(o); if (!f) continue; seen.add(o.i); this.unpack(f, o); }
     for (const f of w.fighters) if (f.nid >= 1000 && !seen.has(f.nid) && f.alive && !f.dispose) f.dispose = true;   // vanished on the host (expired summon, ...)
+    if (s.cp) s.cp.forEach((k, i) => { const c = w.camps?.[i]; if (c) { c.owner = k[0] < 0 ? null : k[0]; c.prog = [k[1], k[2]]; c.contested = !!k[3]; c.spawnT = k[4]; } });
+    if (s.wv != null) w.waveT = s.wv;
     // Luis' mind control: the controller's camera and HUD follow the controlled champion
     if (s.ctl) { const L = w.byNid.get(s.ctl[0]), T = w.byNid.get(s.ctl[1]); if (L && T) { const mine = L === w.player; w.control = { luis: L, target: T, t: s.ctl[2], mode: mine ? 'ctrl' : 'view' }; w.ctrl = mine ? T : null; } }
     else if (w.control) { w.control = null; w.ctrl = null; w.cancelAim(); }
@@ -178,11 +183,13 @@ export class NetGame {
     f.recall = o.rc != null ? { t: o.rc } : null; f.protein = o.pr != null ? { t: o.pr, tick: 0, hps: 0 } : null;
     if (f.isChamp) {
       if (!first && o.lv > f.level) { w.audio.play('levelup', { at: f, vol: local ? 1 : 0.5, gap: 0 }); w.vfx('levelup', f.x, f.y - 20, { scale: 3.2 }); w.float(f.x, f.y - f.def.height - 30, `NIVEL ${o.lv}`, '#ffe066'); }
+      if (o.kd) [f.kills, f.deaths, f.assists] = o.kd;
       f.level = o.lv; f.xp = o.xp; f.gold = o.gd; f.points = o.pt;
       ABILITY_KEYS.forEach((a, i) => { f.ranks[a] = o.rk[i]; f.cds[a] = o.cd[i]; }); f.cds.basic = o.cd[4];
       if (o.pm) { const ps = o.pm.join(); if (ps !== f.permSig) { f.permSig = ps; f.perm = {}; PERM_KEYS.forEach((k, i) => { if (o.pm[i]) f.perm[k] = o.pm[i]; }); f.recomputeItems(); } }
       const sig = JSON.stringify(o.inv); if (sig !== f.invSig) { f.invSig = sig; f.inv = o.inv.map(a => (a ? { id: a[0], cd: a[1], charges: a[2] } : null)); f.recomputeItems(); }
       else f.inv.forEach((sl, i) => { if (sl) sl.cd = o.inv[i][1]; });
+      f.mshield = o.ms ? 1 : 0; f.moveT = o.mt ? 3 : 0; f.hp = f.hp;
       f.dashCharges = o.dc; f.setupStacks = o.ss; f.rage = o.rg; f.potions = (o.po || []).map(t => ({ hp: 0, mana: 0, t, T: t }));
       if (o.hen) { f.hen = true; f.henHp = o.hen[0]; f.henMax = o.hen[1]; } else f.hen = false;
       f.buff = o.bf ? { t: o.bf[0] < 0 ? Infinity : o.bf[0] + 0.5, hpMult: o.bf[1], atkMult: o.bf[2], cdSpeed: o.bf[3] } : null;
@@ -226,6 +233,8 @@ export class NetGame {
     } else if (e[0] === 'r') {   // Jorbi's rewind trails
       w.announceRewind(this.fighter(e[2]) || w.player, e[3], e[1]);
       w.showRewind(e[4].map(([team, flat]) => ({ team, pts: Array.from({ length: flat.length / 2 }, (_, i) => [flat[i * 2], flat[i * 2 + 1]]) })), e[1]);
+    } else if (e[0] === 'sh') {   // reinforcement ship (the minions arrive in the next snapshot)
+      const c = w.camps?.[e[1]]; if (c) w.shipVisual(c, e[2]);
     } else if (e[0] === 's') {
       const [, sx, sy, tx, ty] = e, shell = w.add.circle(sx, sy, 7, 0x333333).setDepth(100000);
       w.tweens.add({ targets: shell, x: tx, y: { value: ty - 8, ease: 'Sine.In' }, scale: 1.8, duration: 800, onComplete: () => { shell.destroy(); w.vfx('shockwave', tx, ty, { scale: 3, below: true }); w.vfx('spark', tx, ty - 20, { scale: 4, tint: 0xffb020 }); w.audio.play('explosion', { at: { x: tx, y: ty }, vol: 0.8, gap: 60 }); } });

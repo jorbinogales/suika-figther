@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { ABILITY_KEYS, MAX_RANK, aimSpec, rk } from './data.js';
 import { Fighter, UNIT_DEFS, BODY_R, WORLD_W, WORLD_H, LANE_Y0, LANE_Y1, WALK_Y0, WALK_Y1, dist } from './fighter.js';
-import { walk, GW, GH, CELL, cellWalk, walkField, MID, CAMP_SITES } from './mapdata.js';
+import { walk, GW, GH, CELL, cellWalk, walkField, MID, CAMP_SITES, LANE_NORTH, LANE_SOUTH } from './mapdata.js';
 import { Audio } from './audio.js';
 import { runChampAi } from './ai.js';
 import { bootScreen } from './bootscreen.js';
@@ -64,7 +64,7 @@ export class Boot extends Phaser.Scene {
     ['blue', 'red', 'gold', 'blue_l', 'red_l', 'gold_l', 'gold_plain'].forEach(c => this.load.image('ui_hud_banner_' + c, `assets/ui/hud_banner_${c}.png?${Date.now()}`));
     this.load.json('uilayout', 'assets/ui/layout.json?' + Date.now());
     this.load.json('sfx', 'assets/sfx/sfx.json?' + Date.now());
-    ['hud_hero', 'hud_center', 'hud_minimap', 'hud_items', 'hud_stats', 'hud_enemy', 'hud_target'].forEach(n => this.load.image('ui_' + n, `assets/ui/${n}.png?${Date.now()}`));
+    ['hud_hero', 'hud_center', 'hud_minimap', 'hud_items', 'hud_stats', 'hud_enemy', 'hud_target', 'hud_kda', 'hud_score'].forEach(n => this.load.image('ui_' + n, `assets/ui/${n}.png?${Date.now()}`));
     this.load.spritesheet('ground', 'assets/map/ground.png', { frameWidth: 32, frameHeight: 32 });
     this.load.spritesheet('details', 'assets/map/details.png', { frameWidth: 32, frameHeight: 32 });
     ['trees', 'bushes', 'rocks'].forEach(n => this.load.image(n, `assets/map/${n}.png`));
@@ -84,6 +84,7 @@ export class Boot extends Phaser.Scene {
     const sfx = this.cache.json.get('sfx') || {};
     Object.values(sfx).flat().forEach(f => this.load.audio('sfx_' + f, 'assets/sfx/' + f));
     (m.classes || []).forEach(n => this.load.image('class_' + n, `assets/classes/${n}.png?${t}`));
+    (m.flags || []).forEach(n => this.load.spritesheet('flag_' + n, `assets/flags/${n}.png?${t}`, { frameWidth: 128, frameHeight: 128 }));
     (m.stats || []).forEach(n => this.load.image('stat_' + n, `assets/stats/${n}.png?${t}`));
     (m.items || []).forEach(n => this.load.image('item_' + n, `assets/items/${n}.png?${t}`));
     (m.aim || []).forEach(n => this.load.image(n, `assets/aim/${n}.png?${t}`));
@@ -102,6 +103,7 @@ export class Boot extends Phaser.Scene {
     // units that only ship walk/attack get a 1-frame idle (first walk frame)
     for (const ch in sprites) if (sprites[ch].walk && !sprites[ch].idle)
       this.anims.create({ key: `${ch}_idle`, frames: [{ key: `${ch}_walk`, frame: 0 }], frameRate: 1, repeat: -1 });
+    for (const fl of (this.cache.json.get('manifest')?.flags || [])) this.anims.create({ key: 'flag_' + fl, frames: this.anims.generateFrameNumbers('flag_' + fl), frameRate: 8, repeat: -1 });
     for (const sheet in CROPS) for (const n in CROPS[sheet]) this.textures.get(sheet).add(n, 0, ...CROPS[sheet][n]);
     this.registry.set('sprites', sprites);
     const h = new URLSearchParams(location.hash.slice(1));
@@ -176,7 +178,7 @@ export class Arena extends Phaser.Scene {
 
     const cam = this.cameras.main;
     this.camTarget = { x: this.player.x, y: this.player.y };
-    cam.setBounds(0, 0, WORLD_W, WORLD_H);
+    cam.setBounds(0, -340, WORLD_W, WORLD_H + 340 + 120);   // the view may go past the top (and a bit past the bottom) of the map, so units at the edges are not hidden behind the HUD
     cam.startFollow(this.camTarget, true, 0.12, 0.12);
     this.zoom = 0;
 
@@ -185,6 +187,7 @@ export class Arena extends Phaser.Scene {
     this.input.mouse?.disableContextMenu();
     this.buildKeys();
     this.setupFog();
+    this.setupCamps();
     this.setupNet();
     this.debugScenario();
     if (!this.scene.isActive('hud')) this.scene.launch('hud');
@@ -363,7 +366,7 @@ export class Arena extends Phaser.Scene {
       }
     });
     // upper boundary of the map: a ridge of the pack's cliff pieces (they mark the edge of the playable terrain together with the trees)
-    for (let x = -40, k = 0; x < WORLD_W + 120; x += 176, k++) img(k % 2 ? 'f_wall2' : 'f_wall1', null, x + rnd(-10, 10), 124 + rnd(-6, 6), 124, 1.45);
+    for (let x = -40, k = 0; x < WORLD_W + 120; x += 176, k++) img(k % 2 ? 'f_wall2' : 'f_wall1', null, x + rnd(-10, 10), 124 + rnd(-6, 6), -3, 1.45);   // ground-level boundary: always below units, flags and camp props
     // dense forest: bush hedge along every path edge, small trees behind it, big trees deep inside
     for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) {
       if (W(i, j)) continue;
@@ -381,6 +384,24 @@ export class Arena extends Phaser.Scene {
     const rt = this.bakedDecor = this.add.renderTexture(0, 0, WORLD_W, WORLD_H).setOrigin(0, 0).setDepth(-5);
     baked.forEach(([sheet, frame, x, y, oy = 1, sc = S]) => rt.stamp(sheet, frame, x, y, { originX: 0.5, originY: oy, scale: sc }));
     rt.render();
+    this.bakeBorders(pick, rnd, R);
+  }
+
+  // the camera can scroll past the map edges: that margin is dressed with dense forest + a second line of cliffs (no flat green)
+  bakeBorders(pick, rnd, R) {
+    const S = MAP_SCALE, BIGT = ['f_tree1', 'f_tree2', 'f_tree1', 'f_tree2', 'f_tree3'], SMALLT = ['f_tree4', 'f_tree4', 'f_tree1'], TOPY = -420, TOPH = 450, BOTY = WORLD_H, BOTH = 240;   // the margins only cover what is OUTSIDE the map (they must never overlap camps / flags)
+    this.cameras.main.setBackgroundColor('#2a3a12');
+    const make = (y0, h, items) => {
+      const rt = this.add.renderTexture(0, y0, WORLD_W, h).setOrigin(0, 0).setDepth(-5); rt.fill(0x35431a, 1);
+      items.sort((a, b) => (b[4] ? 1 : 0) - (a[4] ? 1 : 0) || a[2] - b[2]).forEach(([key, x, y, sc]) => rt.stamp(key, null, x, y - y0, { originX: 0.5, originY: 0.9, scale: sc }));
+      rt.render(); (this.borderRts ||= []).push(rt);
+    };
+    const top = [], bot = [];
+    for (let y = TOPY; y < 26; y += 34) for (let x = -30 - (Math.floor(y / 34) % 2) * 26; x < WORLD_W + 60; x += 52) top.push([R() < 0.62 ? pick(BIGT) : pick(SMALLT), x + rnd(-14, 14), y + rnd(-10, 10), R() < 0.62 ? 1.6 : 1.2]);
+    for (let x = -40, k = 0; x < WORLD_W + 120; x += 176, k++) top.push([k % 2 ? 'f_wall2' : 'f_wall1', x + rnd(-12, 12), -250 + rnd(-6, 6), 1.45, 1]);   // second ridge of cliffs further out
+    for (let y = BOTY + 40; y < BOTY + BOTH + 60; y += 34) for (let x = -30 - (Math.floor(y / 34) % 2) * 26; x < WORLD_W + 60; x += 52) bot.push([R() < 0.62 ? pick(BIGT) : pick(SMALLT), x + rnd(-14, 14), y + rnd(-10, 10), R() < 0.62 ? 1.6 : 1.2]);
+    for (let x = 20, k = 0; x < WORLD_W + 120; x += 176, k++) bot.push([k % 2 ? 'f_wall1' : 'f_wall2', x + rnd(-12, 12), BOTY + 90 + rnd(-6, 6), 1.45, 1]);
+    make(TOPY, TOPH, top); make(BOTY, BOTH, bot);
   }
 
   /* ---------- input ---------- */
@@ -421,7 +442,7 @@ export class Arena extends Phaser.Scene {
     if (J(k.ai)) this.aiOn = !this.aiOn;
     if (J(k.free)) this.debugFree = !this.debugFree;
     if (J(k.full)) { this.scale.toggleFullscreen(); navigator.keyboard?.lock?.(['KeyQ', 'KeyF', 'KeyE', 'KeyR']).catch(() => {}); }
-    if (J(k.respawn)) this.champs.forEach(f => { f.x = f.spawn.x; f.y = f.spawn.y; f.reset(); f.playAnim('idle'); });
+    if (J(k.respawn) && this.training && !this.net) this.champs.forEach(f => { f.x = f.spawn.x; f.y = f.spawn.y; f.reset(); f.playAnim('idle'); });
   }
 
   /* ---------- aiming (preview before casting) ---------- */
@@ -684,7 +705,7 @@ export class Arena extends Phaser.Scene {
   runAi(f, dt = 0.016) {
     if (f.isChamp && !f.owner && !f.antivirus) { runChampAi(this, f, dt); if (f.alive && !f.free) f.in = { mx: 0, my: 0, run: false }; return; }
     f.in = { mx: 0, my: 0, run: false };
-    if (!f.alive || !f.free || f.away) return;
+    if (!f.alive || !f.free || f.away || f.drop) return;
     if (f.antivirus) return this.runAntivirus(f);
     if (f.isNexus) return;
     if (f.isTower) return this.runTower(f);
@@ -729,6 +750,11 @@ export class Arena extends Phaser.Scene {
       return;
     }
     const range = f.def.stats.range, t = this.huntedBy(f, Math.max(380, range + 60)) || this.nearestEnemy(f, Math.max(380, range + 60));
+    if (f.path && !t) {   // reinforcements from a camp follow their own route (top / bottom) to the enemy nexus
+      while (f.path.length > 1 && Math.hypot(f.path[0].x - f.x, f.path[0].y - f.y) < 50) f.path.shift();
+      if ((f.stuckT = (f.stuckT || 0) + 0.016) > 1) { if (Math.hypot(f.x - (f.stuckX ?? -999), f.y - (f.stuckY ?? -999)) < 14 && f.path.length > 1) f.path.shift(); f.stuckT = 0; f.stuckX = f.x; f.stuckY = f.y; }   // not getting anywhere for 1 s: skip the waypoint
+      const w0 = f.path[0]; f.in.mx = w0.x - f.x; f.in.my = w0.y - f.y; f.setAim(f.in.mx, f.in.my); return;
+    }
     if (t) {
       const dx = t.x - f.x, dy = t.y - f.y, d = Math.hypot(dx, dy) - (t.br - BODY_R);
       f.setAim(dx, dy);
@@ -798,6 +824,120 @@ export class Arena extends Phaser.Scene {
     }
   }
 
+
+  /* ---------- capturable camps + reinforcement ships ---------- */
+  setupCamps() {
+    this.camps = this.training ? [] : CAMP_SITES.map((c, i) => ({ i, x: c.x, y: c.y, lane: c.y < 750 ? 'n' : 's', owner: null, prog: [0, 0], spawnT: 0, contested: false, flag: null, fx: 0 }));
+    this.ships = []; this.campG = this.add.graphics().setDepth(-870); this.campR = 118;
+  }
+  campOwnerColor(o) { return o === 0 ? 0x4aa3ff : o === 1 ? 0xff4a3a : 0xc9d1dd; }
+  updateCamps(dt) {
+    if (!this.camps?.length || this.net?.role === 'client' || this.over) return;
+    const R = this.campR;
+    for (const c of this.camps) {
+      const n = [0, 0]; for (const f of this.fighters) if (f.isChamp && f.alive && !f.away && !f.drop && eDist(f.x, f.y, c.x, c.y) <= R) n[f.team]++;
+      c.contested = n[0] > 0 && n[1] > 0;
+      if (!c.contested && (n[0] || n[1])) {
+        const T = n[0] ? 0 : 1, O = 1 - T, rate = dt / 8 * (1 + 0.35 * (n[T] - 1));
+        if (c.owner === O) { c.prog[O] = Math.max(0, c.prog[O] - rate); if (c.prog[O] <= 0) { c.prog[O] = 0; c.owner = null; } }
+        else if (c.prog[O] > 0) c.prog[O] = Math.max(0, c.prog[O] - rate);
+        else { c.prog[T] = Math.min(1, c.prog[T] + rate); if (c.prog[T] >= 1 && c.owner !== T) this.captureCamp(c, T); }
+      } else if (!c.contested && c.owner != null) c.prog[c.owner] = Math.min(1, c.prog[c.owner] + dt / 20);   // nobody on it: the owner's pie slowly refills
+      if (c.owner != null) { c.spawnT -= dt; if (c.spawnT <= 0) { c.spawnT = 30; this.dropShip(c, c.owner); } }
+    }
+  }
+  captureCamp(c, T) {
+    c.owner = T; c.prog[T] = 1; c.prog[1 - T] = 0; c.spawnT = 5;
+    this.fighters.forEach(f => { if (f.isChamp && f.team === T && f.alive && eDist(f.x, f.y, c.x, c.y) <= this.campR) f.gold += 80; });
+    this.showBanner({ title: '¡CAMPAMENTO RECLAMADO!', sub: `${T === 0 ? 'El equipo azul' : 'El equipo rojo'} controla ${c.lane === 'n' ? 'el camino norte' : 'el camino sur'}`, team: T }, 3000);
+    this.audio.play('ui_announce', { vol: 0.7, gap: 0 }); this.vfx('levelup', c.x, c.y - 30, { scale: 6 }); this.zoneDecal(c.x, c.y, this.campR, this.campOwnerColor(T), 1.5);
+    this.net?.onCamp?.();
+  }
+  lanePath(c, team) {
+    const L = c.lane === 'n' ? LANE_NORTH : LANE_SOUTH, dir = team === 0 ? 1 : -1; let idx = 0, best = 1e9;
+    L.forEach((p, i) => { const d = Math.hypot(p[0] - c.x, p[1] - c.y); if (d < best) { best = d; idx = i; } });
+    const raw = []; for (let i = idx; i >= 0 && i < L.length; i += dir) raw.push({ x: L[i][0], y: L[i][1] });
+    raw.push({ x: team === 0 ? WORLD_W - 330 : 330, y: LANE_MID });
+    const pts = [raw[0]]; for (let i = 1; i < raw.length; i++) { const a = raw[i - 1], b = raw[i], n = Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / 70); for (let k = 1; k <= n; k++) pts.push({ x: a.x + (b.x - a.x) * k / n, y: a.y + (b.y - a.y) * k / n }); }   // dense waypoints along the route centre
+    return pts;
+  }
+  // a giant ship descends slowly over the camp and drops 3 minions that then follow the camp's lane to the enemy nexus
+  dropShip(c, team) {
+    if (this.net?.role === 'client') return;
+    this.ships.push({ c, team, t: 0, dur: 9, dropped: false }); this.net?.onShip?.(c.i, team);
+  }
+  shipVisual(c, team) { this.ships.push({ c, team, t: 0, dur: 9, dropped: true, visual: true }); }
+  updateShips(dt) {
+    this.ships = this.ships.filter(sh => {
+      sh.t += dt; const p = sh.t / sh.dur, c = sh.c, HOV = 250, north = c.lane === 'n';
+      const key = sh.team === 0 ? 'ship_human' : 'ship_robot', has = this.textures.exists(key);
+      const hy = north ? c.y - HOV : c.y + HOV + 30, edge = north ? -260 : WORLD_H + 330;   // the bottom ships hover at the extreme (below the camp), never over the battlefield   // it always comes in from, and returns to, the nearest map border (never flies across the map)
+      const kk = p < 0.45 ? 1 - Math.pow(p / 0.45, 0.6) : p < 0.7 ? 0 : Math.pow((p - 0.7) / 0.3, 2);
+      sh.y = hy + (edge - hy) * kk;
+      sh.x = c.x + Math.sin(sh.t * 0.9) * 14;
+      if (!sh.dropped && p >= 0.55) { sh.dropped = true; this.dropMinions(c, sh.team, sh.y); }
+      const a = Math.min(1, Math.max(0, 1 - Math.abs(sh.y - hy) / 900) * 1.6);   // fades in from the border and fades out towards it
+      if (!sh.img && has) sh.img = this.add.image(0, 0, key).setDepth(99950);
+      // units under the ship: it turns as see-through as possible so nobody is hidden behind it
+      const cx = sh.x, cy = sh.y - 90, under = this.fighters.some(f => f.alive && !f.away && !f.drop && Math.abs(f.x - cx) < 210 && Math.abs((f.y - f.def.height * 0.5) - cy) < 150);
+      sh.vis = Phaser.Math.Linear(sh.vis ?? 1, under ? 0.12 : 1, Math.min(1, dt * 8));
+      if (sh.img) { const k = 380 / sh.img.width; sh.img.setPosition(sh.x, sh.y - 90).setScale(k).setAlpha(a * sh.vis); }
+      sh.g ||= this.add.graphics().setDepth(99949); const g = sh.g; g.clear();
+      const a0 = a; 
+      if (!has) { const a = a0 * (sh.vis ?? 1), col = sh.team === 0 ? 0x6a7a68 : 0x2a2224, ac = sh.team === 0 ? 0x66e0ff : 0xff4a3a; g.fillStyle(col, a).fillEllipse(sh.x, sh.y - 90, 380, 190).fillStyle(0x111111, a).fillEllipse(sh.x, sh.y - 60, 170, 60).fillStyle(ac, a * (0.6 + 0.4 * Math.sin(sh.t * 8))).fillCircle(sh.x - 140, sh.y - 80, 14).fillCircle(sh.x + 140, sh.y - 80, 14); }
+      this.campShadow ||= this.add.graphics().setDepth(-860);
+      sh.sh = { x: c.x, y: c.y + 10, a: north ? 0.35 * a : 0 };
+      if (sh.t >= sh.dur) { sh.img?.destroy(); g.destroy(); return false; }
+      return true;
+    });
+    const sg = this.campShadow; if (sg) { sg.clear(); this.ships.forEach(sh => { if (sh.sh) sg.fillStyle(0x000000, sh.sh.a).fillEllipse(sh.sh.x, sh.sh.y, 330, 150); }); }
+  }
+  dropMinions(c, team, fromY) {
+    if (this.net?.role === 'client') return;
+    const names = team === 0 ? ['minion_blue_melee', 'minion_blue_melee', 'minion_blue_ranged'] : ['minion_red_melee', 'minion_red_melee', 'minion_red_ranged'];
+    names.forEach((k, i) => {
+      const x = c.x + (i - 1) * 42, y = c.y + 18 + (i % 2) * 14, m = new Fighter(this, k, team, x, y, { ai: true, slot: { x: 0, y: (i - 1) * 24 } });
+      m.ax = team === 0 ? 1 : -1; m.path = this.lanePath(c, team);
+      m.drop = c.lane === 'n' ? { t: -i * 0.18, dur: 1.0, h: Math.max(120, y - fromY + 80) } : { t: -i * 0.18, dur: 1.1, h: 40, slide: { x0: x + (i - 1) * 30, y0: fromY + 10, x1: x, y1: y } };   // bottom ships launch them from the extreme: they fly in towards the camp
+      this.fighters.push(m);
+    });
+    this.audio.play('minion_yell', { at: c, vol: 0.5, gap: 200 });
+  }
+  // countdown labels (seconds until the next minions): above every owned camp flag and above each nexus
+  timerLabel(id, x, y, text, color, show) {
+    const m = (this.tmLabels ||= {}); let t = m[id];
+    if (!t) t = m[id] = this.add.text(0, 0, '', { fontFamily: 'monospace', fontSize: '15px', fontStyle: 'bold', stroke: '#000', strokeThickness: 4 }).setOrigin(0.5).setDepth(100001);
+    if (!show || !this.inView(x, y, 120)) return t.setVisible(false);
+    return t.setVisible(true).setText(text).setColor(color).setPosition(x, y);
+  }
+  drawTimers() {
+    for (const c of this.camps || []) { const own = c.owner != null; this.timerLabel('c' + c.i, c.x, c.y + this.campR * 0.75 + 16, `REFUERZOS EN ${Math.max(0, Math.ceil(c.spawnT))}s`, c.owner === 0 ? '#8ab4ff' : '#ff8a8a', own); }
+    if (!this.training && this.waveT < 1e8) for (const n of this.fighters) if (n.isNexus) this.timerLabel('n' + n.baseTeam, n.x, n.y + 64, `SÚBDITOS EN ${Math.max(0, Math.ceil(this.waveT))}s`, n.baseTeam === 0 ? '#8ab4ff' : '#ff8a8a', n.alive);
+  }
+  drawCamps(dt) {
+    this.updateShips(dt); this.drawTimers();
+    if (!this.camps?.length) return; const g = this.campG; g.clear(); const t = this.time.now / 1000;
+    for (const c of this.camps) {
+      if (!this.inView(c.x, c.y, 220)) { c.flag?.setVisible(false); continue; }
+      const a = this.campR, b = a * YR, col = (o) => this.campOwnerColor(o);
+      g.fillStyle(0x0a0f1a, 0.38).fillEllipse(c.x, c.y, a * 2, b * 2);
+      const pie = (frac, color, al) => { if (frac <= 0.001) return; const pts = [{ x: c.x, y: c.y }], n = Math.max(3, Math.ceil(frac * 60)); for (let i = 0; i <= n; i++) { const ang = -Math.PI / 2 + frac * Math.PI * 2 * i / n; pts.push({ x: c.x + Math.cos(ang) * a, y: c.y + Math.sin(ang) * b }); } g.fillStyle(color, al).fillPoints(pts, true); };
+      pie(c.prog[0], col(0), 0.55); pie(c.prog[1], col(1), 0.55);
+      g.lineStyle(3, c.contested ? 0xffffff : col(c.owner), c.contested ? 0.5 + 0.5 * Math.sin(t * 10) : 0.9).strokeEllipse(c.x, c.y, a * 2, b * 2);
+      g.lineStyle(1, 0xffffff, 0.35).strokeEllipse(c.x, c.y, a * 1.7, b * 1.7);
+      // flag: waving sprite of the owner's colour (grey when neutral); procedural fallback until the art exists
+      const fk = 'flag_' + (c.owner === 0 ? 'blue' : c.owner === 1 ? 'red' : 'neutral');
+      if (this.textures.exists(fk)) {
+        if (!c.flag || c.flagKey !== fk) { c.flag?.destroy(); c.flag = this.add.sprite(c.x, c.y + 14, fk).setOrigin(0.5, 0.92).setScale(1.5); c.flagKey = fk; if (this.anims.exists(fk)) c.flag.play(fk); }
+        c.flag.setVisible(true).setDepth(Math.max(c.y + 20, 400));   // above every cliff / tree sprite of the scenery
+      } else {
+        g.fillStyle(0x222831, 1).fillRect(c.x - 2, c.y - 108, 4, 118); const wv = (u) => Math.sin(t * 5 + u * 5) * 6 * u, W2 = 62, H2 = 40;
+        const pts = []; for (let i = 0; i <= 8; i++) { const u = i / 8; pts.push({ x: c.x + 3 + u * W2, y: c.y - 106 + wv(u) }); } for (let i = 8; i >= 0; i--) { const u = i / 8; pts.push({ x: c.x + 3 + u * W2, y: c.y - 106 + H2 + wv(u) }); }
+        g.fillStyle(col(c.owner), 1).fillPoints(pts, true).lineStyle(2, 0x000000, 1).strokePoints(pts, true);
+      }
+    }
+  }
+
   spawnWave(team) {
     if (team === 0) this.net?.onWave(this.waveN);
     if (this.waveN === 0 && team === 0) this.audio.voice('v_minions', 1, 'ann_minions', { title: '¡MINIONS DESPLEGADOS!', sub: 'La primera oleada avanza por el carril', team: 2 });
@@ -850,10 +990,12 @@ export class Arena extends Phaser.Scene {
       else if (v.isTower && !v.isNexus) this.audio.voice(v.baseTeam === this.player.baseTeam ? 'v_tower_ally' : 'v_tower_enemy', 2, null, { title: v.baseTeam === this.player.baseTeam ? 'TORRE ALIADA DESTRUIDA' : '¡TORRE ENEMIGA DESTRUIDA!', sub: k0 ? `${kn} destruyó la torre` : 'La torre ha caído', team: kt, face: this.faceOf(k0), kind: 'tower' });
     }
     if (this.net?.role === 'client') return;   // gold and xp come from the host snapshot
+    if (v.isChamp) v.hitBy = null;
     const kc = killer?.owner || killer, team = kc ? kc.team : 1 - v.team, me = this.player;
     const r = v.isChamp ? { gold: 300, xp: 90 + 12 * v.level } : v.def.reward || { gold: 0, xp: 0 };
     if (kc?.isChamp) {
       kc.gold += r.gold; if (v.isChamp) kc.kills++;
+      if (v.isChamp && v.hitBy) for (const [c, t] of v.hitBy) if (c !== kc && c.baseTeam === kc.baseTeam && this.gameT - t <= 10) c.assists++;   // assists: allies who hit the victim in the last 10 s
       if (kc === me) this.float(v.x, v.y - v.def.height - 26, `+${r.gold}g`, '#ffd23f');
     }
     this.fighters.filter(c => c.isChamp && c.alive && c.team === team && dist(c, v) <= 700).forEach(c => {
@@ -1102,7 +1244,7 @@ export class Arena extends Phaser.Scene {
   }
 
   /* ---------- world API used by fighters ---------- */
-  enemiesOf(f) { return this.fighters.filter(t => t.alive && !t.away && t.team !== f.team); }
+  enemiesOf(f) { return this.fighters.filter(t => t.alive && !t.away && !t.drop && t.team !== f.team); }
   enemiesWithin(f, r) { return this.enemiesOf(f).filter(t => eDist(t.x, t.y, f.x, f.y) <= r); }
   meleeHits(f, reach) {
     return this.enemiesOf(f).filter(t => {
@@ -1135,10 +1277,15 @@ export class Arena extends Phaser.Scene {
     const resist = type === 'physical' ? target.armor : type === 'magic' ? target.mr : 0;
     if (src?.key === 'luis' && target !== src) src.lastTarget = target;
     if (target.isRage && !dot && target.alive) target.addRage(Math.min(10, raw * 100 / (100 + resist) / target.maxHp * 100 * target.def.hen.rageTaken));
-    { const atk = src?.owner || src; if (target.isChamp && atk?.isChamp && atk.team !== target.team) { atk.hunted = { team: target.team, t: 3 }; target.lastChampHit = { champ: atk, t: this.gameT }; } }   // allied minions/towers retaliate
+    { const atk = src?.owner || src; if (target.isChamp && atk?.isChamp && atk.team !== target.team) { atk.hunted = { team: target.team, t: 3 }; target.lastChampHit = { champ: atk, t: this.gameT }; (target.hitBy ||= new Map()).set(atk, this.gameT); } }   // allied minions/towers retaliate
     if (target.key === 'luis' && src?.isChamp) { const hz = this.zones.find(z => z.kind === 'hack' && z.owner === target); if (hz && !hz.free.has(src)) { hz.free.add(src); src.silenceT = 0; this.float(src.x, src.y - src.def.height - 30, 'LIBRE', '#ffffff'); } }
     if (src?.key === 'julio' && target.ink && !dot && !this.inInk) this.explodeInk(src, target);
     let dmg = Math.max(1, raw * 100 / (100 + resist));
+    if (target.isChamp && target.pas?.size) {
+      if (type === 'physical' && target.pas.has('chaleco_antibalas')) { dmg *= 1 - 0.15 * target.pas.get('chaleco_antibalas'); if (!dot && this.time.now - (target.blkT || 0) > 600) { target.blkT = this.time.now; this.vfx('block', target.x, target.cy, { scale: 1.8, alpha: 0.8 }); } }
+      if (type === 'magic' && target.mshield > 0) { const ab = Math.min(target.mshield, dmg); target.mshield -= ab; dmg -= ab; this.vfx('shield', target.x, target.cy, { scale: 2, tint: 0x66e0ff, alpha: 0.7 }); if (target.mshield <= 0.5) { target.mshield = 0; target.mshieldCd = 10; } if (dmg <= 0) return 0; }
+    }
+    { const so = src?.owner || src; if (target.isChamp || so?.isChamp) { if (target.isChamp) target.combatT = 5; if (so?.isChamp && so !== target) so.combatT = 5; } }
     if (target.hen && target.henHp > 0) {   // the hen only loses durability: Eliud still takes the full damage
       target.henHp -= dmg;
       if (target.henHp <= 0) { target.endBuff(); target.setSkin(target.key); this.vfx('levelup', target.x, target.y - 10, { scale: 4, below: true }); this.float(target.x, target.y - target.def.height - 40, '¡Gallina agotada!', '#ff8a6a'); }
@@ -1151,7 +1298,8 @@ export class Arena extends Phaser.Scene {
     }
     target.hp -= dmg;
     if (target.recall && dmg > 0) { target.recall = null; this.float(target.x, target.y - target.def.height - 30, 'Teletransporte cancelado', '#ff9a7a'); }
-    { const o = src?.owner || src; if (o?.isChamp && o.it?.lifesteal && type === 'physical' && !dot && o !== target) o.hp = Math.min(o.maxHp, o.hp + dmg * o.it.lifesteal); }
+    { const o = src?.owner || src; if (o?.isChamp && o.it?.lifesteal && type === 'physical' && !dot && o !== target) o.hp = Math.min(o.maxHp, o.hp + dmg * o.it.lifesteal * (o.pas.has('garras_vampiricas') && o.hp < o.maxHp * 0.4 ? 1 + o.pas.get('garras_vampiricas') : 1)); }
+    this.onHitPassives(src, target, dmg, type, dot);
     if (target.protein && dmg > 0) { target.protein = null; this.float(target.x, target.y - target.def.height - 30, '¡Proteína rota!', '#ff9a7a'); }
     if (!dot) target.flash();
     if (dmg < 1e6) this.float(target.x + Phaser.Math.Between(-15, 15), target.y - target.def.height - 5, `${Math.round(dmg)}`,
@@ -1167,6 +1315,37 @@ export class Arena extends Phaser.Scene {
     if (!me.alive || me.blindT <= 0 || f === this.pc || f === me || f.isTower) return 1;
     const d = dist(f, me);
     return Phaser.Math.Clamp((235 - d) / 115, 0, 1);
+  }
+
+  // on-hit effects of the level-3 item passives (all automatic)
+  onHitPassives(src, target, dmg, type, dot) {
+    if (dot || this.inPassive) return;
+    const o = src?.owner || src;
+    if (o?.isChamp && o.pas?.size && this.basicDmg && target.team !== o.team && !target.isTower) {
+      if (o.pas.has('bate_servidor')) { target.slow(0.2 * o.pas.get('bate_servidor'), 1.5); this.vfx('spark', target.x, target.cy, { scale: 2, tint: 0x66aaff }); }
+      if (o.pas.has('punio_acero') && (o.punchN = (o.punchN || 0) + 1) % (o.pas.get('punio_acero') < 1 ? 6 : 4) === 0) {
+        this.inPassive = true; this.damage(o, target, dmg * 0.5 * o.pas.get('punio_acero'), 'physical', true); this.inPassive = false;
+        this.vfx('shockwave', target.x, target.y - 6, { scale: 2.2, below: true, tint: 0xff9a4a }); this.vfx('punch', target.x, target.cy, { scale: 4 }); this.float(target.x, target.y - target.def.height - 30, '¡DEMOLEDOR!', '#ff9a4a');
+      }
+    }
+    if (target.isChamp && target.pas?.size && target.alive) {
+      if (type === 'physical' && this.basicDmg && o && o.alive && !o.isTower && o !== target && target.pas.has('armadura_rack')) { this.inPassive = true; this.damage(target, o, dmg * 0.2 * target.pas.get('armadura_rack'), 'physical', true); this.inPassive = false; this.vfx('spark', o.x, o.cy, { scale: 1.8, tint: 0xffb040 }); }
+      if (target.pas.has('servidor_redundante') && target.backupCd <= 0 && target.hp < target.maxHp * 0.3) { target.backupCd = 60; target.hp = Math.min(target.maxHp, target.hp + target.maxHp * 0.25 * target.pas.get('servidor_redundante')); this.vfx('heal', target.x, target.cy, { scale: 4, tint: 0x66ff99 }); this.float(target.x, target.y - target.def.height - 34, '¡COPIA DE SEGURIDAD!', '#7dff9a'); }
+    }
+  }
+
+  // ground rings of the passives that have an area (burn / spam block / low-life aura / magic barrier): one shared graphics, drawn every frame
+  drawPassiveFx() {
+    const g = (this.pfx ||= this.add.graphics().setDepth(-880)); g.clear(); const t = this.time.now / 1000;
+    for (const f of this.champs) {
+      if (!f.alive || !f.pas?.size || f.hiddenFor?.(this.player) || !this.inView(f.x, f.y, 260)) continue;
+      const ring = (r, col, a, dash) => { g.lineStyle(dash ? 3 : 2, col, a).strokeEllipse(f.x, f.y, r * 2, r * 2 * YR); };
+      if (f.pas.has('tarjeta_grafica')) { g.fillStyle(0xff7a2a, 0.08 + 0.04 * Math.sin(t * 6)).fillEllipse(f.x, f.y, 420, 420 * YR); ring(210, 0xff8a3a, 0.7); for (let i = 0; i < 8; i++) { const a = t * 1.4 + i * 0.785; g.fillStyle(0xffc060, 0.8).fillCircle(f.x + Math.cos(a) * 210, f.y + Math.sin(a) * 210 * YR, 3); } }
+      if (f.pas.has('filtro_spam')) { ring(260, 0x9aa8b8, 0.5, true); for (let i = 0; i < 12; i++) { const a = -t * 0.9 + i * 0.5236; g.fillStyle(0xc9d3e0, 0.7).fillRect(f.x + Math.cos(a) * 260 - 2, f.y + Math.sin(a) * 260 * YR - 2, 4, 4); } }
+      if (f.pas.has('garras_vampiricas') && f.hp < f.maxHp * 0.4) { const p = 0.5 + 0.5 * Math.sin(t * 7); g.fillStyle(0xff2a2a, 0.14 + 0.12 * p).fillEllipse(f.x, f.y, 150, 150 * YR); ring(80, 0xff4a4a, 0.5 + 0.4 * p); }
+      if (f.mshield > 0) { g.fillStyle(0x66e0ff, 0.1).fillEllipse(f.x, f.cy - 6, 90, 130); g.lineStyle(2, 0x9af0ff, 0.75).strokeEllipse(f.x, f.cy - 6, 90, 130); }
+      if (f.pas.has('botas_hipersonicas') && f.moveT > 2) { g.lineStyle(3, 0x66e0ff, 0.5).strokeEllipse(f.x, f.y, 70, 70 * YR); }
+    }
   }
 
   // ---------- Julio's ink ----------
@@ -1366,6 +1545,7 @@ export class Arena extends Phaser.Scene {
     if (!this.over) this.waveT -= dt; if (this.waveT <= 0 && !this.over && this.net?.role !== 'client') { this.waveT = 28; this.spawnWave(0); this.spawnWave(1); this.waveN++; }
     if (!this.over && this.net?.role !== 'client') this.fighters.forEach(f => { if (this.control?.mode === 'remote' && f === this.control.target) return; if ((f.ai && this.aiOn && f !== this.ctrl) || f.isBot || f.isMinion || f.isTower || f.charmT > 0) this.runAi(f, dt); });
     this.recordHistory(dt);
+    this.updateCamps(dt);
     this.fighters.forEach(f => f.update(dt));
     this.fighters.forEach(f => f.alive && !f.isTower && this.resolveSolids(f));
     // AI champions spend their skill points (ultimate first when available)
@@ -1385,6 +1565,8 @@ export class Arena extends Phaser.Scene {
     this.drawAim();
     this.drawRangeHint();
     this.drawRewind(dt);
+    this.drawCamps(dt);
+    this.drawPassiveFx();
     if (this.rwGlow) { this.rwGlow.t -= dt; this.rwGlow.hg -= dt; if (this.rwGlow.t <= 0) this.rwGlow = null; }
     this.updateFog(dt);
     this.net?.post(dt);

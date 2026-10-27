@@ -8,16 +8,17 @@ export const CAMP_SITES = [
   { x: 1010, y: 150, entryX: 1010, entryY: 300 },
   { x: 1650, y: 175, entryX: 1650, entryY: 430 },
   { x: 2300, y: 150, entryX: 2300, entryY: 300 },
-  { x: 1110, y: 1070, entryX: 1010, entryY: 1190 },
-  { x: 1880, y: 1030, entryX: 1835, entryY: 1150 },
-  { x: 2170, y: 1070, entryX: 2300, entryY: 1200 },
+  // bottom camps: exact vertical mirror of the top ones (same x, so the middle one is centred like the top middle one)
+  { x: 1010, y: WORLD_H - 150, entryX: 1010, entryY: WORLD_H - 300 },
+  { x: 1650, y: WORLD_H - 175, entryX: 1650, entryY: WORLD_H - 430 },
+  { x: 2300, y: WORLD_H - 150, entryX: 2300, entryY: WORLD_H - 300 },
 ];
 export const CAMPS = CAMP_SITES.map(({ x, y }) => [x, y]);
 
 // irregular forest paths: [x, y, radius]
-const NORTH = [[700, 650, 90], [640, 540, 70], [770, 440, 85], [900, 385, 70], [1010, 300, 78], [1180, 245, 66], [1330, 305, 78], [1470, 395, 68],
+export const LANE_NORTH = [[700, 650, 90], [640, 540, 70], [770, 440, 85], [900, 385, 70], [1010, 300, 78], [1180, 245, 66], [1330, 305, 78], [1470, 395, 68],
   [1650, 430, 78], [1800, 355, 72], [1960, 262, 64], [2120, 248, 82], [2300, 300, 78], [2430, 425, 74], [2575, 520, 70], [2520, 650, 90]];
-const SOUTH = [[820, 860, 90], [750, 985, 72], [890, 1085, 82], [1010, 1190, 78], [1175, 1262, 66], [1335, 1205, 80], [1500, 1112, 70],
+export const LANE_SOUTH = [[820, 860, 90], [750, 985, 72], [890, 1085, 82], [1010, 1190, 78], [1175, 1262, 66], [1335, 1205, 80], [1500, 1112, 70],
   [1650, 1070, 78], [1835, 1150, 70], [1990, 1255, 84], [2150, 1285, 64], [2300, 1200, 78], [2405, 1090, 76], [2335, 960, 70], [2450, 870, 90]];
 
 export const walk = new Uint8Array(GW * GH);
@@ -34,7 +35,8 @@ const poly = pts => {
 };
 for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) { const cy = j * CELL + CELL / 2; if (cy >= MID.y0 && cy <= MID.y1) walk[j * GW + i] = 1; }
 circle(190, 756, 270); circle(WORLD_W - 190, 756, 270);   // bases
-poly(NORTH); poly(SOUTH);
+const wide = pts => pts.map(([x, y, r]) => [x, y, r + 22]);   // routes are a little wider so minions never scrape the trees
+poly(wide(LANE_NORTH)); poly(wide(LANE_SOUTH));
 // A central opening through the lower forest connects the lane to the southern route.
 poly([[WORLD_W / 2, MID.y1 - 32, 90], [WORLD_W / 2, 1100, 90]]);
 // ...and a matching one through the upper forest toward the northern route.

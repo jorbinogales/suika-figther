@@ -24,6 +24,8 @@ SPECS = {
     **{f"hud_banner_{c}": {"size": (800, 140), "roles": {"portrait": (72, 70), "victim": (750, 70)}} for c in ("blue", "red", "gold")},
     **{f"hud_banner_{c}_l": {"size": (800, 140), "roles": {"portrait": (72, 70)}} for c in ("blue", "red", "gold")},
     "hud_banner_gold_plain": {"size": (800, 140), "roles": {}},
+    "hud_kda": {"size": (380, 64), "roles": {"kills": (74, 32), "deaths": (190, 32), "assists": (306, 32)}},
+    "hud_score": {"size": (440, 64), "roles": {"blue": (79, 32), "time": (220, 32), "red": (361, 32)}},
     "hud_stats": {"size": (254, 230), "roles": {"stats": (127, 115)}},
     "hud_target": {"size": (768, 300), "roles": {
         "name": (224, 28), "portrait": (84, 116), "stats": (310, 156),

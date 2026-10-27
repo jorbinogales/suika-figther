@@ -1,5 +1,5 @@
 import { CHAMPIONS, ABILITY_KEYS, MAX_LEVEL, MAX_RANK, ULT_LEVELS, rk } from './data.js';
-import { ITEM_BY_ID, SLOTS, sellValue, buyPlan, PERM_KEYS, PERM_BY_ID, PERM_COST } from './items.js';
+import { ITEM_BY_ID, MINI_OF, SLOTS, sellValue, buyPlan, PERM_KEYS, PERM_BY_ID, PERM_COST, STAT_CAP } from './items.js';
 
 // World geometry: top-down map, one horizontal lane.
 import { WORLD_W, WORLD_H, CAMPS, isWalk } from './mapdata.js';
@@ -49,7 +49,7 @@ export class Fighter {
     this.isMinion = this.def.kind === 'minion'; this.isNexus = this.def.kind === 'nexus'; this.isTower = this.def.kind === 'tower' || this.isNexus;
     this.isChamp = !this.isBot && !this.isMinion && !this.isTower;
     this.xp = 0; this.gold = this.isChamp ? 500 : 0;
-    this.inv = Array(SLOTS).fill(null); this.perm = {}; this.it = this.zeroStats(); this.potions = []; this.potionCd = 0; this.recall = null; this.skin = key; this.buff = null;
+    this.inv = Array(SLOTS).fill(null); this.pas = new Map(); this.perm = {}; this.it = this.zeroStats(); this.potions = []; this.potionCd = 0; this.recall = null; this.skin = key; this.buff = null;
     this.team = team; this.baseTeam = team;
     this.x = x; this.y = y;
     this.spawn = { x, y };
@@ -64,7 +64,7 @@ export class Fighter {
     this.ranks = { p1: 0, p2: 0, p3: 0, ult: 0 };
     this.setupStacks = 0;
     this.basicCount = 0;
-    this.kills = 0;
+    this.kills = 0; this.deaths = 0; this.assists = 0;
     this.reset();
     this.buildSprite();
   }
@@ -75,7 +75,8 @@ export class Fighter {
     const hpR = this.hp / (this.maxHp || 1), mR = this.maxMana ? this.mana / this.maxMana : 0, t = this.zeroStats();
     this.inv.forEach(sl => { if (!sl) return; const st = ITEM_BY_ID[sl.id].stats; for (const k in st) t[k] += st[k]; });
     for (const k in this.perm) t[k] += this.perm[k] * PERM_BY_ID['p_' + k].per;   // permanent upgrades
-    this.it = t;
+    for (const k in STAT_CAP) t[k] = Math.min(t[k], STAT_CAP[k]);
+    this.it = t; this.pas = new Map(); this.inv.forEach(q => { if (!q) return; const it = ITEM_BY_ID[q.id]; if (!it.passive) return; const key = it.passive.mini ? MINI_OF[q.id] : q.id, v = it.passive.mini ? 0.5 : 1; this.pas.set(key, Math.max(this.pas.get(key) || 0, v)); });   // ids of the items carried (unique passives look here)
     if (this.maxHp) this.hp = Math.min(this.maxHp, Math.max(this.hp, this.maxHp * hpR));   // buying never lowers current health; the new max HP is granted proportionally
     if (this.maxMana) this.mana = Math.min(this.maxMana, Math.max(this.mana, this.maxMana * mR));
   }
@@ -134,6 +135,21 @@ export class Fighter {
     w.audio.playAll('a_xeviche_p3', { at: this, vol: 0.8, gap: 0 }); w.vfx('buff', this.x, this.cy, { scale: 3 }); w.float(this.x, this.y - this.def.height - 40, `Setup x${this.setupStacks}`, '#7ee0ff');
   }
 
+  // ---- unique passives of the level-3 items (automatic, no input) ----
+  itemPassives(dt) {
+    const w = this.w, P = this.pas, ft = this.in && (this.in.mx || this.in.my);
+    this.moveT = ft ? (this.moveT || 0) + dt : 0;
+    if (P.has('botas_hipersonicas') && this.moveT > 2 && (this.trailT = (this.trailT || 0) - dt) <= 0) { this.trailT = 0.12; w.vfx('spark', this.x - this.ax * 18, this.y - 8, { scale: 1.6, tint: 0x66e0ff, alpha: 0.8, below: true }); }
+    if (P.has('tarjeta_grafica') && (this.burnT = (this.burnT || 0) - dt) <= 0) {
+      this.burnT = 0.5; w.enemiesNear(this.team, this.x, this.y, 210).forEach(t => { if (!t.isTower) { w.damage(this, t, (5 + this.ap * 0.12) * P.get('tarjeta_grafica'), 'magic', true); w.vfx('burning_ground', t.x, t.y - 6, { scale: 1.6, alpha: 0.7, below: true }); } });
+    }
+    if (P.has('filtro_spam') && (this.spamT = (this.spamT || 0) - dt) <= 0) { this.spamT = 0.25; w.enemiesNear(this.team, this.x, this.y, 260).forEach(t => { if (!t.isTower) { t.atkSlow = 0.25 * P.get('filtro_spam'); t.atkSlowT = 0.4; } }); }
+    if (P.has('nucleo_ia') && this.combatT > 0 && (this.coreT = (this.coreT ?? 12) - dt) <= 0) { this.coreT = 12; this.shieldHp = Math.max(this.shieldHp, this.maxHp * 0.12 * P.get('nucleo_ia')); this.shieldT = 4; w.vfx('shield', this.x, this.cy, { scale: 2.6 }); w.float(this.x, this.y - this.def.height - 34, '¡Escudo de núcleo!', '#ffffff'); }
+    if (P.has('firewall_magico')) { if (this.mshieldCd > 0) this.mshieldCd -= dt; else if (!this.mshield) { this.mshield = (120 + this.mr * 2) * P.get('firewall_magico'); w.vfx('shield', this.x, this.cy, { scale: 2.2, tint: 0x66e0ff }); } }
+    if (P.has('corazon_silicio') && !(this.combatT > 0) && this.hp < this.maxHp) { this.hp = Math.min(this.maxHp, this.hp + this.maxHp * 0.03 * P.get('corazon_silicio') * dt); if (Math.random() < dt * 3) w.vfx('heal', this.x + (Math.random() - 0.5) * 40, this.cy + (Math.random() - 0.5) * 30, { scale: 1.6, alpha: 0.8, tint: 0x66ff99 }); }
+    if (this.backupCd > 0) this.backupCd -= dt;
+  }
+
   /* ---------- geometry ---------- */
   hiddenFor(me) { return this.away || this.fogHidden || ((this.invis || (this.antivirus && this.owner?.invis)) && this.baseTeam !== me.baseTeam); }
   breakInvis() { if (this.invis) { this.invis = null; if (this.key === 'luis') this.stab = 2.5; this.w.float(this.x, this.y - this.def.height - 30, 'visible', '#9be37a'); } }
@@ -176,7 +192,7 @@ export class Fighter {
   }
   get speed() {
     const base = this.running ? this.def.stats.run : this.def.stats.speed;
-    return base * (1 - this.slows.reduce((m, s) => Math.max(m, s.pct), 0)) * (1 + (this.speedT > 0 ? this.speedBoost : 0) + this.it.speed) * (this.hen ? 1 + this.def.hen.speed : 1);   // the giant hen runs faster
+    return base * (1 - this.slows.reduce((m, s) => Math.max(m, s.pct), 0)) * (1 + (this.speedT > 0 ? this.speedBoost : 0) + this.it.speed + (this.moveT > 2 ? 0.15 * (this.pas.get('botas_hipersonicas') || 0) : 0)) * (this.hen ? 1 + this.def.hen.speed : 1);   // the giant hen runs faster
   }
 
   /* ---------- lifecycle ---------- */
@@ -191,7 +207,7 @@ export class Fighter {
     this.running = false;
     this.deadT = 0;
     this.in = { mx: 0, my: 0, run: false };
-    this.setupStacks = 0; this.setupHits = 0; this.rw = null;
+    this.setupStacks = 0; this.setupHits = 0; this.rw = null; this.mshield = 0; this.mshieldCd = 0; this.backupCd = 0; this.moveT = 0; this.punchN = 0; this.combatT = 0; this.atkSlowT = 0; this.coreT = undefined;
     this.cds = { p1: 0, p2: 0, p3: 0, ult: 0, basic: 0 };
     this.ink = null; this.inkDash = null; this.silenceT = 0; this.blindT = 0; this.shieldHp = 0; this.shieldT = 0; this.speedBoost = 0; this.speedT = 0; this.charmT = 0; this.team = this.baseTeam; this.malware = null;
     this.rage = 0; this.hen = false;
@@ -301,11 +317,11 @@ export class Fighter {
   tryCast(k) {
     const n = this.w.net;
     if (n?.role === 'client' && !n.replaying) return n.clientCast(this, k);
-    const ok = this._tryCast(k); if (ok) { this.setupHit(); if (n?.role === 'host') n.sendCast(this, k); } return ok;
+    const ok = this._tryCast(k); if (ok) { this.setupHit(); if (this.pas.has('procesador_cuantico')) { this.speedBoost = Math.max(this.speedT > 0 ? this.speedBoost : 0, 0.25 * this.pas.get('procesador_cuantico')); this.speedT = Math.max(this.speedT, 2); this.w.vfx('run_dust', this.x, this.y - 6, { scale: 2.2, alpha: 0.8, below: true }); } if (n?.role === 'host') n.sendCast(this, k); } return ok;
   }
   _tryBasic() {
     if (!this.free || this.cds.basic > 0) return false;
-    this.cds.basic = this.def.stats.atkCd / (1 + this.pk('aspd') + this.it.aspd);
+    this.cds.basic = this.def.stats.atkCd / (1 + this.pk('aspd') + this.it.aspd) / (this.atkSlowT > 0 ? 1 - this.atkSlow : 1);
     if (this.invis) this.breakInvis();
     if (this.isBot) { this.startAction('attack', 0.2, 0.4, () => this.basicDo(() => this.botAttack())); return true; }
     if (this.isMinion || this.isTower) { this.startAction('attack', 0.15, 0.35, () => this.basicDo(() => this.unitAttack())); return true; }
@@ -665,6 +681,7 @@ export class Fighter {
   }
 
   die(killer) {
+    if (this.isChamp) this.deaths++;
     this.alive = false; this.state = 'dead';
     this.stateT = 0; this.deadT = 0; this.pending = null; this.stunT = 0;
     this.slows = []; this.poisons = [];
@@ -701,6 +718,10 @@ export class Fighter {
       }
       return;
     }
+    if (this.drop) {   // reinforcement falling from the ship: untouchable until it lands
+      const d = this.drop; d.t += dt; if (d.slide && d.t > 0) { const k = Math.min(1, d.t / d.dur), e = 1 - Math.pow(1 - k, 2); this.x = d.slide.x0 + (d.slide.x1 - d.slide.x0) * e; this.y = d.slide.y0 + (d.slide.y1 - d.slide.y0) * e; } else if (d.slide) { this.x = d.slide.x0; this.y = d.slide.y0; }
+      if (d.t >= d.dur) { this.drop = null; this.w.vfx('run_dust', this.x, this.y - 6, { scale: 2.6, alpha: 0.8, below: true }); this.w.audio.play('step', { at: this, vol: 0.5, gap: 60 }); } return;
+    }
     if (this.isBot) {
       this.life -= dt;
       if (this.life <= 0 || (this.owner && !this.owner.alive)) { this.dispose = true; return; }
@@ -726,6 +747,9 @@ export class Fighter {
       if (p.mana && this.maxMana) this.mana = Math.min(this.maxMana, this.mana + p.mana * f);
       return p.t > 0;
     });
+    if (this.atkSlowT > 0) this.atkSlowT -= dt;
+    if (this.combatT > 0) this.combatT -= dt;
+    if (this.isChamp && this.pas.size) this.itemPassives(dt);
     if (this.isChamp) {   // item regen, passive income and the base fountain
       this.hp = Math.min(this.maxHp, this.hp + this.it.hpRegen * dt);
       if (this.maxMana) this.mana = Math.min(this.maxMana, this.mana + this.it.manaRegen * dt);
@@ -869,6 +893,10 @@ export class Fighter {
   // blinded player: only units inside the (blurred) vision area can be seen
   render(time) {
     this.renderInner(time);
+    if (this.drop) {   // falls from above (the sprite is lifted by the remaining height) and appears once it is released
+      const d = this.drop, p = Math.max(0, Math.min(1, d.t / d.dur)), lift = d.slide ? Math.sin(p * Math.PI) * 60 + d.h * (1 - p) : d.h * (1 - p * p);
+      this.spr.y -= lift; this.spr.setAlpha(d.t < 0 ? 0 : 1); this.shadow.setAlpha(d.t < 0 ? 0 : 0.15 + 0.3 * p).setScale(this.def.height / 32 * 0.8 * (0.5 + 0.5 * p), this.def.height / 32 * 0.4 * (0.5 + 0.5 * p));
+    }
     const m = this.w.blindVis(this);
     if (m < 1) { this.spr.setAlpha(this.spr.alpha * m); this.shadow.setAlpha(this.shadow.alpha * m); this.ring?.setAlpha(m); if (m <= 0) this.ring?.setVisible(false); }
   }

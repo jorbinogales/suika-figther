@@ -1,0 +1,10 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--enable-unsafe-swiftshader', '--use-gl=angle', '--mute-audio'], defaultViewport: { width: 1280, height: 720 } });
+const p = await b.newPage(); p.on('pageerror', e => console.log('[pageerror]', e.message));
+await p.goto('http://localhost:5173/#mode=3&keep=1&noai=1&nofog=1', { waitUntil: 'load' }); await new Promise(r => setTimeout(r, 14000));
+console.log(await p.evaluate(`(() => { const a = window.__arena, f = a.player; a.handleInput = () => {}; a.audio.play = () => {}; a.audio.playAll = () => {}; a.audio.voice = () => {};
+  const foe = a.champs.find(c => c.baseTeam !== f.baseTeam), ally = a.champs.find(c => c !== f && c.baseTeam === f.baseTeam);
+  foe.hp = 1; a.damage(f, foe, 50, 'true'); ally.hp = ally.hp; const foe2 = a.champs.filter(c => c.baseTeam !== f.baseTeam)[1]; a.damage(ally, foe2, 10, 'true'); a.damage(f, foe2, 9999, 'true'); a.selected = foe;
+  for (let i = 0; i < 60 * 75; i++) a.update(a.time.now + i * 16, 16.7);
+  return JSON.stringify({ k: f.kills, d: f.deaths, a: f.assists, allyKills: ally.kills, t: Math.round(a.gameT) }); })()`));
+await new Promise(r => setTimeout(r, 500)); await p.screenshot({ path: 'D:/mycowork/game/shot_score.png' }); await b.close();

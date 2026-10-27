@@ -49,7 +49,22 @@
       "Tienda: el filtro por ventaja ahora es una columna a la izquierda con la opción «Todos»; en el árbol de crafteo el objeto a fabricar y sus ingredientes brillan en dorado, y las líneas de lo ya completado se iluminan; abajo aparece «Se usa para crear» con los objetos de un nivel más arriba.",
       "Dos objetos de nivel 3 nuevos: Garras vampíricas (ataque, velocidad de ataque y robo de vida) y Botas hipersónicas (la mayor velocidad de movimiento).",
       "La tienda recuerda la pestaña y el filtro elegidos al cerrarla, entre partidas y al recargar la página.",
-      "Mejoras permanentes («prompts»): una por ventaja (ataque, poder de IA, armadura, resistencia a la IA, vida, maná, velocidad, velocidad de ataque, robo de vida, recarga y regeneraciones). Son rojas, no ocupan espacio, se pueden comprar sin límite y cada una cuesta 300 de oro. Pestaña «Mejoras» en la tienda."
+      "Mejoras permanentes («prompts»): una por ventaja (ataque, poder de IA, armadura, resistencia a la IA, vida, maná, velocidad, velocidad de ataque, robo de vida, recarga y regeneraciones). Son rojas, no ocupan espacio, se pueden comprar sin límite y cada una cuesta 300 de oro. Pestaña «Mejoras» en la tienda.",
+      "Corregido: al pulsar Enter ya no se reinicia el personaje (esa tecla de pruebas solo existe en la zona de entrenamiento).",
+      "Balance de objetos: cada paso de crafteo duplica la suma de sus ingredientes (un objeto de nivel 2 vale el doble que sus dos partes, y uno de nivel 3 el doble de las suyas). Los valores de los básicos se ajustaron y hay topes de seguridad (recarga 40 %, velocidad de ataque 100 %, robo de vida 35 %, velocidad 50 %).",
+      "Cada objeto de nivel 3 tiene una pasiva única automática: Golpe demoledor, Sobrecarga, Sed de sangre, Sobrecalentamiento, Cálculo paralelo, Escudo de núcleo, Blindaje reactivo, Disipador de calor, Bloqueo de spam, Cortafuegos, Copia de seguridad, Latido sereno e Hipervelocidad, con efectos visuales sobre los campeones.",
+      "Al pasar el ratón sobre un objeto (tienda, inventario o árbol de crafteo) aparece su descripción: qué mejora, su texto y la pasiva resaltada en amarillo.",
+      "Los objetos verdes (nivel 2) de 13 tipos tienen una versión menor de la pasiva de su objeto morado correspondiente.",
+      "Marcador de partida: tus kills, muertes y asistencias cuelgan en el centro superior, y arriba a la derecha se ven las kills de cada equipo y el tiempo de partida.",
+      "Marcador: cuando sube un número (kills, muertes, asistencias o kills de equipo) su recuadro hace una animación de resplandor.",
+      "Campamentos reclamables (3 al norte y 3 al sur): quédate sobre uno para llenar su gráfica de color azul o rojo; al completarse su bandera ondeante toma el color del equipo y cada 30 s llega una nave gigante que descarga 3 súbditos que avanzan por el camino norte o sur hasta el nexo enemigo. Se ven en el minimapa.",
+      "Las banderas ahora se dibujan por encima de los riscos y del decorado del mapa.",
+      "Las naves de refuerzo entran desde el borde del mapa y se alejan de nuevo hacia el borde (nunca cruzan el mapa); los campamentos del sur son ahora el espejo exacto de los del norte (el del medio queda centrado) y las rutas son más anchas y con puntos densos para que los súbditos no se atasquen.",
+      "La cámara ahora puede desplazarse más hacia arriba (y un poco hacia abajo) del mapa.",
+      "Mapa: el margen que se ve al desplazar la cámara más arriba o abajo ya no es una zona verde lisa; se llena de árboles y una segunda línea de riscos.",
+      "Se muestra la cuenta atrás en segundos de la llegada de súbditos: sobre cada bandera reclamada («Refuerzos en Xs») y sobre cada nexo («Súbditos en Xs»).",
+      "Cuando hay unidades debajo de una nave de refuerzo, la nave se vuelve casi transparente para no taparlas.",
+      "Las naves del sur ya no pisan el campo de batalla: se quedan en el extremo inferior del mapa y lanzan desde allí a los súbditos, que vuelan hasta el campamento."
     ]
   },
   {

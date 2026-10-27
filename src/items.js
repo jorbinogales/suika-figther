@@ -4,25 +4,25 @@
 // Stat fields: atk, ap, armor, mr, hp, mana (flat) · speed, aspd, lifesteal, cdr (fractions) · hpRegen, manaRegen (per second)
 export const CATS = { ad: 'Ataque físico', ap: 'Poder de IA', arm: 'Defensa física', mr: 'Resistencia a la IA', hp: 'Vida', util: 'Utilidad', rec: 'Recuperación' };
 export const CAT_COL = { ad: '#ff9a6a', ap: '#c77dff', arm: '#f2c14e', mr: '#7ee0ff', hp: '#5dff8a', util: '#ffd23f', rec: '#ff7ab8' };
-export const SLOTS = 6, MAX_LEVEL = 3, CRAFT_BONUS = 1.15, FEE = [0, 50, 100];
+export const SLOTS = 6, MAX_LEVEL = 3, CRAFT_BONUS = 2, FEE = [0, 100, 250];   // every crafting step doubles the sum of its ingredients (so combining is always better than buying the parts)
 
 const defs = [];
 const B = (id, name, cat, cost, desc, stats = {}, extra = {}) => defs.push({ id, name, cat, cost, desc, stats, ...extra });
 const C = (id, name, cat, recipe, desc, extra = {}) => defs.push({ id, name, cat, recipe, desc, ...extra });
 
 // ---- level 1: basic components ----
-B('b_pesa', 'Pesa de gimnasio', 'ad', 160, 'Un poco de fuerza.', { atk: 8 });
-B('b_cafe', 'Café expreso', 'ad', 180, 'Ataca más rápido.', { aspd: 0.08 });
+B('b_pesa', 'Pesa de gimnasio', 'ad', 160, 'Un poco de fuerza.', { atk: 6 });
+B('b_cafe', 'Café expreso', 'ad', 180, 'Ataca más rápido.', { aspd: 0.05 });
 B('b_colmillo', 'Colmillo', 'ad', 200, 'Roba un poco de vida.', { lifesteal: 0.04 });
-B('b_chip', 'Chip de memoria', 'ap', 170, 'Un poco de poder de IA.', { ap: 12 });
-B('b_pila', 'Pila de maná', 'ap', 150, 'Más maná.', { mana: 80 });
-B('b_cargador', 'Cargador', 'ap', 140, 'Regenera maná.', { manaRegen: 1.5 });
-B('b_placa', 'Placa de acero', 'arm', 150, 'Armadura básica.', { armor: 10 });
-B('b_filtro', 'Filtro de señal', 'mr', 150, 'Resistencia de IA básica.', { mr: 10 });
-B('b_vial', 'Vial de vitalidad', 'hp', 160, 'Más vida.', { hp: 100 });
-B('b_botiquin', 'Botiquín', 'hp', 140, 'Regenera vida.', { hpRegen: 2 });
-B('b_zapas', 'Zapatillas', 'util', 150, 'Más velocidad.', { speed: 0.04 });
-B('b_reloj', 'Reloj de arena', 'util', 180, 'Poderes más rápidos.', { cdr: 0.04 });
+B('b_chip', 'Chip de memoria', 'ap', 170, 'Un poco de poder de IA.', { ap: 8 });
+B('b_pila', 'Pila de maná', 'ap', 150, 'Más maná.', { mana: 50 });
+B('b_cargador', 'Cargador', 'ap', 140, 'Regenera maná.', { manaRegen: 0.8 });
+B('b_placa', 'Placa de acero', 'arm', 150, 'Armadura básica.', { armor: 6 });
+B('b_filtro', 'Filtro de señal', 'mr', 150, 'Resistencia de IA básica.', { mr: 6 });
+B('b_vial', 'Vial de vitalidad', 'hp', 160, 'Más vida.', { hp: 60 });
+B('b_botiquin', 'Botiquín', 'hp', 140, 'Regenera vida.', { hpRegen: 1.2 });
+B('b_zapas', 'Zapatillas', 'util', 150, 'Más velocidad.', { speed: 0.02 });
+B('b_reloj', 'Reloj de arena', 'util', 180, 'Poderes más rápidos.', { cdr: 0.03 });
 B('pocion_vida_peq', 'Poción de vida pequeña', 'rec', 90, 'Consumible: cura vida en 5 s.', {}, { consumable: { hp: 130, time: 5, charges: 3 } });
 B('pocion_mana_peq', 'Poción de maná pequeña', 'rec', 90, 'Consumible: devuelve maná.', {}, { consumable: { mana: 110, time: 3, charges: 3 } });
 
@@ -80,6 +80,25 @@ C('botas_hipersonicas', 'Botas hipersónicas', 'util', ['botas_turbo', 'botas_re
 C('dron_combate', 'Dron de combate', 'util', ['bot_prompts', 'cable_fibra'], 'Activo: un dron te acompaña y dispara.', { active: { type: 'drone', cd: 50, life: 18 } });
 C('elixir_mixto', 'Elixir mixto', 'rec', ['pocion_vida_gde', 'pocion_mana_gde'], 'Consumible: vida y maná en 4 s.', { consumable: { hp: 190, mana: 150, time: 4, charges: 3 } });
 
+export const PASSIVES = {
+  punio_acero:         { name: 'Golpe demoledor',     desc: 'Cada 4º ataque básico causa un 50 % de daño extra con una onda de choque.' },
+  bate_servidor:       { name: 'Sobrecarga',          desc: 'Tus ataques básicos ralentizan al objetivo un 20 % durante 1.5 s.' },
+  garras_vampiricas:   { name: 'Sed de sangre',       desc: 'Con menos del 40 % de vida tu robo de vida se duplica (aura roja).' },
+  tarjeta_grafica:     { name: 'Sobrecalentamiento',  desc: 'Los enemigos cerca de ti sufren quemadura continua que escala con tu poder de IA (anillo naranja).' },
+  procesador_cuantico: { name: 'Cálculo paralelo',    desc: 'Al usar un poder ganas +25 % de velocidad durante 2 s.' },
+  nucleo_ia:           { name: 'Escudo de núcleo',    desc: 'En combate, cada 12 s generas un escudo temporal (barra blanca) del 12 % de tu vida máxima.' },
+  chaleco_antibalas:   { name: 'Blindaje reactivo',   desc: 'Reduces un 15 % el daño físico que recibes.' },
+  armadura_rack:       { name: 'Disipador de calor',  desc: 'Devuelves el 20 % del daño físico de los ataques básicos que recibes al atacante.' },
+  filtro_spam:         { name: 'Bloqueo de spam',     desc: 'Los enemigos cercanos atacan un 25 % más lento (anillo gris).' },
+  firewall_magico:     { name: 'Cortafuegos',         desc: 'Cada 10 s se activa una barrera que absorbe daño de IA (burbuja cian).' },
+  servidor_redundante: { name: 'Copia de seguridad',  desc: 'Al bajar del 30 % de vida te restauras un 25 % (una vez cada 60 s).' },
+  corazon_silicio:     { name: 'Latido sereno',       desc: 'Fuera de combate durante 5 s recuperas un 3 % de tu vida por segundo.' },
+  botas_hipersonicas:  { name: 'Hipervelocidad',      desc: 'Tras correr 2 s seguidos ganas +15 % de velocidad extra (estela cian).' },
+};
+// level-2 (green) items carry a reduced version (50 %) of one level-3 passive
+export const MINI_OF = { teclado_mecanico: 'punio_acero', guantes_tacticos: 'bate_servidor', navaja_suiza: 'garras_vampiricas', pantalla_holo: 'tarjeta_grafica', libro_algoritmos: 'procesador_cuantico',
+  memoria_ram: 'nucleo_ia', casco_seguridad: 'chaleco_antibalas', rodilleras_pro: 'armadura_rack', antivirus_portatil: 'filtro_spam', amuleto_logico: 'firewall_magico',
+  bateria_extendida: 'servidor_redundante', proteina_extra: 'corazon_silicio', botas_turbo: 'botas_hipersonicas' };
 export const ITEMS = [], ITEM_BY_ID = {};
 for (const d of defs) {
   const it = { ...d };
@@ -91,10 +110,13 @@ for (const d of defs) {
     if (!it.consumable) for (const c of cs) for (const k in c.stats) it.stats[k] = (it.stats[k] || 0) + c.stats[k];
     for (const k in it.stats) it.stats[k] = Math.round(it.stats[k] * CRAFT_BONUS * 100) / 100;
   } else it.lvl = 1;
+  if (PASSIVES[it.id]) it.passive = PASSIVES[it.id];
+  else if (MINI_OF[it.id]) { const b = PASSIVES[MINI_OF[it.id]]; it.passive = { name: b.name + ' menor', desc: 'Versión menor (efecto a la mitad y más lenta). ' + b.desc, mini: true }; }
   ITEMS.push(it); ITEM_BY_ID[it.id] = it;
 }
 export const sellValue = item => Math.round(item.cost * 0.5);
 export const STAT_LABEL = { atk: 'Ataque físico', ap: 'Poder de IA', armor: 'Armadura', mr: 'Res. a la IA', hp: 'Vida', mana: 'Maná', speed: 'Velocidad', aspd: 'Vel. de ataque', lifesteal: 'Robo de vida', cdr: 'Recarga de poderes', hpRegen: 'Regen. vida/s', manaRegen: 'Regen. maná/s' };
+export const STAT_CAP = { cdr: 0.4, aspd: 1.0, lifesteal: 0.35, speed: 0.5 };   // totals are capped so stacking can't break the game
 export const fmtStat = (k, v) => (['speed', 'aspd', 'lifesteal', 'cdr'].includes(k) ? `+${Math.round(v * 100)}%` : `+${Math.round(v * 10) / 10}`);
 
 // What buying `id` costs with the inventory `inv` (slots {id, cd, charges}): components already owned are consumed, missing ones are bought.
