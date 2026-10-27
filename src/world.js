@@ -1711,7 +1711,7 @@ export class Arena extends Phaser.Scene {
       const champ = f.isChamp;
       if (f.hiddenFor(me) || this.blindVis(f) <= 0) { f.bt && Object.values(f.bt).forEach(t => t.setVisible(false)); continue; }
       if (champ && !f.bt) {
-        const mk = () => this.add.text(0, 0, '', { fontFamily: 'monospace', fontSize: '10px', fontStyle: 'bold', color: '#fff', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5).setDepth(100000);
+        const mk = () => { const t = this.add.text(0, 0, '', { fontFamily: 'monospace', fontSize: '10px', fontStyle: 'bold', color: '#fff', stroke: '#000', strokeThickness: 3, resolution: 3 }).setOrigin(0.5).setDepth(100000); t.texture.setFilter(Phaser.Textures.FilterMode.LINEAR); return t; };
         f.bt = { hp: mk(), mp: mk(), name: mk(), lvl: mk() };
       }
       if (!f.alive) { f.bt && Object.values(f.bt).forEach(t => t.setVisible(false)); continue; }
