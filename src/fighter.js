@@ -38,10 +38,6 @@ export const UNIT_DEFS = {
 
 export const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-// per-champion motion strength for the juice layer in renderInner (1 = base).
-// Tuned one champion at a time with Elis, starting with Xeviche: his idle frames are near-identical,
-// so he needs a much stronger procedural layer to read as alive.
-const JUICE_MUL = { xeviche: 2.3 };
 
 export class Fighter {
   constructor(world, key, team, x, y, opts = {}) {
@@ -187,7 +183,7 @@ export class Fighter {
     this.running = false;
     this.deadT = 0;
     this.in = { mx: 0, my: 0, run: false };
-    this.setupStacks = 0; this.setupHits = 0; this.hitT = 0; this.flashing = false;
+    this.setupStacks = 0; this.setupHits = 0;
     this.cds = { p1: 0, p2: 0, p3: 0, ult: 0, basic: 0 };
     this.ink = null; this.inkDash = null; this.silenceT = 0; this.blindT = 0; this.shieldHp = 0; this.shieldT = 0; this.speedBoost = 0; this.speedT = 0; this.charmT = 0; this.team = this.baseTeam; this.malware = null;
     this.rage = 0; this.hen = false;
@@ -573,7 +569,6 @@ export class Fighter {
       }
       case 'xeviche:p1': {
         const dmg = rk(a.dmg, rank) + this.atk * a.atkScale, stun = rk(a.stun, rank);
-        // throw the actual LEGO brick (the ability icon art) spinning, not a red-tinted rock
         w.projectile(this, { speed: a.speed, dmg, type: 'physical', obj: 'icon_xeviche_p1', scale: 0.72, spin: true, spinSpeed: 3.8, r: 26,
           onHit: t => t.stun(stun) });
         break;
@@ -847,7 +842,7 @@ export class Fighter {
     reverse ? this.spr.playReverse(cfg) : this.spr.play(cfg);
   }
 
-  flash() { this.flashing = true; this.hitT = 1; this.spr.setTint(0xff5555); this.w.after(0.09, () => { this.flashing = false; this.spr.clearTint(); this.tintBot(); }); }
+  flash() { this.spr.setTint(0xff5555); this.w.after(0.08, () => { this.spr.clearTint(); this.tintBot(); }); }
 
   // team marker: green = champion in use, blue = ally, red = enemy. A ground ring (cheap); the per-sprite WebGL glow filter it replaced
   // cost 2-4x the frame time once a few dozen units were on screen (the main cause of lag in big matches).
@@ -894,36 +889,7 @@ export class Fighter {
         const hasDeath = this.w.anims.exists(`${this.key}_death`), t = this.stateT - (hasDeath ? 2.0 : 0);
         spr.setAlpha(Math.max(0, 1 - Math.max(0, t) / (hasDeath ? 0.6 : 1.0)));
       }
-      // juice: procedural motion layered over the sprite frames (purely visual; never touches position/logic).
-      // Animated units used to render at the raw x/y with no weight at all, which is why they felt like gliding cutouts.
-      const tt = time / 1000, ph = this.nid * 1.37;   // per-unit phase so a crowd doesn't bob in sync
-      const jm = JUICE_MUL[this.key] || 1;   // per-champion motion strength
-      const wj = 1 + (jm - 1) * 0.3;   // locomotion stays gentler: the walk/run frames already sway, a strong layer on top reads as wobbling
-      let oy = 0, rot = 0, sx = this.baseScale, sy = this.baseScale, ox = 0;
-      if (this.alive) {
-        if (this.state === 'idle') { const b = Math.sin(tt * 2.6 + ph); sy *= 1 + b * 0.015 * jm; sx *= 1 - b * 0.007 * jm; oy = -Math.abs(b) * 1.4 * jm; rot = Math.sin(tt * 1.3 + ph) * 0.012 * jm; }   // breathing + sway (carries champions whose idle frames barely change)
-        else if (this.state === 'walk') { oy = -Math.abs(Math.sin(tt * 10.5 + ph)) * 3.2 * wj; }
-        else if (this.state === 'run') { oy = -Math.abs(Math.sin(tt * 14.7 + ph)) * 4.5 * wj; rot = 0.055 * this.facing; }
-        else if (this.state === 'stun') { rot = Math.sin(tt * 26) * 0.05 * Math.min(jm, 1.8); }
-        else if (this.state === 'cast' && this.stateDur > 0) {
-          const p = Math.min(1, Math.max(0, this.stateT / this.stateDur)), s = Math.sin(p * Math.PI);
-          if (this.anim === 'attack' || this.anim === 'attack2' || this.anim === 'attack3') ox = s * 13 * Math.min(jm, 2) * this.facing;   // lunge into the hit
-          else if (this.anim === 'dash') rot = 0.12 * this.facing;
-          else if (this.anim === 'run') { oy = -Math.abs(Math.sin(tt * 14.7 + ph)) * 4.5 * wj; rot = 0.055 * this.facing; }   // bike form keeps its run motion
-          else { sy *= 1 - s * 0.05 * jm; sx *= 1 + s * 0.04 * jm; oy = -s * 7 * jm; }   // power wind-up squash
-        }
-        if (this.hitT > 0) {   // impact squash when hit (flash() arms hitT)
-          const dtR = this._rt == null ? 0 : Math.min(0.05, (time - this._rt) / 1000);
-          this.hitT = Math.max(0, this.hitT - dtR * 7);
-          const e = this.hitT * this.hitT; sx *= 1 + e * 0.09 * Math.min(jm, 1.7); sy *= 1 - e * 0.09 * Math.min(jm, 1.7);
-        }
-        // keep the walk/run cycle in step with the real speed (slows, boosts, items)
-        if (spr.anims) { const nom = this.state === 'run' ? this.def.stats.run : this.def.stats.speed; spr.anims.timeScale = (this.state === 'walk' || this.state === 'run') && nom > 0 ? clamp(this.speed / nom, 0.55, 1.7) : 1; }
-      } else if (this.isChamp) {   // death: settle into the ground as the death frames play
-        const k = Math.min(1, this.stateT / 0.8); oy = k * 5; rot = k * 0.1 * -this.facing;
-      }
-      this._rt = time;
-      spr.setScale(sx, sy).setRotation(rot).setPosition(this.x + ox, this.y + oy);
+      spr.setPosition(this.x, this.y);
       return;
     }
     // fallback: procedural motion on the static reference image
