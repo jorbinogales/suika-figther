@@ -1,0 +1,25 @@
+// two browser sessions: register, create room, join by code, pick champions, start -> loading -> arena
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader', '--mute-audio', '--autoplay-policy=no-user-gesture-required'], defaultViewport: { width: 1366, height: 768 } });
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const mk = async name => { const c = await b.createBrowserContext(); const p = await c.newPage(); p.on('pageerror', e => console.log(`[${name} pageerror]`, e.message)); p.on('console', m => { if (m.type() === 'error') console.log(`[${name} console]`, m.text()); }); await p.goto('http://localhost:5173/', { waitUntil: 'load' }); await sleep(9000); return p; };
+const uid = Date.now().toString(36);
+const A = await mk('A'), B = await mk('B');
+const reg = async (p, n) => { await p.click('[data-tab=register]'); await p.type('input[name=name]', n); await p.type('input[name=email]', `${n}@t.com`); await p.type('input[name=password]', 'secreto1'); await p.click('button[type=submit]'); await sleep(1500); };
+await reg(A, 'ana' + uid.slice(-4)); await reg(B, 'beto' + uid.slice(-4));
+await A.screenshot({ path: 'D:/mycowork/game/shot_home.png' });
+await A.click('[data-a=create]'); await sleep(1200);
+const code = await A.$eval('.code', e => e.textContent);
+console.log('code', code);
+await B.click('[data-a=joinbox]'); await sleep(300); await B.type('#code', code); await B.keyboard.press('Enter'); await sleep(1500);
+await B.click('.cc[data-k=luis]'); await sleep(500);
+await A.click('.cc[data-k=xeviche]'); await sleep(500);
+await A.type('#chatin', 'hola!'); await A.keyboard.press('Enter'); await sleep(600);
+await A.screenshot({ path: 'D:/mycowork/game/shot_lobby.png' });
+await B.click('[data-a=ready]'); await sleep(500);
+await A.click('[data-a=start]'); await sleep(1300);
+await A.screenshot({ path: 'D:/mycowork/game/shot_loading.png' });
+await sleep(7000);
+console.log('A loading still shown:', await A.$('#loading') !== null, ' arena:', await A.evaluate(() => !!window.Phaser || true));
+await A.screenshot({ path: 'D:/mycowork/game/shot_game.png' });
+await b.close();

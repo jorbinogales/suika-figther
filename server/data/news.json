@@ -1,0 +1,109 @@
+[
+  {
+    "id": "0.6.0",
+    "date": "2026-10-27",
+    "version": "0.6.0",
+    "title": "Nuevo sistema de crafteo de objetos",
+    "tag": "NUEVO",
+    "items": [
+      "Los objetos ya no tienen colores ni niveles de mejora: ahora se fabrican combinando objetos más simples (hasta 3 niveles de crafteo).",
+      "Hay 12 objetos básicos nuevos (pesa, café, chip, pila de maná, placa, filtro, vial, zapatillas, reloj, botiquín, cargador y colmillo) con su propio icono.",
+      "Un objeto híbrido, por ejemplo de poder de IA y vida, se crea con un objeto básico de cada tipo. Al armar, los componentes que ya llevas se consumen y solo pagas lo que falta más una tarifa.",
+      "La tienda muestra el árbol de crafteo del objeto, qué componentes ya tienes y su precio; el botón Comprar pasa a Armar para los objetos fabricados.",
+      "Los bots también fabrican sus objetos por componentes.",
+      "Los iconos antiguos de objetos se rehicieron en tamaño pequeño y suave, ya no se ven pixelados.",
+      "Mapa: nueva apertura hacia el camino norte desde el centro de la línea, y se quitaron los arbustos sueltos que cruzaban los caminos.",
+      "El nexo ya no tiene el círculo pequeño y el círculo de regeneración es más pequeño (ajustado también a la zona de tienda y curación).",
+      "Mapa: se corrigieron las colisiones invisibles junto a los caminos; ahora se puede caminar por todo el terreno que se ve como camino.",
+      "Corregido: al salir al menú y volver a entrar, la partida no empezaba; ahora se puede jugar varias partidas seguidas.",
+      "El volumen de música, efectos y voz del anunciador ahora se controla con barras (launcher y menú de pausa), con porcentaje visible.",
+      "Pantalla de carga al abrir el juego: muestra el progreso mientras se descargan campeones, objetos y sonidos, y desaparece al llegar al launcher."
+    ]
+  },
+  {
+    "id": "0.5.1",
+    "date": "2026-10-27",
+    "version": "0.5.1",
+    "title": "Sonido de Leandro",
+    "tag": "MEJORA",
+    "items": [
+      "El ataque básico de Leandro suena ahora a un proyectil arcano grabado, en lugar del láser retro de 8 bits.",
+      "Sonidos de disparos, explosiones, robots, menús y varias habilidades (Axel, Julio, Luis, Héctor, Xeviche, Eliud) reemplazados por grabaciones de 24 bits; ya no quedan sonidos tipo 8 bits.",
+      "Los campeones sin maná (Eliud) muestran su propia barra sobre la cabeza: ira en naranja y vida de la gallina en dorado.",
+      "La ira de Eliud baja poco a poco si pasa más de 2 segundos sin atacar ni recibir ataques.",
+      "La regeneración base de maná de todos los campeones se reduce un 90 %.",
+      "Eliud gana mucha ira al eliminar enemigos: 35 por un campeón, 15 por una torre y 8 por un súbdito.",
+      "Interfaz: se quitó el botón «?» del campeón en uso; sus estadísticas muestran el valor base en blanco y, al lado, lo que suman objetos o mejoras en verde.",
+      "Tienda: un solo botón de acción (Comprar y, una vez tienes el objeto, Mejorar) y un árbol de mejoras a la izquierda con el efecto y el costo de cada nivel."
+    ]
+  },
+  {
+    "id": "0.5.0",
+    "date": "2026-10-27",
+    "version": "0.5.0",
+    "title": "Partidas online",
+    "tag": "NUEVO",
+    "items": [
+      "Las partidas de sala ya se juegan en vivo: el anfitrión simula la partida y los demás jugadores ven y controlan a su campeón.",
+      "Movimiento, ataques, habilidades, tienda, mejoras de habilidades y objetos funcionan para todos los jugadores de la sala.",
+      "Si un jugador se va, su campeón pasa a ser controlado por la IA; si se va el anfitrión, la partida termina para todos.",
+      "En línea no se puede pausar la partida ni rendirse, y la habilidad definitiva de Luis (control mental) aún no está disponible."
+    ]
+  },
+  {
+    "id": "0.4.0",
+    "date": "2026-10-27",
+    "version": "0.4.0",
+    "title": "Launcher, cuentas y salas",
+    "tag": "NUEVO",
+    "items": [
+      "Nuevo launcher con inicio de sesión y registro por correo.",
+      "Noticias y actualizaciones del juego dentro del launcher.",
+      "Crear sala con código de 6 letras (hasta 10 jugadores), unirse por código o a una partida rápida.",
+      "Selección de campeón en la sala, elección de equipo y pantalla de carga antes de empezar.",
+      "Menú de estilo tecnológico con música y sonidos de navegación de ciencia ficción."
+    ]
+  },
+  {
+    "id": "0.3.0",
+    "date": "2026-10-27",
+    "version": "0.3.0",
+    "title": "Sistema de objetos y tienda",
+    "tag": "NUEVO",
+    "items": [
+      "Tienda en la base (tecla B): 50 objetos en 7 categorías: ataque físico, poder de IA, defensa física, defensa de IA, vida, utilidad y recuperación.",
+      "5 niveles por objeto: gris, verde, azul, morado y rojo. Mejorar cuesta oro y requiere tener el objeto.",
+      "Objetos activos: mortero portátil, maletín de soldados, dron de combate, escudo de emergencia, sprint, bomba de humo y teleport a la base.",
+      "Pociones de vida y maná con 3 cargas (teclas 1-6 para usar objetos).",
+      "Fuente de curación alrededor del nexo: vida y maná se recuperan en la base.",
+      "Los bots ahora compran, mejoran y usan objetos."
+    ]
+  },
+  {
+    "id": "0.2.0",
+    "date": "2026-10-20",
+    "version": "0.2.0",
+    "title": "Modos de juego y anunciador",
+    "tag": "MEJORA",
+    "items": [
+      "Modos 1 vs 1, 3 vs 3 y 5 vs 5 en el mismo mapa.",
+      "Anunciador con voz, carteles épicos con el rostro del campeón y cola de mensajes.",
+      "Escudos como barra blanca delante de la vida.",
+      "Bots más inteligentes: usan más habilidades y se sacrifican menos.",
+      "Eliminados los temblores de cámara; caminar hacia atrás gira al personaje."
+    ]
+  },
+  {
+    "id": "0.1.0",
+    "date": "2026-10-13",
+    "version": "0.1.0",
+    "title": "Primera versión jugable",
+    "tag": "LANZAMIENTO",
+    "items": [
+      "8 campeones: Leandro, Xeviche, Jorbi, Axel-kun, Julio, Luis, Eliud y Héctor.",
+      "Mapa de una línea con torres, nexos y bosque con caminos laterales.",
+      "12 niveles, 4 habilidades por campeón y habilidad definitiva desbloqueable.",
+      "Interfaz estilo ciencia ficción con minimapa, habilidades y estadísticas."
+    ]
+  }
+]

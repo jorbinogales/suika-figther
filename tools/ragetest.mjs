@@ -1,0 +1,12 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader', '--mute-audio'], defaultViewport: { width: 1280, height: 720 } });
+const p = await b.newPage(); p.on('pageerror', e => console.log('[pageerror]', e.message));
+await p.goto('http://localhost:5173/#char=eliud&keep=1&noai=1', { waitUntil: 'load' }); await new Promise(r => setTimeout(r, 12000));
+console.log(await p.evaluate(`(() => { const a = window.__arena, e = a.player; a.handleInput = () => {}; a.audio.play = () => {}; a.audio.playAll = () => {};
+  e.rage = 60; e.mana = 0; const r = [], step = n => { for (let i = 0; i < n; i++) a.update(a.time.now + i * 16, 16.7); };
+  step(60 * 1.5); r.push(Math.round(e.rage)); step(60 * 3); r.push(Math.round(e.rage)); step(60 * 3); r.push(Math.round(e.rage));
+  e.rage = 60; e.rageIdle = 0; for (let i = 0; i < 60 * 5; i++) { if (i % 30 === 0) e.addRage(1.6); a.update(a.time.now + i * 16, 16.7); } const fighting = Math.round(e.rage);
+  const c = a.champs.find(c => c.maxMana), m0 = c.mana = 0; for (let i = 0; i < 600; i++) a.update(a.time.now + i * 16, 16.7);
+  return JSON.stringify({ rageDecay: r, rageWhileFighting: fighting, manaAfter10s: +c.mana.toFixed(1) }); })()`));
+await new Promise(r => setTimeout(r, 500)); await p.screenshot({ path: 'D:/mycowork/game/shot_rage.png' });
+await b.close();

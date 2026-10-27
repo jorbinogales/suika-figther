@@ -1,0 +1,620 @@
+import Phaser from 'phaser';
+import { CLASSES, ABILITY_KEYS, MAX_LEVEL, MAX_RANK, ULT_LEVELS, rk } from './data.js';
+import { WORLD_W, WORLD_H, CAMPS } from './fighter.js';
+import { walk, GW, GH, CELL } from './mapdata.js';
+import { levelGauge } from './world.js';
+import { vol, saveVol } from './audio.js';
+import { net } from './net.js';
+import { ITEMS, ITEM_BY_ID, CATS, CAT_COL, STAT_LABEL, fmtStat, sellValue, buyPlan, recipeTree } from './items.js';
+
+// HUD = separate floating modules built on Codex art (art/raw/ui -> tools/process_ui.py -> public/assets/ui).
+// Each element is placed in its hole. Layout (empty space between modules on purpose):
+//   bottom-left : hero (portrait, name, "?" button -> stats popup)   bottom-center: abilities + big HP / mana
+//   bottom-right: minimap                                            middle-left  : 6 item slots
+//   top-right   : info panel of the clicked champion (name, portrait, stats, items)
+// Without the art it falls back to the default hole positions over a plain dark panel.
+const MODS = {
+  hud_hero:    { w: 260, h: 230, holes: { portrait: [20, 36, 128, 128], name: [20, 172, 128, 24], help: [164, 36, 36, 36] } },
+  hud_center:  { w: 520, h: 190, holes: { ability0: [64, 16, 76, 76], ability1: [162, 16, 76, 76], ability2: [260, 16, 76, 76], ability3: [358, 16, 76, 76], hp: [40, 112, 440, 28], mana: [40, 146, 440, 18] } },
+  hud_minimap: { w: 370, h: 230, holes: { minimap: [20, 24, 330, 180] } },
+  hud_enemy:   { w: 504, h: 72, holes: { name: [14, 23, 170, 26], item0: [196, 17, 38, 38], item1: [238, 17, 38, 38], item2: [280, 17, 38, 38], item3: [322, 17, 38, 38], item4: [364, 17, 38, 38], item5: [406, 17, 38, 38], help: [462, 21, 30, 30] } },
+  hud_banner_blue: { w: 800, h: 140, holes: { portrait: [18, 16, 108, 108], victim: [718, 38, 64, 64] } },
+  hud_banner_red:  { w: 800, h: 140, holes: { portrait: [18, 16, 108, 108], victim: [718, 38, 64, 64] } },
+  hud_banner_blue_l: { w: 800, h: 140, holes: { portrait: [18, 16, 108, 108] } },
+  hud_banner_red_l:  { w: 800, h: 140, holes: { portrait: [18, 16, 108, 108] } },
+  hud_banner_gold_l: { w: 800, h: 140, holes: { portrait: [18, 16, 108, 108] } },
+  hud_banner_gold_plain: { w: 800, h: 140, holes: {} },
+  hud_banner_gold: { w: 800, h: 140, holes: { portrait: [18, 16, 108, 108], victim: [718, 38, 64, 64] } },
+  hud_stats:   { w: 254, h: 230, holes: { stats: [20, 20, 214, 190] } },
+  hud_items:   { w: 148, h: 240, holes: { item0: [14, 28, 56, 56], item1: [78, 28, 56, 56], item2: [14, 92, 56, 56], item3: [78, 92, 56, 56], item4: [14, 156, 56, 56], item5: [78, 156, 56, 56] } },
+  hud_target:  { w: 768, h: 300, holes: { name: [24, 14, 400, 28], portrait: [24, 56, 120, 120], stats: [160, 56, 300, 200],
+    item0: [488, 56, 72, 72], item1: [568, 56, 72, 72], item2: [648, 56, 72, 72], item3: [488, 136, 72, 72], item4: [568, 136, 72, 72], item5: [648, 136, 72, 72] } },
+};
+
+// polygon of a clockwise sweep from 12 o'clock covering `frac` of a square (clock-style cooldown)
+function sweep(cx, cy, half, frac) {
+  const pts = [{ x: cx, y: cy }, { x: cx, y: cy - half }];
+  const steps = Math.max(2, Math.ceil(frac * 72));
+  for (let i = 1; i <= steps; i++) {
+    const a = -Math.PI / 2 + (frac * 2 * Math.PI * i) / steps, c = Math.cos(a), sn = Math.sin(a), t = half / Math.max(Math.abs(c), Math.abs(sn));
+    pts.push({ x: cx + c * t, y: cy + sn * t });
+  }
+  return pts;
+}
+
+// tooltip table: ability field -> [label, unit]. Only array fields (one value per rank) are listed.
+const FIELD = { shieldFlat: ['Escudo fijo', ''], shieldPct: ['Escudo (% vida máx.)', '%'], shieldArmor: ['Escudo (x armadura)', ''], effectTime: ['Duración de mejoras', 's'], effectPower: ['Potencia de mejoras', '%'], packages: ['Cajas', ''], interval: ['Segundos por pieza', 's'], robots: ['Robots', ''], maxInvis: ['Invisibilidad máx.', 's'], control: ['Control', 's'], cd: ['Enfriamiento', 's'], mana: ['Maná', ''], dmg: ['Daño', ''], stun: ['Stun', 's'], slow: ['Ralentiza', '%'], poisonApScale: ['Veneno (xPoder IA)', ''],
+  life: ['Duración', 's'], heal: ['Curación', ''], healHpPct: ['Curación extra (% vida)', '%'], maxStacks: ['Pilas máximas', ''], armorPer: ['Armadura por pila', ''],
+  mrPer: ['Res. mágica por pila', ''], silence: ['Silencio', 's'], stunAfter: ['Stun tras (s)', 's'], drops: ['Rondas de gotas', ''], amp: ['Curvatura', ''], blind: ['Ceguera', 's'], charm: ['Duración de control', 's'], hps: ['Curación por seg', ''], shield: ['Escudo', ''], speedBoost: ['Velocidad extra', '%'], time: ['Duración', 's'], critMult: ['Daño crítico (x)', ''], dashDist: ['Distancia del dash', ''], window: ['Tiempo para usar dashes', 's'], duration: ['Duración', 's'], hpMult: ['Vida (x)', ''], atkMult: ['Ataque (x)', ''], cdSpeed: ['Recarga de poderes (x)', ''], reqLvl: ['Nivel requerido', ''], radius: ['Radio', ''], melee: ['Bots cuerpo a cuerpo', ''], ranged: ['Bots a distancia', ''] };
+const fmt = (k, v) => (FIELD[k][1] === '%' ? `${Math.round(v * 100)}%` : `${v}${FIELD[k][1]}`);
+
+export class Hud extends Phaser.Scene {
+  constructor() { super('hud'); }
+
+  create() {
+    this.g = this.add.graphics().setDepth(1);        // dark fills behind the art + bars/minimap
+    this.top = this.add.graphics().setDepth(3);      // overlays above icons (cooldown sweep, highlights)
+    // the scene object survives restarts but its display objects do not: forget every pooled object / texture of the previous match
+    this.stImgs = {}; this.itImgs = {}; this.bnImgs = {}; this.blindImg = null; this.blindTex = null; this.blindWas = false; if (this.textures.exists('blindmask')) this.textures.remove('blindmask');
+    this.txt = {}; this.icons = []; this.pimg = {}; this.panels = {}; this.iconRects = []; this.upRects = []; this.helpRect = null;
+    this.tipG = this.add.graphics().setDepth(6);
+    this.redG = this.add.graphics().setDepth(0.5);   // red screen tint while dead
+    this.helpHold = null; this.enemyHelpRect = null; this.btns = []; this.ovG = this.add.graphics().setDepth(20); this.overlay = false;   // '?' buttons show stats only while held
+    const L = this.cache.json.get('uilayout') || {};
+    this.layout = {};
+    Object.keys(MODS).forEach(n => {
+      this.layout[n] = L[n] || MODS[n];
+      if (this.textures.exists('ui_' + n)) this.panels[n] = this.add.image(0, 0, 'ui_' + n).setOrigin(0, 0).setDepth(2.5);
+    });
+    this.shopOpen = false; this.shopCat = 'all'; this.shopSel = null; this.shopScroll = 0; this.shopBtns = []; this.slotBtns = [];
+    this.shopG = this.add.graphics().setDepth(30);
+    this.input.on('wheel', (ptr, over, dx, dy) => { if (this.shopOpen) this.shopScroll += dy > 0 ? 1 : -1; });
+    this.input.on('pointerdown', ptr => {
+      if (!ptr.leftButtonDown()) return;
+      const A = this.scene.get('arena'), hit = r => r && ptr.x >= r.x && ptr.x <= r.x + (r.s ?? r.w) && ptr.y >= r.y && ptr.y <= r.y + (r.s ?? r.h);
+      if (this.shopOpen) { const sb = this.shopBtns.find(hit); if (sb) { A.audio.play('ui_click', { gap: 0 }); sb.fn(); } return; }   // the shop eats every click
+      const si = this.slotBtns.findIndex(hit); if (si >= 0 && !this.overlay) { if (this.slotBtns[si].special) this.toggleShop(); else A.pc.useItem(si); return; }
+      const vb = this.volBars?.find(hit); if (vb) { this.dragVol = vb; this.setVol(vb, ptr.x); return; }
+      const bt = this.btns.find(hit); if (bt) { A.audio.play('ui_click', { gap: 0 }); bt.fn(); return; }
+      if (this.overlay) return;
+      const up = this.upRects.findIndex(r => r && hit(r)), i = this.iconRects.findIndex(hit);
+      if (up >= 0) A.player.spend(ABILITY_KEYS[up]);   // glowing upgrade button above the icon
+      else if (i >= 0) { if (A.pc.silenceT > 0 && !A.pc.def.abilities[ABILITY_KEYS[i]].passive) return; A.aimKey === ABILITY_KEYS[i] ? A.confirmAim() : A.beginAim(ABILITY_KEYS[i]); }   // silenced: icons cannot be clicked
+      else if (hit(this.enemyHelpRect)) this.helpHold = 'sel';
+    });
+    this.input.on('pointermove', ptr => { if (this.dragVol && ptr.isDown) this.setVol(this.dragVol, ptr.x); });
+    this.input.on('pointerup', () => { this.helpHold = null; this.dragVol = null; });
+    this.input.on('pointerupoutside', () => { this.helpHold = null; this.dragVol = null; });
+  }
+
+  // reusable text objects (hidden each frame unless re-set)
+  T(id, str, x, y, { size = 12, color = '#fff', origin = [0, 0], bold = false, stroke = 3, depth = 4 } = {}) {
+    let t = this.txt[id];
+    if (!t) t = this.txt[id] = this.add.text(0, 0, '', { fontFamily: 'monospace' }).setDepth(depth);
+    t.setStyle({ fontFamily: 'monospace', fontSize: `${Math.max(7, Math.round(size))}px`, color, fontStyle: bold ? 'bold' : 'normal', stroke: '#000', strokeThickness: stroke });
+    return t.setText(str).setOrigin(...origin).setPosition(x, y).setVisible(true);
+  }
+
+  // place a module at (x, y) with scale s; returns role -> {x, y, w, h} in screen px. Also registers its box (clicks on it don't reach the world).
+  place(name, x, y, s) {
+    const L = this.layout[name], im = this.panels[name];
+    if (im) im.setPosition(x, y).setScale(s).setVisible(true);
+    else { this.g.fillStyle(0x0a0e18, 0.92).fillRect(x, y, L.w * s, L.h * s); this.g.lineStyle(2, 0x3fd0ff, 0.5).strokeRect(x, y, L.w * s, L.h * s); }
+    this.boxes.push({ x, y, w: L.w * s, h: L.h * s });
+    const rect = role => { const h = L.holes[role]; return h && { x: x + h[0] * s, y: y + h[1] * s, w: h[2] * s, h: h[3] * s }; };
+    Object.keys(L.holes).forEach(r => { const q = rect(r); this.g.fillStyle(0x070a12, 1).fillRect(q.x, q.y, q.w, q.h); });
+    return rect;
+  }
+
+  update() {
+    const A = this.scene.get('arena');
+    if (!A?.player) return;
+    Object.values(this.txt).forEach(t => t.setVisible(false));
+    if (this.stImgs) Object.values(this.stImgs).forEach(im => im.setVisible(false));
+    if (this.itImgs) Object.values(this.itImgs).forEach(im => im.setVisible(false));
+    Object.values(this.panels).forEach(p => p.setVisible(false));
+    const W = this.scale.width, H = this.scale.height, g = this.g, o = this.top, p = A.pc;
+    g.clear(); o.clear(); this.tipG.clear(); this.redG.clear(); this.iconRects = []; this.upRects = []; this.boxes = [];
+    const u = Phaser.Math.Clamp(H / 900, 0.75, 1.5), m = 14 * u;
+
+    // ---- worm: darkness, only a small circle around the champion stays visible ----
+    if (p.alive && p.blindT > 0) {   // darkened map with an irregular, blurred vision area (not a perfect circle, not pitch black)
+      const cam = A.cameras.main, v = cam.worldView, z = cam.zoom, cx = (p.x - v.x) * z, cy = (p.y - 40 - v.y) * z, S = 560 * z;
+      if (!this.blindTex) { this.blindTex = this.textures.createCanvas('blindmask', 256, 256); this.blindImg = this.add.image(0, 0, 'blindmask').setDepth(0.45); this.blindTex.setFilter(Phaser.Textures.FilterMode.LINEAR); }
+      if (!this.blindWas) {   // new random blob each time the blindness starts
+        const ctx = this.blindTex.getContext(), id = ctx.createImageData(256, 256), ph = [0, 1, 2, 3, 4].map(() => Math.random() * 6.283), am = [0.1, 0.07, 0.05, 0.03, 0.02];
+        for (let y = 0; y < 256; y++) for (let x = 0; x < 256; x++) {
+          const dx = (x - 128) / 128, dy = (y - 128) / 128, d = Math.hypot(dx, dy), th = Math.atan2(dy, dx);
+          let rr = 0.66; for (let k = 0; k < 5; k++) rr *= 1 + am[k] * Math.sin((k + 2) * th + ph[k]);
+          const t = Math.min(1, Math.max(0, (d - rr * 0.62) / (rr * 0.62))), sm = t * t * (3 - 2 * t), i = (y * 256 + x) * 4;
+          id.data[i] = 0; id.data[i + 1] = 6; id.data[i + 2] = 3; id.data[i + 3] = Math.round(sm * 215);
+        }
+        ctx.putImageData(id, 0, 0); this.blindTex.refresh();
+      }
+      this.blindImg.setVisible(true).setPosition(cx, cy).setDisplaySize(S, S);
+      const L = cx - S / 2, Rr = cx + S / 2, Tp = cy - S / 2, Bt = cy + S / 2, rg = this.redG, y0 = Math.max(0, Tp), y1 = Math.min(H, Bt);
+      rg.fillStyle(0x000603, 0.843).fillRect(0, 0, W, y0).fillRect(0, y1, W, Math.max(0, H - y1)).fillRect(0, y0, Math.max(0, L), y1 - y0).fillRect(Math.min(W, Rr), y0, Math.max(0, W - Rr), y1 - y0);
+      this.T('blindT', `CEGADO ${p.blindT.toFixed(1)}s`, W / 2, 36 * u, { size: 16 * u, bold: true, color: '#9be37a', origin: [0.5, 0], stroke: 4 });
+    }
+    this.blindWas = p.alive && p.blindT > 0; if (!this.blindWas) this.blindImg?.setVisible(false);
+    if (p.alive && p.silenceT > 0) this.T('silT', `SILENCIADO ${p.silenceT.toFixed(1)}s`, W / 2, 64 * u, { size: 16 * u, bold: true, color: '#c77dff', origin: [0.5, 0], stroke: 4 });
+    if (p.alive && p.charmT > 0) this.T('charmT', `CONTROLADO ${p.charmT.toFixed(1)}s`, W / 2, 90 * u, { size: 18 * u, bold: true, color: '#ffd23f', origin: [0.5, 0], stroke: 4 });
+
+    if (A.control && A.control.mode === 'ctrl') this.T('ctrlT', `CONTROLANDO a ${A.control.target.def.name.toUpperCase()} · ${A.control.t.toFixed(1)}s`, W / 2, 90 * u, { size: 18 * u, bold: true, color: '#33ff88', origin: [0.5, 0], stroke: 4 });
+
+    this.drawBanner(A, u, W);
+
+    // ---- dead: red screen + respawn countdown at the top ----
+    if (!p.alive) {
+      const pulse = 0.5 + 0.5 * Math.sin(this.time.now / 300);
+      this.redG.fillStyle(0x7a0000, 0.26 + 0.06 * pulse).fillRect(0, 0, W, H);
+      for (let i = 0; i < 10; i++) this.redG.lineStyle(26, 0x9a0000, 0.045 * (10 - i)).strokeRect(i * 13, i * 13, W - i * 26, H - i * 26);
+      const left = Math.max(0, p.respawnTime - p.deadT);
+      this.T('deadT1', 'HAS MUERTO · REAPARECES EN', W / 2, 36 * u, { size: 18 * u, bold: true, color: '#ffb0b0', origin: [0.5, 0], stroke: 4, depth: 8 });
+      this.T('deadT2', `${left.toFixed(1)}s`, W / 2, 60 * u, { size: 44 * u, bold: true, color: '#ff4a4a', origin: [0.5, 0], stroke: 6, depth: 8 });
+    }
+
+    // ---- bottom-left: hero ----
+    const hh = this.layout.hud_hero.h * u, hy = H - hh - m;
+    const Rh = this.place('hud_hero', m, hy, u);
+    this.portrait('main', p.def.ref, Rh('portrait'));
+    const nm = Rh('name');
+    this.T('heroName', `${p.def.name.toUpperCase()} · Nv${p.level}`, nm.x + nm.w / 2, nm.y + nm.h / 2, { size: nm.h * 0.6, bold: true, origin: [0.5, 0.5], stroke: 2 });
+    // level badge on the portrait corner: gold ring fills with XP around the level number (full ring = level up)
+    const pq = Rh('portrait'), br = 17 * u, bcx = pq.x + 4 * u, bcy = pq.y + 4 * u;
+    levelGauge(o, bcx, bcy, br, p.level >= MAX_LEVEL ? 1 : p.xp / p.xpNeed, 5 * u);
+    this.T('lvlNum', `${p.level}`, bcx, bcy, { size: 15 * u, bold: true, origin: [0.5, 0.5], stroke: 3 });
+    const ptrx = this.input.activePointer;
+    if (Math.hypot(ptrx.x - bcx, ptrx.y - bcy) < br * 1.2) this.T('xpTip', p.level >= MAX_LEVEL ? 'Nivel máximo' : `XP ${Math.floor(p.xp)} / ${p.xpNeed}`, bcx + br + 6 * u, bcy, { size: 12 * u, bold: true, origin: [0, 0.5], color: '#ffd23f', depth: 8 });
+    this.helpRect = null;   // no '?' button on the champion in use: its stats are always visible
+    const hb = Rh('help');   // that slot now shows the unspent skill points
+    this.T('ptsL', 'PUNTOS', hb.x + hb.w / 2, hb.y + hb.h * 0.2, { size: hb.h * 0.2, color: '#8aa0c8', bold: true, origin: [0.5, 0.5], stroke: 2 });
+    this.T('ptsN', `${p.points}`, hb.x + hb.w / 2, hb.y + hb.h * 0.62, { size: hb.h * 0.52, color: p.points > 0 ? '#7dff9a' : '#5d6c88', bold: true, origin: [0.5, 0.5], stroke: 3 });
+    {   // stats of the champion in use: always visible, to the side of the hero module
+      const hs = this.layout.hud_stats, T = this.place('hud_stats', m + this.layout.hud_hero.w * u + 8 * u, H - m - hs.h * u, u);
+      this.statsBlock('pop', T('stats'), p, true, 1);
+    }
+
+    // ---- bottom-center: abilities + big HP / mana ----
+    const Rc = this.place('hud_center', W / 2 - this.layout.hud_center.w * u / 2, H - this.layout.hud_center.h * u - m, u);
+    ABILITY_KEYS.forEach((a, i) => { const q = Rc('ability' + i); this.drawAbility(A, p, a, i, q.x, q.y, Math.min(q.w, q.h)); });
+    const ptr = this.input.activePointer, hov = this.iconRects.findIndex(r => r && ptr.x >= r.x && ptr.x <= r.x + r.s && ptr.y >= r.y && ptr.y <= r.y + r.s);
+    A.hoverKey = hov >= 0 && !p.def.abilities[ABILITY_KEYS[hov]].passive ? ABILITY_KEYS[hov] : null;   // world draws that ability's range
+    const hp = Rc('hp'), mp = Rc('mana');
+    const shd = p.shieldHp > 0 ? p.shieldHp : 0, tot = Math.max(p.maxHp, p.hp + shd);
+    this.fillBar(g, hp, p.hp / tot, 0x2fd06f);
+    if (shd > 0) { const sx0 = hp.x + hp.w * p.hp / tot, sw = hp.w * shd / tot; g.fillStyle(0xffffff).fillRect(sx0, hp.y, sw, hp.h).fillStyle(0xbfc8d8).fillRect(sx0, hp.y + hp.h * 0.65, sw, hp.h * 0.35); }   // white shield bar in front of the health
+    this.T('hpTxt', `${Math.ceil(p.hp)} / ${Math.ceil(p.maxHp)}${shd > 0 ? '  +' + Math.ceil(shd) : ''}`, hp.x + hp.w / 2, hp.y + hp.h / 2, { size: hp.h * 0.62, bold: true, origin: [0.5, 0.5] });
+    if (p.isRage) this.fillBar(g, mp, p.hen ? p.henHp / p.henMax : p.rage / 100, p.hen ? 0xffd23f : 0xff7a2a); else this.fillBar(g, mp, p.maxMana ? p.mana / p.maxMana : 0, 0x3b8cff);
+    this.T('mpTxt', p.isRage ? (p.hen ? `GALLINA ${Math.ceil(p.henHp)} / ${Math.ceil(p.henMax)}` : `IRA ${Math.floor(p.rage)} / 100`) : `${Math.floor(p.mana)} / ${Math.floor(p.maxMana)}`, mp.x + mp.w / 2, mp.y + mp.h / 2, { size: mp.h * 0.62, bold: true, origin: [0.5, 0.5], stroke: 2 });
+    if (A.aimKey) this.T('aimHint', `${p.def.abilities[A.aimKey].name}: CLIC para lanzar · clic derecho / ESC cancela`, W / 2, Rc('ability0').y - 44 * u, { size: 14 * u, color: '#ffd23f', bold: true, origin: [0.5, 1] });
+
+    if (hov >= 0) this.drawTip(p, hov, this.iconRects[hov], u, W);
+    else this.drawStatus(A, p, Rc, u, W);
+
+    // ---- bottom-right: minimap ----
+    const mmw = this.layout.hud_minimap.w * u, mmh = this.layout.hud_minimap.h * u;
+    const Rm = this.place('hud_minimap', W - mmw - m, H - mmh - m, u);
+    this.drawMinimap(A, g, o, Rm('minimap'));
+
+    // ---- middle-left: 6 item slots (crafted items), gold and shop prompt ----
+    const iy = H / 2 - this.layout.hud_items.h * u / 2, Ri = this.place('hud_items', m * 0.6, iy, u);
+    this.slotBtns = []; let tipSlot = -1;
+    for (let i = 0; i < 6; i++) {
+      const q = Ri('item' + i), sl = p.inv[i]; this.slotBtns.push(q); this.boxes.push(q);
+      this.T('key' + i, `${i + 1}`, q.x + 3 * u, q.y + 2 * u, { size: 11 * u, bold: true, color: '#cfe3ff', stroke: 3, depth: 5 });
+      if (!sl) continue;
+      const it = ITEM_BY_ID[sl.id], usable = !!(it.active || it.consumable);
+      this.tile(g, 'slot' + i, sl.id, q, 3, sl.cd > 0 || (it.consumable && p.potionCd > 0) ? 0.45 : 1);
+      if (sl.cd > 0) {   // clock sweep + seconds
+        const f = sl.cd / it.active.cd; this.tipG.fillStyle(0x000000, 0.6).fillPoints(sweep(q.x + q.w / 2, q.y + q.h / 2, q.w / 2, f), true);
+        this.T('cd' + i, `${Math.ceil(sl.cd)}`, q.x + q.w / 2, q.y + q.h / 2, { size: q.h * 0.4, bold: true, origin: [0.5, 0.5], depth: 7 });
+      }
+      if (it.consumable) this.T('ch' + i, `x${sl.charges}`, q.x + q.w - 3 * u, q.y + q.h - 2 * u, { size: 13 * u, bold: true, origin: [1, 1], color: '#ffe066', depth: 5 });
+      else if (usable) this.tipG.fillStyle(0xffd23f, 0.9).fillCircle(q.x + q.w - 7 * u, q.y + 7 * u, 3.5 * u);
+      const ptrI = this.input.activePointer; if (ptrI.x >= q.x && ptrI.x <= q.x + q.w && ptrI.y >= q.y && ptrI.y <= q.y + q.h) tipSlot = i;
+    }
+    if (tipSlot >= 0) this.itemTip(p.inv[tipSlot], Ri('item' + tipSlot), u);
+    const gx0 = m * 0.6 + this.layout.hud_items.w * u / 2, gy0 = iy + this.layout.hud_items.h * u + 6 * u;
+    this.T('gold', `ORO ${Math.floor(p.gold)}`, gx0, gy0, { size: 15 * u, color: '#ffd23f', bold: true, origin: [0.5, 0] });
+    this.shopPrompt = A.canShop(p) && !this.shopOpen ? { x: gx0 - 58 * u, y: gy0 + 24 * u, w: 116 * u, h: 26 * u } : null;
+    if (this.shopPrompt) {
+      const sp = this.shopPrompt, ptrS = this.input.activePointer, overS = ptrS.x >= sp.x && ptrS.x <= sp.x + sp.w && ptrS.y >= sp.y && ptrS.y <= sp.y + sp.h;
+      this.boxes.push(sp); this.slotBtns.push({ ...sp, special: true });
+      o.fillStyle(overS ? 0x2e8a5a : 0x14583a).fillRect(sp.x, sp.y, sp.w, sp.h).lineStyle(2, 0x7dff9a, 0.9).strokeRect(sp.x, sp.y, sp.w, sp.h);
+      this.T('shopPrompt', 'TIENDA (B)', sp.x + sp.w / 2, sp.y + sp.h / 2, { size: 13 * u, bold: true, origin: [0.5, 0.5], stroke: 2, depth: 5 });
+    }
+    this.drawShop(A, p, u, W, H);
+
+    // ---- top-right: clicked champion as a thin LINEAR strip (name + items); hold its ? for the stats box ----
+    const sel = A.selected;
+    this.enemyHelpRect = null;
+    if (sel) {
+      const eL = this.layout.hud_enemy, E = this.place('hud_enemy', W - eL.w * u - m, m, u), n = E('name');
+      const who = sel === p ? 'TU' : sel.team === A.player.baseTeam ? 'ALIADO' : 'ENEMIGO';
+      this.T('tName', `${sel.def.name.toUpperCase()} Nv${sel.level} · ${who}`, n.x + 6 * u, n.y + n.h / 2,
+        { size: n.h * 0.5, bold: true, origin: [0, 0.5], stroke: 2, color: sel === p ? '#7dff9a' : sel.team === A.player.baseTeam ? '#8ab4ff' : '#ff8a8a' });
+      for (let i = 0; i < 6; i++) { const q = E('item' + i), sl = sel.inv?.[i]; if (q && sl) this.tile(g, 'eit' + i, sl.id, q, 3, 1); }
+      const hb = this.enemyHelpRect = E('help');
+      g.fillStyle(this.helpHold === 'sel' ? 0x1d6f8f : 0x0f2038).fillRect(hb.x, hb.y, hb.w, hb.h);
+      this.T('help2?', '?', hb.x + hb.w / 2, hb.y + hb.h / 2, { size: hb.h * 0.8, bold: true, origin: [0.5, 0.5], color: '#7ee0ff' });
+      if (this.helpHold === 'sel') {
+        const hs = this.layout.hud_stats, T = this.place('hud_stats', W - hs.w * u - m, m + eL.h * u + 6 * u, u);
+        this.statsBlock('sel', T('stats'), sel, false, 1);
+      }
+    }
+
+    // ---- kill feed / announcements (top center, below the enemy strip) ----
+    A.feed.forEach((e, i) => {
+      const ally = e.team === A.player.baseTeam, col = ally ? '#8ab4ff' : '#ff8a8a', t = this.T('feed' + i, e.text, W / 2, (120 + i * 30) * u, { size: 15 * u, bold: true, color: col, origin: [0.5, 0.5], stroke: 4 });
+      t.setAlpha(Math.min(1, e.t));
+      o.fillStyle(0x070b14, 0.7 * Math.min(1, e.t)).fillRoundedRect(t.x - t.width / 2 - 12 * u, t.y - 13 * u, t.width + 24 * u, 26 * u, 6 * u);
+      o.lineStyle(2, ally ? 0x3b82f6 : 0xff3b3b, 0.9 * Math.min(1, e.t)).strokeRoundedRect(t.x - t.width / 2 - 12 * u, t.y - 13 * u, t.width + 24 * u, 26 * u, 6 * u);
+    });
+
+    // ---- menu button + pause / game-over overlays ----
+    this.btns = []; this.volBars = []; const ov = this.ovG; ov.clear();
+    const btn = (id, label, x, y, w, h, fn, col = 0x1d3a5c) => {
+      if (this.input.activePointer.x >= x && this.input.activePointer.x <= x + w && this.input.activePointer.y >= y && this.input.activePointer.y <= y + h) { if (this.hovBtn !== id) { this.hovBtn = id; A.audio.play('ui_hover', { gap: 0, vol: 0.5 }); } } else if (this.hovBtn === id) this.hovBtn = null;
+      const over = this.input.activePointer.x >= x && this.input.activePointer.x <= x + w && this.input.activePointer.y >= y && this.input.activePointer.y <= y + h;
+      ov.fillStyle(over ? 0x2e6aa8 : col).fillRect(x, y, w, h).lineStyle(2, 0x3fd0ff, 0.9).strokeRect(x, y, w, h);
+      this.T('b' + id, label, x + w / 2, y + h / 2, { size: h * 0.45, bold: true, origin: [0.5, 0.5], depth: 22 });
+      this.btns.push({ x, y, w, h, fn });
+    };
+    const finished = A.over && A.over.t > 2.4;
+    this.overlay = A.paused || finished;
+    if (!this.overlay) {
+      const mb = { x: 12, y: 44 * u, w: 92 * u, h: 26 * u }; this.boxes.push(mb);
+      const over = this.input.activePointer.x >= mb.x && this.input.activePointer.x <= mb.x + mb.w && this.input.activePointer.y >= mb.y && this.input.activePointer.y <= mb.y + mb.h;
+      o.fillStyle(over ? 0x2e6aa8 : 0x0f2038).fillRect(mb.x, mb.y, mb.w, mb.h).lineStyle(2, 0x3fd0ff, 0.9).strokeRect(mb.x, mb.y, mb.w, mb.h);
+      this.T('menuBtn', '☰ MENÚ (Esc)', mb.x + mb.w / 2, mb.y + mb.h / 2, { size: 11 * u, bold: true, origin: [0.5, 0.5], stroke: 2 });
+      this.btns.push({ ...mb, fn: () => A.togglePause() });
+    } else {
+      this.boxes.push({ x: 0, y: 0, w: W, h: H });
+      ov.fillStyle(0x000000, 0.62).fillRect(0, 0, W, H);
+      const pw = 380 * u, px0 = W / 2 - pw / 2, bh = 46 * u;
+      if (finished) {
+        const win = A.over.winner === A.player.baseTeam;
+        this.T('ovTitle', win ? '¡VICTORIA!' : 'DERROTA', W / 2, H / 2 - 120 * u, { size: 64 * u, bold: true, color: win ? '#7dff9a' : '#ff6a6a', origin: [0.5, 0.5], stroke: 8, depth: 22 });
+        this.T('ovSub', win ? 'El nexo enemigo ha caído' : 'Tu nexo ha sido destruido', W / 2, H / 2 - 60 * u, { size: 18 * u, color: '#cfe3ff', origin: [0.5, 0.5], stroke: 4, depth: 22 });
+        btn('leave', 'VOLVER AL MENÚ', px0, H / 2 - 10 * u, pw, bh, () => this.leave());
+      } else {
+        this.T('ovTitle', 'PAUSA', W / 2, H / 2 - 150 * u, { size: 48 * u, bold: true, color: '#ffe066', origin: [0.5, 0.5], stroke: 6, depth: 22 });
+        btn('resume', 'CONTINUAR', px0, H / 2 - 100 * u, pw, bh, () => A.togglePause());
+        // volume bars (click or drag): the filled part is the current level
+        [['music', 'MÚSICA', 0x3fd0ff], ['sfx', 'EFECTOS', 0x7dff9a], ['voice', 'VOZ ANUNCIADOR', 0xffd23f]].forEach(([k, label, col], n) => {
+          const y = H / 2 + 80 * u + n * 34 * u, lw = 150 * u, bx = px0 + lw, bw = pw - lw - 56 * u, bhh = 16 * u;
+          this.T('vl' + k, label, px0, y + bhh / 2, { size: 12 * u, bold: true, color: '#cfe3ff', origin: [0, 0.5], stroke: 3, depth: 22 });
+          ov.fillStyle(0x070a12, 1).fillRect(bx, y, bw, bhh).fillStyle(col, 0.9).fillRect(bx, y, bw * vol[k], bhh).fillStyle(0xffffff, 0.25).fillRect(bx, y, bw * vol[k], bhh * 0.35).lineStyle(2, 0x3fd0ff, 0.9).strokeRect(bx, y, bw, bhh);
+          ov.fillStyle(0xffffff, 1).fillRect(bx + bw * vol[k] - 2 * u, y - 3 * u, 4 * u, bhh + 6 * u);
+          this.T('vp' + k, `${Math.round(vol[k] * 100)}%`, bx + bw + 8 * u, y + bhh / 2, { size: 12 * u, bold: true, color: '#fff', origin: [0, 0.5], stroke: 3, depth: 22 });
+          this.volBars.push({ x: bx - 4 * u, y: y - 8 * u, w: bw + 8 * u, h: bhh + 16 * u, bx, bw, key: k });
+        });
+        if (!A.training && !A.net) btn('surr', 'RENDIRSE', px0, H / 2 - 40 * u, pw, bh, () => A.surrender(), 0x5c1d1d);
+        btn('leave', 'SALIR AL MENÚ PRINCIPAL', px0, A.training ? H / 2 - 40 * u : H / 2 + 20 * u, pw, bh, () => this.leave());
+      }
+    }
+
+    A.uiRects = this.boxes;
+  }
+
+  /* ---------- items: icon tile, tooltip and shop ---------- */
+  iconImg(key, tex, x, y, size, depth) {
+    this.itImgs = this.itImgs || {}; let im = this.itImgs[key];
+    if (!im || im.texture.key !== tex) { im?.destroy(); im = this.itImgs[key] = this.add.image(0, 0, tex); }
+    return im.setDepth(depth).setVisible(true).setPosition(x, y).setDisplaySize(size, size);
+  }
+  // neutral square behind the item icon; small pips show the crafting level (1-3)
+  tile(g, key, id, q, depth, alpha = 1) {
+    const it = ITEM_BY_ID[id];
+    g.fillStyle(0x1b2436, alpha).fillRect(q.x, q.y, q.w, q.h).fillStyle(0x2a3650, 0.5 * alpha).fillRect(q.x, q.y, q.w, q.h * 0.45).lineStyle(2, 0x56688a, alpha).strokeRect(q.x, q.y, q.w, q.h);
+    const tex = 'item_' + id, sz = Math.min(q.w, q.h) * 0.86;
+    if (this.textures.exists(tex)) this.iconImg(key, tex, q.x + q.w / 2, q.y + q.h / 2, sz, depth + 0.2).setAlpha(alpha);
+    else this.T(key + 'f', it.name.slice(0, 2).toUpperCase(), q.x + q.w / 2, q.y + q.h / 2, { size: q.h * 0.4, bold: true, origin: [0.5, 0.5], depth: depth + 0.5 });
+    const ps = Math.max(3, q.w * 0.08); for (let i = 0; i < it.lvl; i++) g.fillStyle(0xdfe8ff, alpha).fillRect(q.x + 3 + i * (ps + 2), q.y + q.h - ps - 3, ps, ps);
+  }
+  statStr(it) {
+    const parts = Object.keys(it.stats).map(k => `${fmtStat(k, it.stats[k])} ${STAT_LABEL[k]}`);
+    if (it.consumable) { const c = it.consumable; if (c.hp) parts.push(`cura ${c.hp} vida`); if (c.mana) parts.push(`${c.mana} maná`); }
+    if (it.active) parts.push(`activo (enfriamiento ${it.active.cd}s)`);
+    return parts.join(' · ') || '—';
+  }
+  itemTip(sl, q, u) {
+    const it = ITEM_BY_ID[sl.id], g = this.tipG, w = 270 * u, x = q.x + q.w + 14 * u;
+    const ln = [[it.name.toUpperCase(), '#ffffff', 14], [`Nivel ${it.lvl} · ${CATS[it.cat]}`, CAT_COL[it.cat], 11], [this.statStr(it), '#ffffff', 11], [it.desc, '#aab8d0', 11]];
+    if (it.recipe) ln.push([`Receta: ${it.recipe.map(r => ITEM_BY_ID[r].name).join(' + ')}`, '#8aa0c8', 10]);
+    if (it.active && sl.cd > 0) ln.push([`Listo en ${Math.ceil(sl.cd)}s`, '#ffd23f', 11]);
+    let y = q.y, h = 10 * u; const ts = ln.map((l, i) => { const t = this.T('itTip' + i, l[0], x + 10 * u, 0, { size: l[2] * u, color: l[1], bold: i === 0, depth: 8, stroke: 2 }); t.setWordWrapWidth(w - 20 * u, true); const r = { t, h: t.height + 3 * u }; h += r.h; return r; });
+    h += 8 * u; g.fillStyle(0x070b14, 0.96).fillRect(x, y, w, h).lineStyle(2, 0x56688a, 0.95).strokeRect(x, y, w, h);
+    let yy = y + 6 * u; ts.forEach(r => { r.t.setPosition(x + 10 * u, yy); yy += r.h; });
+  }
+  toggleShop() {
+    const A = this.scene.get('arena');
+    if (this.shopOpen) { this.shopOpen = false; return; }
+    if (A?.pc && A.canShop(A.pc) && !A.paused) { this.shopOpen = true; A.audio.play('ui_open', { gap: 0 }); if (!this.shopSel) this.shopSel = ITEMS[0].id; }
+  }
+  drawShop(A, p, u, W, H) {
+    this.shopBtns = []; const g = this.shopG; g.clear();
+    if (this.shopOpen && (!A.canShop(p) || A.paused || (A.over && A.over.t > 2.4))) this.shopOpen = false;
+    if (!this.shopOpen) return;
+    const pw = Math.min(W - 30, 1100 * u), ph = Math.min(H - 30, 660 * u), x0 = (W - pw) / 2, y0 = (H - ph) / 2, pad = 14 * u, D = 32;
+    this.boxes.push({ x: 0, y: 0, w: W, h: H });
+    g.fillStyle(0x000000, 0.6).fillRect(0, 0, W, H).fillStyle(0x070b14, 0.98).fillRect(x0, y0, pw, ph).lineStyle(3, 0x3fd0ff, 0.9).strokeRect(x0, y0, pw, ph);
+    const ptr = this.input.activePointer, over = q => ptr.x >= q.x && ptr.x <= q.x + q.w && ptr.y >= q.y && ptr.y <= q.y + q.h;
+    const sbtn = (id, label, q, en, fn, col = 0x1d3a5c, tc = '#fff') => {
+      g.fillStyle(!en ? 0x1a1f2a : over(q) ? 0x2e6aa8 : col).fillRect(q.x, q.y, q.w, q.h).lineStyle(2, en ? 0x3fd0ff : 0x3a4252, 0.9).strokeRect(q.x, q.y, q.w, q.h);
+      this.T('sb' + id, label, q.x + q.w / 2, q.y + q.h / 2, { size: Math.min(q.h * 0.42, q.w / (label.length * 0.62)), bold: true, origin: [0.5, 0.5], color: en ? tc : '#5d6676', stroke: 2, depth: D + 1 });
+      if (en) this.shopBtns.push({ ...q, fn });
+    };
+    this.T('shT', 'TIENDA DE LA BASE', x0 + pad, y0 + pad * 0.7, { size: 22 * u, bold: true, color: '#7ee0ff', depth: D + 1 });
+    this.T('shGold', `ORO ${Math.floor(p.gold)}`, x0 + pw - pad * 2 - 40 * u, y0 + pad * 0.8, { size: 20 * u, bold: true, color: '#ffd23f', origin: [1, 0], depth: D + 1 });
+    sbtn('x', 'X', { x: x0 + pw - pad - 34 * u, y: y0 + pad * 0.5, w: 34 * u, h: 34 * u }, true, () => { this.shopOpen = false; }, 0x5c1d1d);
+
+    // tabs
+    const gw = pw * 0.58 - pad, gx = x0 + pad, ty = y0 + 52 * u, SH = { all: 'TODOS', basic: 'BÁSICOS', ad: 'ATAQUE', ap: 'PODER IA', arm: 'ARMADURA', mr: 'RES. IA', hp: 'VIDA', util: 'UTILIDAD', rec: 'RECUP.' };
+    const cats = Object.keys(SH), tw = gw / cats.length;
+    cats.forEach((c, i) => sbtn('tab' + c, SH[c], { x: gx + i * tw, y: ty, w: tw - 3 * u, h: 28 * u }, true, () => { this.shopCat = c; this.shopScroll = 0; }, this.shopCat === c ? 0x2e6aa8 : 0x10213a, c === 'all' ? '#fff' : CAT_COL[c]));
+
+    // grid
+    const cs = 60 * u, gap = 8 * u, cellH = cs + 17 * u, gy = ty + 38 * u, invH = 104 * u, gh = ph - (gy - y0) - invH - pad, cols = Math.max(1, Math.floor((gw + gap) / (cs + gap)));
+    const list = ITEMS.filter(i => this.shopCat === 'all' || (this.shopCat === 'basic' ? i.lvl === 1 : i.cat === this.shopCat)).sort((a, b) => a.lvl - b.lvl), vis = Math.max(1, Math.floor((gh + gap) / (cellH + gap))), maxS = Math.max(0, Math.ceil(list.length / cols) - vis);
+    this.shopScroll = Phaser.Math.Clamp(this.shopScroll, 0, maxS);
+    for (let r = 0; r < vis; r++) for (let c = 0; c < cols; c++) {
+      const it = list[(r + this.shopScroll) * cols + c]; if (!it) continue;
+      const q = { x: gx + c * (cs + gap), y: gy + r * (cellH + gap), w: cs, h: cs }, si = p.slotOf(it.id), pl = buyPlan(p.inv, it.id), afford = pl.ok && p.gold >= pl.gold, key = 'g' + (r * cols + c);
+      this.tile(g, key, it.id, q, D, afford || si >= 0 ? 1 : 0.5);
+      if (this.shopSel === it.id) g.lineStyle(3, 0xffffff, 1).strokeRect(q.x - 2, q.y - 2, q.w + 4, q.h + 4);
+      this.T('gp' + key, si >= 0 ? 'TIENES' : `${pl.gold}`, q.x + q.w / 2, q.y + q.h + 2 * u, { size: 11 * u, bold: true, origin: [0.5, 0], color: si >= 0 ? '#7dff9a' : afford ? '#ffd23f' : '#ff6a6a', stroke: 2, depth: D + 1 });
+      this.shopBtns.push({ x: q.x, y: q.y, w: cs, h: cellH, fn: () => { this.shopSel = it.id; this.shopSlot = null; } });
+    }
+    if (maxS > 0) {
+      sbtn('up', '▲', { x: gx + gw - 56 * u, y: gy + gh + 4 * u, w: 26 * u, h: 24 * u }, this.shopScroll > 0, () => { this.shopScroll--; });
+      sbtn('dn', '▼', { x: gx + gw - 26 * u, y: gy + gh + 4 * u, w: 26 * u, h: 24 * u }, this.shopScroll < maxS, () => { this.shopScroll++; });
+    }
+
+    // inventory strip
+    const iy = y0 + ph - pad - invH + 30 * u;
+    this.T('shInv', 'INVENTARIO (clic para ver · teclas 1-6 para usar)', gx, iy - 22 * u, { size: 11 * u, bold: true, color: '#7ee0ff', stroke: 2, depth: D + 1 });
+    for (let i = 0; i < 6; i++) {
+      const q = { x: gx + i * (58 * u + 10 * u), y: iy, w: 58 * u, h: 58 * u }, sl = p.inv[i];
+      if (!sl) { g.fillStyle(0x0d1422, 1).fillRect(q.x, q.y, q.w, q.h).lineStyle(1, 0x2a3650, 1).strokeRect(q.x, q.y, q.w, q.h); continue; }
+      this.tile(g, 'inv' + i, sl.id, q, D);
+      if (this.shopSel === sl.id && (this.shopSlot ?? i) === i) g.lineStyle(3, 0xffffff, 1).strokeRect(q.x - 2, q.y - 2, q.w + 4, q.h + 4);
+      if (ITEM_BY_ID[sl.id].consumable) this.T('invc' + i, `x${sl.charges}`, q.x + q.w - 3 * u, q.y + q.h - 2 * u, { size: 12 * u, bold: true, origin: [1, 1], color: '#ffe066', depth: D + 2 });
+      this.shopBtns.push({ ...q, fn: () => { this.shopSel = sl.id; this.shopSlot = i; } });
+    }
+
+    // right column: title, recipe tree, action buttons
+    const dx = gx + gw + pad * 1.5, dw = x0 + pw - pad - dx, it = ITEM_BY_ID[this.shopSel || ITEMS[0].id];
+    const owned = p.inv.map((sl, i) => (sl && sl.id === it.id ? i : -1)).filter(i => i >= 0), sellSlot = owned.includes(this.shopSlot) ? this.shopSlot : owned[0], sl = sellSlot !== undefined ? p.inv[sellSlot] : null;
+    let dy = y0 + 52 * u;
+    this.T('dN', it.name.toUpperCase(), dx, dy, { size: 18 * u, bold: true, color: '#ffffff', depth: D + 1 }).setWordWrapWidth(dw, true); dy += 28 * u;
+    const st = this.T('dS', this.statStr(it), dx, dy, { size: 11 * u, color: '#9fe8ff', depth: D + 1, stroke: 2 }); st.setWordWrapWidth(dw, true); dy += st.height + 6 * u;
+    {   // recipe tree: the item on top, its components below (up to 3 crafting levels). Owned components are marked: they are consumed when you craft.
+      const by0 = y0 + ph - pad - 46 * u, tx = dx, tt0 = dy, th = by0 - 10 * u - tt0, rowH = (th - 24 * u) / 3, ts = Math.min(52 * u, rowH - 26 * u), tree = recipeTree(p.inv, it.id);
+      g.fillStyle(0x0a1224, 1).fillRect(tx, tt0, dw, th).lineStyle(1, 0x2a3650, 1).strokeRect(tx, tt0, dw, th);
+      this.T('trH', 'ÁRBOL DE CRAFTEO', tx + 10 * u, tt0 + 6 * u, { size: 12 * u, bold: true, color: '#7ee0ff', depth: D + 1, stroke: 2 });
+      let n = 0;
+      const place = (node, depth, xl, xr, parent) => {
+        const cx = (xl + xr) / 2, cy = tt0 + 24 * u + depth * rowH, q = { x: cx - ts / 2, y: cy, w: ts, h: ts }, c = ITEM_BY_ID[node.id], k = n++;
+        if (parent) g.lineStyle(2, 0x4b5870, 1).lineBetween(parent.x, parent.y + ts, cx, cy);
+        this.tile(g, 'tr' + k, node.id, q, D, depth === 0 || node.owned ? 1 : 0.75);
+        g.lineStyle(depth === 0 ? 3 : 2, depth === 0 ? 0xffffff : node.owned ? 0x5dff8a : 0x56688a, 1).strokeRect(q.x - 2, q.y - 2, q.w + 4, q.h + 4);
+        const lw = Math.max(60 * u, Math.min(dw / (depth === 2 ? 4 : depth === 1 ? 2 : 1), 150 * u)), lab = this.T('trL' + k, c.name, cx, cy + ts + 3 * u, { size: 10 * u, color: '#cfe0ff', depth: D + 1, stroke: 2, origin: [0.5, 0] }); lab.setWordWrapWidth(lw, true).setAlign('center');
+        this.T('trP' + k, node.owned ? '✔ TIENES' : depth === 0 ? '' : `${c.cost}`, cx, cy + ts + 3 * u + lab.height, { size: 10 * u, bold: true, color: node.owned ? '#7dff9a' : '#ffd23f', depth: D + 1, stroke: 2, origin: [0.5, 0] });
+        if (depth > 0) this.shopBtns.push({ x: cx - lw / 2, y: cy, w: lw, h: ts + 26 * u, fn: () => { this.shopSel = node.id; this.shopSlot = null; } });
+        const w2 = (xr - xl) / Math.max(1, node.children.length);
+        node.children.forEach((ch, i) => place(ch, depth + 1, xl + i * w2, xl + (i + 1) * w2, { x: cx, y: cy }));
+      };
+      place(tree, 0, tx + 6 * u, tx + dw - 6 * u, null);
+    }
+    const by = y0 + ph - pad - 46 * u, bh = 44 * u, bw1 = (dw - 8 * u) * 0.62, bw2 = dw - 8 * u - bw1, pl = buyPlan(p.inv, it.id);
+    const label = !pl.ok ? pl.reason : p.gold < pl.gold ? `FALTA ORO (${pl.gold})` : `${it.recipe ? 'ARMAR' : 'COMPRAR'} ${pl.gold}`;
+    sbtn('buy', label, { x: dx, y: by, w: bw1, h: bh }, p.canBuy(it.id), () => p.buyItem(it.id), 0x14583a);
+    const sv = sl ? sellValue(it) * (it.consumable ? Math.max(1, sl.charges) : 1) : 0;
+    sbtn('sell', sl ? `VENDER ${sv}` : 'VENDER', { x: dx + bw1 + 8 * u, y: by, w: bw2, h: bh }, !!sl, () => p.sellItem(sellSlot), 0x5c3a1d);
+  }
+
+  setVol(bar, x) {
+    const A = this.scene.get('arena'); vol[bar.key] = Math.round(Phaser.Math.Clamp((x - bar.bx) / bar.bw, 0, 1) * 100) / 100; saveVol(); A.audio.refresh();
+  }
+
+  leave() {
+    const A = this.scene.get('arena'); if (A) { A.time.paused = false; A.tweens.resumeAll(); A.paused = false; }   // leaving from the pause menu must not leave the clocks frozen for the next match
+    this.anims.resumeAll();
+    if (net.room) { net.send('leave_room'); net.room = null; }
+    this.scene.stop('arena'); this.scene.stop('hud'); this.scene.start('launcher');
+  }
+
+  // epic announcement banner: killer's face (big), victim's face (small), title and subtitle; slides in, pops, fades out
+  drawBanner(A, u, W) {
+    const b = A.banner, g = this.g, o = this.top;
+    if (this.bnImgs) Object.values(this.bnImgs).forEach(i => i.setVisible(false));
+    if (!b) return;
+    const age = b.T - b.t, inT = Math.min(1, age / 0.4), outT = Math.min(1, b.t / 0.45);
+    const ease = 1 - Math.pow(1 - inT, 3), pop = 1 + (b.big || 1) * 0.02 * Math.max(0, 1 - age * 2.5) + (inT < 1 ? (1 - ease) * -0.25 : 0);
+    const alpha = Math.min(ease, outT), sc = Math.min(W * 0.5 / 800, 0.62 * u) * pop;   // compact banner
+    const col = b.team === 0 ? 'blue' : b.team === 1 ? 'red' : 'gold', tint = { blue: 0x4aa3ff, red: 0xff4a3a, gold: 0xffd23f }[col], tcol = { blue: '#9ad0ff', red: '#ff9a8a', gold: '#ffe066' }[col];
+    // variants: with the actor's portrait -> only the left frame; announcer-only messages -> plain banner (no frames)
+    const name = b.face ? (this.panels['hud_banner_' + col + '_l'] ? 'hud_banner_' + col + '_l' : 'hud_banner_' + col) : (this.panels.hud_banner_gold_plain ? 'hud_banner_gold_plain' : 'hud_banner_gold'), L = this.layout[name], bw = 800 * sc, bh = 140 * sc, x = W / 2 - bw / 2, y = 58 * u + (1 - ease) * -70 * u;
+    this.boxes.push({ x, y, w: bw, h: bh });
+    // glow behind the banner
+    o.fillStyle(tint, 0.16 * alpha).fillRect(x - 14 * sc, y + 10 * sc, bw + 28 * sc, bh - 20 * sc);
+    const art = this.panels[name];
+    if (art) art.setPosition(x, y).setScale(sc).setAlpha(alpha).setVisible(true);
+    else { this.g.fillStyle(0x0a0f1e, 0.95 * alpha).fillRect(x, y, bw, bh).lineStyle(4, tint, alpha).strokeRect(x, y, bw, bh); }
+    const hole = r => L.holes[r] && { x: x + L.holes[r][0] * sc, y: y + L.holes[r][1] * sc, w: L.holes[r][2] * sc, h: L.holes[r][3] * sc };
+    const show = (id, f, q) => {
+      if (!f || !q) return;
+      this.bnImgs = this.bnImgs || {};
+      if (!this.bnImgs[id] || this.bnImgs[id].key !== f.tex) { this.bnImgs[id]?.destroy(); this.bnImgs[id] = this.add.image(0, 0, f.tex).setOrigin(0, 0).setDepth(2); this.bnImgs[id].key = f.tex; }
+      const im = this.bnImgs[id].setVisible(true).setAlpha(alpha);
+      this.g.fillStyle(0x05070d, alpha).fillRect(q.x, q.y, q.w, q.h);
+      if (f.kind === 'face') { const cw = 400, ch = Math.min(420, cw), k = q.w / cw; im.setCrop(360, 10, cw, ch).setScale(k).setPosition(q.x - 360 * k, q.y - 10 * k); }
+      else { im.setCrop(); const k = Math.min(q.w / im.width, q.h / im.height) * 0.92; im.setScale(k).setPosition(q.x + (q.w - im.width * k) / 2, q.y + (q.h - im.height * k) / 2); }
+    };
+    const pr = hole('portrait');
+    if (b.face && pr) show('bnA', b.face, pr);
+    // text
+    const cx0 = x + (b.face ? 140 : 70) * sc, cx1 = x + (b.face ? 740 : 730) * sc, cx = (cx0 + cx1) / 2;
+    const title = this.T('bnTitle', b.title, cx, y + 52 * sc, { size: 40 * sc, bold: true, color: tcol, origin: [0.5, 0.5], stroke: 6, depth: 6 });
+    title.setAlpha(alpha).setShadow(0, 3, '#000', 6, true, true);
+    const maxW = cx1 - cx0; if (title.width > maxW) title.setFontSize(Math.floor(title.style.fontSize.replace('px', '') * maxW / title.width));
+    this.T('bnSub', b.sub || '', cx, y + 98 * sc, { size: 17 * sc, color: '#dfe9ff', origin: [0.5, 0.5], stroke: 4, depth: 6 }).setAlpha(alpha);
+  }
+
+  fillBar(g, q, f, c) {
+    const w = q.w * Phaser.Math.Clamp(f, 0, 1);
+    g.fillStyle(c).fillRect(q.x, q.y, w, q.h);
+    g.fillStyle(0xffffff, 0.2).fillRect(q.x, q.y, w, q.h * 0.35);
+  }
+
+  portrait(id, ref, q) {
+    let im = this.pimg[id];
+    if (!im || im.key !== ref) { im?.img.destroy(); im = this.pimg[id] = { key: ref, img: this.add.image(0, 0, ref).setOrigin(0, 0).setDepth(2) }; }
+    // crop the face region of the 1122x1402 reference to the hole's aspect, then scale to fill it
+    const cw = 400, ch = Math.min(420, cw * q.h / q.w), k = q.w / cw;
+    im.img.setVisible(true).setCrop(360, 10, cw, ch).setScale(k).setPosition(q.x - 360 * k, q.y - 10 * k);
+  }
+
+  // base values in white; when items / buffs add (or a debuff takes away) the difference is shown right beside it in green (red)
+  statsBlock(id, q, f, mine, cols = 2) {
+    const B = f.baseStats(), rows = [['VIDA', B.hp, f.maxHp], [f.isRage ? 'IRA' : 'MANA', f.isRage ? 100 : B.mana, f.isRage ? 100 : f.maxMana], ['ATQ FIS', B.atk, f.atk], ['PODER IA', B.ap, f.ap],
+      ['ARMADURA', B.armor, f.armor], ['RES MAG', B.mr, f.mr], ['VELOCIDAD', B.speed, f.speed], ['RANGO', f.def.stats.range, f.def.stats.range]];
+    const lh = cols === 1 ? q.h / 11 : q.h / 6.4, fs = Math.min(lh * 0.62, q.w / (cols === 1 ? 17 : 22)), pad = q.w * 0.04, colW = (q.w - pad * 2) / cols;
+    this.T(id + 'h1', mine ? `${f.def.name.toUpperCase()} · ${(CLASSES[f.def.cls]?.label || f.def.name)}` : (CLASSES[f.def.cls]?.label || f.def.name), q.x + pad, q.y + lh * 0.15, { size: fs * 1.05, bold: true, stroke: 2 });
+    this.T(id + 'h2', mine ? `NIVEL ${f.level}/${MAX_LEVEL} · XP ${f.level >= MAX_LEVEL ? 'MAX' : `${Math.floor(f.xp)}/${f.xpNeed}`}` : `NIVEL ${f.level}/${MAX_LEVEL} · ${Math.ceil(f.hp)}/${Math.ceil(f.maxHp)} HP`,
+      q.x + pad, q.y + lh * 1.15, { size: fs, color: mine && f.points > 0 ? '#7dff9a' : '#ffe066', stroke: 2 });
+    rows.forEach(([n, base, now], i) => {
+      const x = q.x + pad + (cols === 1 ? 0 : (i % 2) * colW), y = q.y + lh * (cols === 1 ? 2.1 + i : 2.2 + (i >> 1)), nx = x + (cols === 1 ? q.w * 0.4 : colW * 0.5), d = now - base;
+      this.T(`${id}n${i}`, n, x, y, { size: fs * 0.85, color: '#8aa0c8', stroke: 2 });
+      const tv = this.T(`${id}v${i}`, `${Math.round(base)}`, nx, y - fs * 0.05, { size: fs, color: '#ffffff', bold: true, stroke: 2 });
+      if (Math.abs(d) >= 0.5) this.T(`${id}b${i}`, `${d > 0 ? '+' : '-'}${Math.abs(Math.round(d))}`, nx + tv.width + fs * 0.4, y - fs * 0.05, { size: fs, color: d > 0 ? '#5dff8a' : '#ff6a6a', bold: true, stroke: 2 });
+    });
+  }
+
+  drawAbility(A, p, a, i, x, y, size) {
+    const o = this.top, d = p.def.abilities[a], rank = p.ranks[a];
+    this.iconRects[i] = { x, y, s: size };
+    const learned = rank > 0, cd = p.cds[a], total = learned && d.cd ? rk(d.cd, rank) : 1, onCd = learned && cd > 0 && !d.passive;
+    const noMana = learned && d.mana && p.mana < rk(d.mana, rank) && !A.debugFree;
+    const tex = 'icon_' + d.icon, pad = size * 0.04;
+    if (this.textures.exists(tex)) {
+      if (!this.icons[i] || this.icons[i].texture.key !== tex) { this.icons[i]?.destroy(); this.icons[i] = this.add.image(0, 0, tex).setDepth(1.5); }
+      const sil = p.silenceT > 0 && !d.passive && learned, jx = sil ? Phaser.Math.Between(-4, 4) : 0, jw = sil ? Phaser.Math.FloatBetween(0.82, 1.18) : 1;
+      const im = this.icons[i].setVisible(true).setPosition(x + size / 2 + jx, y + size / 2 + (sil ? Phaser.Math.Between(-2, 2) : 0)).setDisplaySize((size - pad * 2) * jw, size - pad * 2).setAlpha(learned ? (sil ? 0.55 : 1) : 0.3);
+      if (sil) {   // glitch: distorted icon + noise bars + red "no" sign
+        im.setTint(Phaser.Math.Between(0, 3) === 0 ? 0x66ffaa : 0xb070ff);
+        for (let n = 0; n < 5; n++) { const by = y + Phaser.Math.Between(0, size - 6); o.fillStyle(Phaser.Math.Between(0, 1) ? 0x33ff88 : 0x000000, 0.7).fillRect(x + Phaser.Math.Between(0, size / 3), by, Phaser.Math.Between(size / 4, size), Phaser.Math.Between(2, 5)); }
+        const cx0 = x + size / 2, cy0 = y + size / 2, rr = size * 0.34;
+        o.lineStyle(Math.max(4, size * 0.09), 0xff3b3b, 0.95).strokeCircle(cx0, cy0, rr).lineBetween(cx0 - rr * 0.7, cy0 + rr * 0.7, cx0 + rr * 0.7, cy0 - rr * 0.7);
+      }
+      if (onCd) im.setTint(0x3a3a3a); else if (!(p.silenceT > 0 && !d.passive && learned)) im.clearTint();
+    } else this.T('lab' + i, d.name.split(' ').map(w => w[0]).join(''), x + size / 2, y + size / 2, { size: size * 0.3, origin: [0.5, 0.5] });
+    if (onCd) {
+      // bold dark overlay + clock sweep marking the time still missing, with the seconds on top
+      o.fillStyle(0x000000, 0.45).fillRect(x, y, size, size);
+      o.fillStyle(0x000000, 0.55).fillPoints(sweep(x + size / 2, y + size / 2, size / 2, Math.min(1, cd / total)), true);
+      this.T('cd' + i, `${cd.toFixed(cd < 10 ? 1 : 0)}s`, x + size / 2, y + size / 2, { size: size * 0.3, bold: true, origin: [0.5, 0.5], stroke: 5 });
+    }
+    if (noMana && !onCd) o.fillStyle(0x0033ff, 0.35).fillRect(x, y, size, size);
+    if (A.aimKey === a) o.lineStyle(4, 0xffd23f).strokeRect(x, y, size, size);
+    if (d.passive) this.T('pas' + i, learned ? 'PASIVA' : 'PASIVA', x + size / 2, y + size * 0.62, { size: size * 0.16, bold: true, origin: [0.5, 0.5], color: '#ffe066', stroke: 3 });
+    if (p.key === 'jorbi' && a === 'p2' && learned) this.T('dashN' + i, `${p.dashCharges}/3`, x + size - size * 0.08, y + size - size * 0.2, { size: size * 0.26, bold: true, origin: [1, 0.5], color: p.dashCharges ? '#ffd23f' : '#ff8a6a', stroke: 4 });
+    this.T('key' + i, ['Q', 'F', 'E', 'R'][i], x + size * 0.06, y + size * 0.03, { size: size * 0.17, color: '#ffe066', bold: true });
+    for (let r = 0; r < MAX_RANK; r++) o.fillStyle(r < rank ? 0xffd23f : 0x30384a).fillRect(x + size / 2 - size * 0.22 + r * size * 0.16, y + size - size * 0.09, size * 0.13, size * 0.06);
+    if (p.canSpend(a)) {   // pulsing gold "level up" button above the icon: click to upgrade
+      const r = size * 0.2, cx = x + size / 2, cy = y - r - size * 0.14, pulse = 0.5 + 0.5 * Math.sin(this.time.now / 170);
+      const ptr = this.input.activePointer, over = Math.hypot(ptr.x - cx, ptr.y - cy) <= r * 1.3;
+      this.upRects[i] = { x: cx - r * 1.3, y: cy - r * 1.3, w: r * 2.6, h: r * 2.6 }; this.boxes.push(this.upRects[i]);   // clicks on the upgrade button must not reach the world (no attack)
+      o.fillStyle(0xffd23f, 0.16 + 0.22 * pulse).fillCircle(cx, cy, r * (1.55 + 0.35 * pulse));
+      o.fillStyle(0xfff3a0, 0.25 + 0.3 * pulse).fillCircle(cx, cy, r * (1.25 + 0.2 * pulse));
+      o.fillStyle(0x3a2a00).fillCircle(cx, cy, r * 1.08).fillStyle(over ? 0xfff3a0 : 0xffd23f).fillCircle(cx, cy, r);
+      o.fillStyle(0x4a3200).fillPoints([{ x: cx, y: cy - r * 0.68 }, { x: cx + r * 0.62, y: cy + r * 0.05 }, { x: cx + r * 0.24, y: cy + r * 0.05 }, { x: cx + r * 0.24, y: cy + r * 0.62 },
+        { x: cx - r * 0.24, y: cy + r * 0.62 }, { x: cx - r * 0.24, y: cy + r * 0.05 }, { x: cx - r * 0.62, y: cy + r * 0.05 }], true);
+    }
+  }
+
+  // status bar above the abilities: each active effect with its source ability, remaining seconds and (hover) description
+  drawStatus(A, p, Rc, u, W) {
+    const list = p.statusList(), o = this.top, g = this.tipG;
+    if (!list.length) return;
+    const q0 = Rc('ability0'), q3 = Rc('ability3'), sz = 46 * u, gap = 8 * u, y = q0.y - 126 * u;
+    const totalW = list.length * sz + (list.length - 1) * gap, cx = (q0.x + q3.x + q3.w) / 2, x0 = cx - totalW / 2, ptr = this.input.activePointer;
+    let hv = -1;
+    list.forEach((e, i) => {
+      const x = x0 + i * (sz + gap), col = e.bad ? 0xff5a5a : 0x5dff8a, pulse = e.t != null && e.t < 2 ? 0.5 + 0.5 * Math.sin(this.time.now / 100) : 1;
+      this.boxes.push({ x, y, w: sz, h: sz });
+      this.g.fillStyle(0x070b14, 0.92).fillRect(x, y, sz, sz);
+      const tex = e.icon && this.textures.exists(e.icon) ? e.icon : null, key = 'st' + i;
+      if (tex) { this.stImgs = this.stImgs || {}; let im = this.stImgs[key]; if (!im || im.texture.key !== tex) { im?.destroy(); im = this.stImgs[key] = this.add.image(0, 0, tex).setDepth(3.2); } im.setVisible(true).setPosition(x + sz / 2, y + sz / 2).setDisplaySize(sz - 6 * u, sz - 6 * u).setAlpha(0.35 + 0.65 * pulse); this.stUsed = this.stUsed || new Set(); this.stUsed.add(key); }
+      else { o.fillStyle(e.tint, 0.55 * pulse).fillRect(x + 4 * u, y + 4 * u, sz - 8 * u, sz - 8 * u); this.T('stl' + i, e.label[0], x + sz / 2, y + sz / 2, { size: sz * 0.5, bold: true, origin: [0.5, 0.5], depth: 4 }); }
+      o.lineStyle(3, col, 1).strokeRect(x, y, sz, sz);
+      if (e.t != null) { o.fillStyle(0x000000, 0.7).fillRect(x, y + sz - 15 * u, sz, 15 * u); this.T('sts' + i, `${e.t >= 10 ? Math.ceil(e.t) : e.t.toFixed(1)}s`, x + sz / 2, y + sz - 7.5 * u, { size: 12 * u, bold: true, origin: [0.5, 0.5], depth: 5, stroke: 3 }); }
+      if (ptr.x >= x && ptr.x <= x + sz && ptr.y >= y && ptr.y <= y + sz) hv = i;
+    });
+    if (hv >= 0) {   // tooltip: which ability, what it does, seconds left
+      const e = list[hv], x = x0 + hv * (sz + gap), TW = 330 * u, pad = 10 * u;
+      const title = this.T('stTitle', e.name, 0, 0, { size: 15 * u, bold: true, color: e.bad ? '#ff9a9a' : '#9affb0', depth: 8 });
+      const sub = this.T('stSub', `${e.by ? e.by + ' · ' : ''}${e.label}${e.t != null ? ` · quedan ${e.t.toFixed(1)}s` : ''}`, 0, 0, { size: 11 * u, color: '#8aa0c8', depth: 8, stroke: 2 });
+      const desc = this.T('stDesc', e.desc, 0, 0, { size: 12 * u, color: '#cfe3ff', depth: 8, stroke: 2 }); desc.setWordWrapWidth(TW - 2 * pad);
+      const th = pad * 2 + title.height + sub.height + desc.height + 8 * u, bx = Phaser.Math.Clamp(x + sz / 2 - TW / 2, 8, W - TW - 8), by = y - th - 8 * u;
+      g.fillStyle(0x070b14, 0.97).fillRect(bx, by, TW, th).lineStyle(2, e.bad ? 0xff5a5a : 0x5dff8a, 0.9).strokeRect(bx, by, TW, th);
+      title.setPosition(bx + pad, by + pad); sub.setPosition(bx + pad, by + pad + title.height + 2 * u); desc.setPosition(bx + pad, sub.y + sub.height + 6 * u);
+    }
+  }
+
+  // hover info: title, description and what each rank improves (current rank highlighted)
+  drawTip(p, i, q, u, W) {
+    const a = ABILITY_KEYS[i], d = p.def.abilities[a], rank = p.ranks[a], g = this.tipG;
+    const TW = 360 * u, pad = 12 * u, fs = 12 * u, depth = 7, rows = [];
+    Object.keys(FIELD).forEach(k => { if (Array.isArray(d[k])) rows.push([k, d[k]]); });
+    if (a === 'ult') rows.push(['reqLvl', ULT_LEVELS]);
+    ['range', 'radius'].forEach(k => { if (typeof d[k] === 'number') rows.push([k, d[k]]); });
+    const title = this.T('tipTitle', `[${'QFER'[i]}] ${d.name}`, 0, 0, { size: 16 * u, bold: true, color: '#ffe066', depth });
+    const sub = this.T('tipSub', rank ? `Nivel ${rank} de ${MAX_RANK}${a === 'ult' ? ' · mejora en nv ' + ULT_LEVELS.join(', ') : ''}` : a === 'ult' ? `Se desbloquea en el nivel ${ULT_LEVELS[0]}` : 'Sin aprender (Ctrl+' + 'QFER'[i] + ' o botón dorado)', 0, 0, { size: 11 * u, color: rank ? '#7dff9a' : '#ff9a7a', depth, stroke: 2 });
+    const desc = this.T('tipDesc', d.desc, 0, 0, { size: fs, color: '#cfe3ff', depth, stroke: 2 }); desc.setWordWrapWidth(TW - 2 * pad);
+    const rh = 18 * u, head = 20 * u, th = pad + title.height + 2 * u + sub.height + 8 * u + desc.height + 10 * u + head + rows.length * rh + pad;
+    const x = Phaser.Math.Clamp(q.x + q.s / 2 - TW / 2, 8, W - TW - 8), y = q.y - 50 * u - th;
+    g.fillStyle(0x070b14, 0.97).fillRect(x, y, TW, th).lineStyle(2, 0x3fd0ff, 0.9).strokeRect(x, y, TW, th);
+    g.lineStyle(1, 0x1b4a63, 1).strokeRect(x + 4 * u, y + 4 * u, TW - 8 * u, th - 8 * u);
+    g.fillStyle(0xffb020).fillRect(x, y, 14 * u, 3 * u).fillRect(x + TW - 14 * u, y + th - 3 * u, 14 * u, 3 * u);
+    title.setPosition(x + pad, y + pad); sub.setPosition(x + pad, y + pad + title.height + 2 * u);
+    desc.setPosition(x + pad, sub.y + sub.height + 8 * u);
+    let cy = desc.y + desc.height + 10 * u;
+    const c0 = x + pad + 170 * u, cw = 52 * u;
+    this.T('tipH', 'NIVEL', x + pad, cy, { size: 10 * u, color: '#8aa0c8', depth, stroke: 2 });
+    for (let r = 0; r < MAX_RANK; r++) this.T('tipHr' + r, `${r + 1}`, c0 + r * cw, cy, { size: 11 * u, bold: true, color: rank === r + 1 ? '#ffd23f' : '#8aa0c8', depth, stroke: 2, origin: [0.5, 0] });
+    g.lineStyle(1, 0x3fd0ff, 0.5).lineBetween(x + pad, cy + head - 4 * u, x + TW - pad, cy + head - 4 * u);
+    cy += head;
+    rows.forEach(([k, v], n) => {
+      const y2 = cy + n * rh;
+      if (Array.isArray(v)) {
+        this.T('tipL' + n, FIELD[k][0], x + pad, y2, { size: fs, depth, stroke: 2 });
+        v.forEach((val, r) => this.T(`tipV${n}_${r}`, fmt(k, val), c0 + r * cw, y2, { size: fs, bold: rank === r + 1, color: rank === r + 1 ? '#ffd23f' : '#cfe3ff', depth, stroke: 2, origin: [0.5, 0] }));
+      } else {
+        this.T('tipL' + n, k === 'range' ? 'Alcance' : 'Radio de efecto', x + pad, y2, { size: fs, depth, stroke: 2 });
+        this.T(`tipV${n}_0`, `${v}`, c0, y2, { size: fs, color: '#cfe3ff', depth, stroke: 2, origin: [0.5, 0] });
+      }
+    });
+  }
+
+  drawMinimap(A, g, o, q) {
+    const fx = q.w / WORLD_W, fy = q.h / WORLD_H;     // stretched to fill the hole
+    g.fillStyle(0x5d7a2e).fillRect(q.x, q.y, q.w, q.h);
+    const dirt = 0xb98a5c;
+    for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) if (walk[j * GW + i]) g.fillStyle(dirt).fillRect(q.x + i * CELL * fx, q.y + j * CELL * fy, CELL * fx + 0.6, CELL * fy + 0.6);
+    CAMPS.forEach(([cx, cy]) => g.fillStyle(0x8a6238).fillCircle(q.x + cx * fx, q.y + cy * fy, 4));
+    g.fillStyle(0x3b82f6, 0.45).fillRect(q.x, q.y + 600 * fy, 340 * fx, 312 * fy);
+    g.fillStyle(0xef4444, 0.45).fillRect(q.x + q.w - 340 * fx, q.y + 600 * fy, 340 * fx, 312 * fy);
+    A.fighters.forEach(ft => {
+      if ((!ft.alive && !ft.isNexus) || ft.hiddenFor(A.player)) return;
+      const me = A.player, cx = q.x + ft.x * fx, cy = q.y + ft.y * fy;
+      g.fillStyle(ft.isNexus && !ft.alive ? 0x444444 : ft === me ? 0x3ddc84 : ft.team === me.baseTeam ? 0x3b82f6 : 0xff3b3b);
+      if (ft.isNexus) g.fillRect(cx - 6, cy - 6, 12, 12); else if (ft.isTower) g.fillRect(cx - 4, cy - 4, 8, 8); else g.fillCircle(cx, cy, ft.isBot || ft.isMinion ? 2.5 : 5);
+      if (ft === A.selected) o.lineStyle(2, 0xffffff).strokeCircle(cx, cy, 8);
+    });
+    const v = A.cameras.main.worldView;
+    o.lineStyle(1, 0xffffff, 0.9).strokeRect(q.x + v.x * fx, q.y + Math.max(0, v.y) * fy, v.width * fx, Math.min(v.height, WORLD_H) * fy);
+  }
+}

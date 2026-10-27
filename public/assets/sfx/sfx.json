@@ -1,0 +1,514 @@
+{
+"atk_leandro": [
+"atk_leandro_0.wav"
+],
+"atk_xeviche": [
+"atk_xeviche_0.ogg"
+],
+"atk_jorbi": [
+"atk_jorbi_0.ogg"
+],
+"atk_jorbi_crit": [
+"atk_jorbi_crit_0.ogg",
+"atk_jorbi_crit_1.ogg"
+],
+"atk_axel": [
+"atk_axel_0.wav",
+"atk_axel_1.ogg"
+],
+"atk_julio_slow": [
+"atk_julio_slow_0.wav",
+"atk_julio_slow_1.wav"
+],
+"atk_julio_fast": [
+"atk_julio_fast_0.wav",
+"atk_julio_fast_1.wav"
+],
+"atk_luis": [
+"atk_luis_0.ogg"
+],
+"atk_hector": [
+"atk_hector_0.ogg"
+],
+"atk_eliud": [
+"atk_eliud_0.wav"
+],
+"atk_eliud_hen": [
+"atk_eliud_hen_0.ogg",
+"atk_eliud_hen_1.wav"
+],
+"a_leandro_p1": [
+"a_leandro_p1_0.wav",
+"a_leandro_p1_1.ogg"
+],
+"a_leandro_p2": [
+"a_leandro_p2_0.wav",
+"a_leandro_p2_1.wav"
+],
+"a_leandro_p3": [
+"a_leandro_p3_0.ogg",
+"a_leandro_p3_1.ogg"
+],
+"a_leandro_ult": [
+"a_leandro_ult_0.wav"
+],
+"a_xeviche_p1": [
+"a_xeviche_p1_0.ogg",
+"a_xeviche_p1_1.wav"
+],
+"a_xeviche_p2": [
+"a_xeviche_p2_0.ogg",
+"a_xeviche_p2_1.ogg"
+],
+"a_xeviche_p3": [
+"a_xeviche_p3_0.wav",
+"a_xeviche_p3_1.ogg"
+],
+"a_xeviche_ult": [
+"a_xeviche_ult_0.wav",
+"a_xeviche_ult_1.ogg"
+],
+"a_jorbi_p1": [
+"a_jorbi_p1_0.ogg",
+"a_jorbi_p1_1.wav"
+],
+"a_jorbi_p2": [
+"a_jorbi_p2_0.wav"
+],
+"a_jorbi_ult": [
+"a_jorbi_ult_0.wav",
+"a_jorbi_ult_1.wav"
+],
+"a_axel_p1": [
+"a_axel_p1_0.wav",
+"a_axel_p1_1.wav"
+],
+"ev_axel_virus": [
+"ev_axel_virus_0.wav"
+],
+"ev_axel_trojan": [
+"ev_axel_trojan_0.wav"
+],
+"ev_axel_worm": [
+"ev_axel_worm_0.wav"
+],
+"a_axel_p2": [
+"a_axel_p2_0.wav",
+"a_axel_p2_1.ogg"
+],
+"a_axel_p3": [
+"a_axel_p3_0.ogg",
+"a_axel_p3_1.wav"
+],
+"a_axel_ult": [
+"a_axel_ult_0.wav",
+"a_axel_ult_1.wav"
+],
+"a_julio_p1": [
+"a_julio_p1_0.wav",
+"a_julio_p1_1.wav"
+],
+"a_julio_p2": [
+"a_julio_p2_0.wav",
+"a_julio_p2_1.wav"
+],
+"a_julio_p3": [
+"a_julio_p3_0.wav",
+"a_julio_p3_1.ogg"
+],
+"a_julio_ult": [
+"a_julio_ult_0.ogg"
+],
+"ev_julio_inkpop": [
+"ev_julio_inkpop_0.ogg"
+],
+"ev_julio_dropland": [
+"ev_julio_dropland_0.wav"
+],
+"a_luis_p1": [
+"a_luis_p1_0.wav",
+"a_luis_p1_1.wav"
+],
+"a_luis_p2": [
+"a_luis_p2_0.wav",
+"a_luis_p2_1.ogg"
+],
+"a_luis_p3": [
+"a_luis_p3_0.wav"
+],
+"a_luis_ult": [
+"a_luis_ult_0.wav",
+"a_luis_ult_1.wav"
+],
+"a_hector_p1": [
+"a_hector_p1_0.wav",
+"a_hector_p1_1.ogg"
+],
+"a_hector_p2": [
+"a_hector_p2_0.ogg",
+"a_hector_p2_1.ogg"
+],
+"ev_hector_chain": [
+"ev_hector_chain_0.ogg",
+"ev_hector_chain_1.ogg"
+],
+"a_hector_p3": [
+"a_hector_p3_0.ogg",
+"a_hector_p3_1.ogg"
+],
+"a_hector_ult": [
+"a_hector_ult_0.wav"
+],
+"a_eliud_p1": [
+"a_eliud_p1_0.ogg"
+],
+"ev_eliud_boom": [
+"ev_eliud_boom_0.wav"
+],
+"a_eliud_p2": [
+"a_eliud_p2_0.ogg",
+"a_eliud_p2_1.ogg"
+],
+"ev_eliud_trapboom": [
+"ev_eliud_trapboom_0.wav"
+],
+"a_eliud_p3": [
+"a_eliud_p3_0.wav",
+"a_eliud_p3_1.ogg"
+],
+"ev_eliud_spear_stick": [
+"ev_eliud_spear_stick_0.ogg"
+],
+"ev_eliud_pickup": [
+"ev_eliud_pickup_0.ogg"
+],
+"a_eliud_ult": [
+"a_eliud_ult_0.ogg"
+],
+"ev_eliud_pkg_land": [
+"ev_eliud_pkg_land_0.ogg"
+],
+"ev_eliud_pkg_open": [
+"ev_eliud_pkg_open_0.wav"
+],
+"ev_eliud_hen": [
+"ev_eliud_hen_0.ogg",
+"ev_eliud_hen_1.wav"
+],
+"ann_first": [
+"ann_first_0.wav"
+],
+"ann_2": [
+"ann_2_0.wav"
+],
+"ann_3": [
+"ann_3_0.wav"
+],
+"ann_4": [
+"ann_4_0.wav"
+],
+"ann_5": [
+"ann_5_0.wav"
+],
+"ann_minions": [
+"ann_minions_0.wav"
+],
+"ann_goodluck": [
+"ann_goodluck_0.wav"
+],
+"v_2": [
+"v_2_0.mp3"
+],
+"v_3": [
+"v_3_0.mp3"
+],
+"v_4": [
+"v_4_0.mp3"
+],
+"v_5": [
+"v_5_0.mp3"
+],
+"v_ally_down": [
+"v_ally_down_0.mp3"
+],
+"v_enemy_down": [
+"v_enemy_down_0.mp3"
+],
+"v_firstblood": [
+"v_firstblood_0.mp3"
+],
+"v_kill_ally": [
+"v_kill_ally_0.mp3"
+],
+"v_kill_you": [
+"v_kill_you_0.mp3"
+],
+"v_minions": [
+"v_minions_0.mp3"
+],
+"v_nexus_lose": [
+"v_nexus_lose_0.mp3"
+],
+"v_nexus_win": [
+"v_nexus_win_0.mp3"
+],
+"v_suicide": [
+"v_suicide_0.mp3"
+],
+"v_surrender": [
+"v_surrender_0.mp3"
+],
+"v_tower_ally": [
+"v_tower_ally_0.mp3"
+],
+"v_tower_enemy": [
+"v_tower_enemy_0.mp3"
+],
+"v_welcome": [
+"v_welcome_0.mp3"
+],
+"v_you_died": [
+"v_you_died_0.mp3"
+],
+"r_2": [
+"r_2_0.wav"
+],
+"r_3": [
+"r_3_0.wav"
+],
+"r_4": [
+"r_4_0.wav"
+],
+"r_5": [
+"r_5_0.wav"
+],
+"r_ally_down": [
+"r_ally_down_0.wav"
+],
+"r_enemy_down": [
+"r_enemy_down_0.wav"
+],
+"r_firstblood": [
+"r_firstblood_0.wav"
+],
+"r_kill_ally": [
+"r_kill_ally_0.wav"
+],
+"r_kill_you": [
+"r_kill_you_0.wav"
+],
+"r_minions": [
+"r_minions_0.wav"
+],
+"r_nexus_lose": [
+"r_nexus_lose_0.wav"
+],
+"r_nexus_win": [
+"r_nexus_win_0.wav"
+],
+"r_suicide": [
+"r_suicide_0.wav"
+],
+"r_surrender": [
+"r_surrender_0.wav"
+],
+"r_tower_ally": [
+"r_tower_ally_0.wav"
+],
+"r_tower_enemy": [
+"r_tower_enemy_0.wav"
+],
+"r_welcome": [
+"r_welcome_0.wav"
+],
+"r_you_died": [
+"r_you_died_0.wav"
+],
+"punch": [
+"punch_0.ogg",
+"punch_1.ogg",
+"punch_2.ogg"
+],
+"punch_heavy": [
+"punch_heavy_0.ogg",
+"punch_heavy_1.ogg"
+],
+"slash": [
+"slash_0.wav",
+"slash_1.wav"
+],
+"hit_flesh": [
+"hit_flesh_0.wav",
+"hit_flesh_1.wav",
+"hit_flesh_2.wav"
+],
+"hit_metal": [
+"hit_metal_0.ogg",
+"hit_metal_1.ogg",
+"hit_metal_2.ogg",
+"hit_metal_3.ogg",
+"hit_metal_4.ogg"
+],
+"hit_heavy": [
+"hit_heavy_0.ogg",
+"hit_heavy_1.ogg",
+"hit_heavy_2.ogg",
+"hit_heavy_3.ogg"
+],
+"block": [
+"block_0.wav",
+"block_1.ogg",
+"block_2.ogg",
+"block_3.ogg",
+"block_4.ogg",
+"block_5.ogg"
+],
+"whoosh": [
+"whoosh_0.wav",
+"whoosh_1.wav"
+],
+"laser": [
+"laser_0.wav",
+"laser_1.wav",
+"laser_2.wav",
+"laser_3.wav"
+],
+"laser_big": [
+"laser_big_0.wav",
+"laser_big_1.wav"
+],
+"shot": [
+"shot_0.wav",
+"shot_1.wav",
+"shot_2.wav"
+],
+"cannon": [
+"cannon_0.ogg"
+],
+"cannon_hit": [
+"cannon_hit_0.ogg",
+"cannon_hit_1.ogg"
+],
+"explosion": [
+"explosion_0.wav",
+"explosion_1.wav"
+],
+"explosion_big": [
+"explosion_big_0.wav"
+],
+"nexus_destroy": [
+"nexus_destroy_0.ogg"
+],
+"buff": [
+"buff_0.wav"
+],
+"debuff": [
+"debuff_0.wav"
+],
+"stun": [
+"stun_0.ogg",
+"stun_1.ogg",
+"stun_2.ogg",
+"stun_3.ogg",
+"stun_4.ogg"
+],
+"levelup": [
+"levelup_0.wav"
+],
+"champ_death": [
+"champ_death_0.wav"
+],
+"death_soft": [
+"death_soft_0.ogg",
+"death_soft_1.ogg",
+"death_soft_2.ogg",
+"death_soft_3.ogg"
+],
+"minion_grunt": [
+"minion_grunt_0.wav",
+"minion_grunt_1.wav",
+"minion_grunt_2.wav",
+"minion_grunt_3.wav",
+"minion_grunt_4.wav",
+"minion_grunt_5.wav"
+],
+"minion_yell": [
+"minion_yell_0.wav",
+"minion_yell_1.wav",
+"minion_yell_2.wav",
+"minion_yell_3.wav",
+"minion_yell_4.wav",
+"minion_yell_5.wav",
+"minion_yell_6.wav",
+"minion_yell_7.wav",
+"minion_yell_8.wav",
+"minion_yell_9.wav"
+],
+"robot_beep": [
+"robot_beep_0.wav",
+"robot_beep_1.wav",
+"robot_beep_2.wav"
+],
+"step": [
+"step_0.ogg",
+"step_1.ogg",
+"step_2.ogg",
+"step_3.ogg",
+"step_4.ogg"
+],
+"ui_click": [
+"ui_click_0.wav",
+"ui_click_1.wav"
+],
+"ui_hover": [
+"ui_hover_0.wav"
+],
+"ui_confirm": [
+"ui_confirm_0.wav",
+"ui_confirm_1.wav"
+],
+"ui_error": [
+"ui_error_0.wav"
+],
+"ui_back": [
+"ui_back_0.wav"
+],
+"ui_open": [
+"ui_open_0.wav"
+],
+"ui_pause": [
+"ui_pause_0.wav"
+],
+"ui_unpause": [
+"ui_unpause_0.wav"
+],
+"ui_upgrade": [
+"ui_upgrade_0.wav",
+"ui_upgrade_1.wav"
+],
+"ui_announce": [
+"ui_announce_0.wav"
+],
+"ui_victory": [
+"ui_victory_0.wav"
+],
+"ui_defeat": [
+"ui_defeat_0.wav"
+],
+"ui_select": [
+"ui_select_0.wav",
+"ui_select_1.wav"
+],
+"thunder": [
+"thunder_0.wav"
+],
+"ice": [
+"ice_0.wav"
+],
+"music_game": [
+"music_game_0.ogg"
+],
+"music_menu": [
+"music_menu_0.ogg"
+]
+}
