@@ -574,7 +574,7 @@ export class Fighter {
       case 'xeviche:p1': {
         const dmg = rk(a.dmg, rank) + this.atk * a.atkScale, stun = rk(a.stun, rank);
         // throw the actual LEGO brick (the ability icon art) spinning, not a red-tinted rock
-        w.projectile(this, { speed: a.speed, dmg, type: 'physical', obj: 'icon_xeviche_p1', scale: 1.1, spin: true, r: 26,
+        w.projectile(this, { speed: a.speed, dmg, type: 'physical', obj: 'icon_xeviche_p1', scale: 0.72, spin: true, spinSpeed: 3.8, r: 26,
           onHit: t => t.stun(stun) });
         break;
       }
