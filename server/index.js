@@ -1,4 +1,4 @@
-// Dev Brawl launcher server: auth + news (REST) and lobby/relay (WebSocket).
+// SUIKA FIGTHER launcher server: auth + news (REST) and lobby/relay (WebSocket).
 import express from 'express';
 import { WebSocketServer } from 'ws';
 import Database from 'better-sqlite3';
@@ -324,5 +324,5 @@ export function stop() {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  start().then((s) => console.log(`Dev Brawl server en http://localhost:${s.address().port}`));
+  start().then((s) => console.log(`SUIKA FIGTHER server en http://localhost:${s.address().port}`));
 }

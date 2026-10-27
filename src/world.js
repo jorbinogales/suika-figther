@@ -1002,6 +1002,7 @@ export class Arena extends Phaser.Scene {
   damage(src, target, raw, type, dot = false) {
     if (this.net?.role === 'client') return 0;   // online clients only show what the host reports
     if (!target.alive) return 0;
+    if (this.basicDmg && src?.key === 'xeviche' && !dot && target.team !== src.team) src.setupHit();   // a landed basic attack feeds the Setup passive
     if (target.isTower && !this.basicDmg) return 0;   // towers and nexus only take basic attacks
     if (!dot) this.audio.play(target.isNexus ? 'hit_heavy' : target.isTower ? 'hit_metal' : type === 'physical' ? 'hit_flesh' : 'debuff', { at: target, vol: target.isTower ? 0.5 : 0.55, gap: 90 });
     const resist = type === 'physical' ? target.armor : type === 'magic' ? target.mr : 0;

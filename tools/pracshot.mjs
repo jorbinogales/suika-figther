@@ -1,0 +1,14 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader', '--mute-audio'], defaultViewport: { width: 1366, height: 768 } });
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const p = await b.newPage(); p.on('pageerror', e => console.log('[pageerror]', e.message));
+await p.goto('http://localhost:5173/', { waitUntil: 'load' }); await sleep(11000);
+await p.evaluate(`document.querySelector('[data-a=practice]').click()`); await sleep(600);
+await p.evaluate(`document.querySelector('[data-a=pmode][data-m="3"]').click()`); await sleep(300);
+await p.evaluate(`document.querySelector('[data-cls=hacker]').click()`); await sleep(300);
+await p.evaluate(`document.querySelector('.cc').click()`); await sleep(400);
+await p.hover('.abi:nth-child(2)'); await sleep(300);
+await p.screenshot({ path: 'D:/mycowork/game/shot_prac.png' });
+await p.evaluate(`document.querySelector('[data-a=ptrain]').click()`); await sleep(9000);
+console.log(await p.evaluate(`JSON.stringify({ ui: !!document.querySelector('#ui'), arena: !!window.__arena || !!document.querySelector('canvas'), training: window.__arena?.training })`));
+await b.close();

@@ -2,7 +2,7 @@
 // level = 1 + the highest component level, up to MAX_LEVEL 3. Stats are derived from the recipe, so a hybrid item (AI power + health) is simply
 // the sum of its components (+15 %). Buying a crafted item consumes the components you already carry and only charges the missing parts + a fee.
 // Stat fields: atk, ap, armor, mr, hp, mana (flat) · speed, aspd, lifesteal, cdr (fractions) · hpRegen, manaRegen (per second)
-export const CATS = { ad: 'Ataque físico', ap: 'Poder de IA', arm: 'Defensa física', mr: 'Defensa de IA', hp: 'Vida', util: 'Utilidad', rec: 'Recuperación' };
+export const CATS = { ad: 'Ataque físico', ap: 'Poder de IA', arm: 'Defensa física', mr: 'Resistencia a la IA', hp: 'Vida', util: 'Utilidad', rec: 'Recuperación' };
 export const CAT_COL = { ad: '#ff9a6a', ap: '#c77dff', arm: '#f2c14e', mr: '#7ee0ff', hp: '#5dff8a', util: '#ffd23f', rec: '#ff7ab8' };
 export const SLOTS = 6, MAX_LEVEL = 3, CRAFT_BONUS = 1.15, FEE = [0, 50, 100];
 
@@ -49,7 +49,7 @@ C('amuleto_logico', 'Amuleto lógico', 'mr', ['b_filtro', 'b_chip'], 'Resistenci
 C('bateria_extendida', 'Batería extendida', 'hp', ['b_vial', 'b_vial'], 'Más vida.');
 C('proteina_extra', 'Proteína extra', 'hp', ['b_vial', 'b_botiquin'], 'Vida y regeneración.');
 C('sistema_raid', 'Sistema RAID', 'hp', ['b_vial', 'b_placa'], 'Vida y armadura.');
-C('anillo_vitalidad', 'Anillo de vitalidad', 'hp', ['b_vial', 'b_filtro'], 'Vida y resistencia mágica.');
+C('anillo_vitalidad', 'Anillo de vitalidad', 'hp', ['b_vial', 'b_filtro'], 'Vida y resistencia a la IA.');
 C('botas_turbo', 'Botas turbo', 'util', ['b_zapas', 'b_zapas'], 'Más velocidad.');
 C('termo_cafe', 'Termo de café', 'util', ['b_reloj', 'b_cargador'], 'Recarga y maná.');
 C('mortero_portatil', 'Mortero portátil', 'util', ['b_pesa', 'b_chip'], 'Activo: despliega un mortero que bombardea desde lejos.', { active: { type: 'mortar', cd: 45, life: 14 } });
@@ -92,7 +92,7 @@ for (const d of defs) {
   ITEMS.push(it); ITEM_BY_ID[it.id] = it;
 }
 export const sellValue = item => Math.round(item.cost * 0.5);
-export const STAT_LABEL = { atk: 'Ataque físico', ap: 'Poder de IA', armor: 'Armadura', mr: 'Res. mágica', hp: 'Vida', mana: 'Maná', speed: 'Velocidad', aspd: 'Vel. de ataque', lifesteal: 'Robo de vida', cdr: 'Recarga de poderes', hpRegen: 'Regen. vida/s', manaRegen: 'Regen. maná/s' };
+export const STAT_LABEL = { atk: 'Ataque físico', ap: 'Poder de IA', armor: 'Armadura', mr: 'Res. a la IA', hp: 'Vida', mana: 'Maná', speed: 'Velocidad', aspd: 'Vel. de ataque', lifesteal: 'Robo de vida', cdr: 'Recarga de poderes', hpRegen: 'Regen. vida/s', manaRegen: 'Regen. maná/s' };
 export const fmtStat = (k, v) => (['speed', 'aspd', 'lifesteal', 'cdr'].includes(k) ? `+${Math.round(v * 100)}%` : `+${Math.round(v * 10) / 10}`);
 
 // What buying `id` costs with the inventory `inv` (slots {id, cd, charges}): components already owned are consumed, missing ones are bought.

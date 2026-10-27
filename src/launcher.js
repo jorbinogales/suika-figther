@@ -13,9 +13,9 @@ const $ = (sel, el = document) => el.querySelector(sel);
 
 /* ---------- sound (synthesised by tools/gen_menu_audio.py) ---------- */
 const cache = {};
-// navigation sounds: 24-bit recordings (RuneVault / RPG Essentials) already shipped in assets/sfx; [file, volume]
-const UI_SND = { ui_hover: ['ui_hover_0.wav', 0.55], ui_click: ['ui_confirm_1.wav', 0.5], ui_confirm: ['ui_confirm_0.wav', 0.8], ui_back: ['ui_unpause_0.wav', 0.7], ui_error: ['ui_error_0.wav', 0.8],
-  ui_open: ['ui_open_0.wav', 0.8], ui_tab: ['ui_pause_0.wav', 0.45], ui_start: ['levelup_0.wav', 0.9], ui_join: ['ui_upgrade_0.wav', 0.7] };
+// navigation sounds: the same 24-bit set the training menu always used (ui_select / ui_confirm...) from assets/sfx; [file, volume]
+const UI_SND = { ui_click: ['ui_select_0.wav', 0.9], ui_tab: ['ui_select_1.wav', 0.9], ui_confirm: ['ui_confirm_0.wav', 0.9], ui_back: ['ui_back_0.wav', 0.8], ui_error: ['ui_error_0.wav', 0.8],
+  ui_open: ['ui_open_0.wav', 0.8], ui_start: ['levelup_0.wav', 0.9], ui_join: ['ui_confirm_0.wav', 0.8] };
 const snd = n => { const u = UI_SND[n]; if (!u) return; try { const a = (cache[n] ||= new window.Audio(`assets/sfx/${u[0]}`)).cloneNode(); a.volume = Math.min(1, vol.sfx * u[1]); a.play().catch(() => {}); } catch (e) { /* ignore */ } };
 let music = null, musicWanted = false;
 const startMusic = () => {
@@ -34,7 +34,7 @@ const toast = (msg, good) => { const e = $('.err', view); if (e) { e.textContent
 
 /* ---------- screens ---------- */
 function header() {
-  return `<div class="hdr"><div class="logo">DEV<b>BRAWL</b></div><div class="sp"></div>
+  return `<div class="hdr"><div class="logo">SUIKA <b>FIGTHER</b></div><div class="sp"></div>
     <div class="vol">${['music', 'sfx'].map(k => `<span>${k === 'music' ? 'MÚSICA' : 'EFECTOS'}</span><input type="range" min="0" max="100" value="${Math.round(vol[k] * 100)}" data-vol="${k}" style="--v:${Math.round(vol[k] * 100)}%"><b class="pc" id="pc-${k}">${Math.round(vol[k] * 100)}%</b>`).join('')}</div>
     <div class="chip"><span class="dot ${net.online ? 'on' : ''}" id="dot"></span>${esc(net.user?.name || '')}</div>
     <button class="btn sm ghost" data-a="logout">Salir</button></div>`;
@@ -43,7 +43,7 @@ function header() {
 function loginScreen(mode = 'login') {
   const again = screen === 'login'; screen = 'login';
   view.innerHTML = `<div class="scr ${again ? 'noanim' : ''}"><div class="center">
-    <div class="logo">DEV<b>BRAWL</b></div><div class="sub">LAUNCHER · ACCESO</div>
+    <div class="logo">SUIKA <b>FIGTHER</b></div><div class="sub">LAUNCHER · ACCESO</div>
     <div class="panel"><div class="tabs"><button class="btn ${mode === 'login' ? 'on' : ''}" data-tab="login">Iniciar sesión</button><button class="btn ${mode === 'register' ? 'on' : ''}" data-tab="register">Registrarme</button></div>
     <form id="f" autocomplete="on">
       ${mode === 'register' ? '<label class="l">Nombre de jugador</label><input class="fld" name="name" maxlength="16" autocomplete="nickname">' : ''}
@@ -91,6 +91,11 @@ function joinModal() {
 
 function send(t, o) { if (!net.online) { toast('Sin conexión con el servidor. Reintentando...'); return false; } snd('ui_join'); net.send(t, o); return true; }
 
+const champTabs = () => `<div class="ctabs">${CLASS_TABS.map(c => `<button class="ctab ${clsFilter === c ? 'on' : ''}" data-cls="${c}" title="${esc(classLabel(c))}"><img src="assets/classes/${c}.png" alt="" onerror="this.style.display='none'"><span>${esc(classLabel(c))}</span><i>${c === 'todos' ? KEYS.length : KEYS.filter(k => CHAMPIONS[k].cls === c).length}</i></button>`).join('')}</div>`;
+const champGrid = (sel, taken = () => false) => `<div class="champs" id="champs">${KEYS.filter(k => clsFilter === 'todos' || CHAMPIONS[k].cls === clsFilter).map(k => `<div class="cc ${k === sel ? 'sel' : ''} ${taken(k) ? 'taken' : ''}" data-k="${k}"><div class="im" style="${faceCss(k)}"></div><div class="lb">${esc(CHAMPIONS[k].name)}</div></div>`).join('')}</div>`;
+const abilityStrip = d => `<div class="abis">${ABILITY_KEYS.map((a, i) => { const ab = d.abilities[a]; return `<div class="abi" data-tip="${esc(`<b>[${'QFER'[i]}] ${ab.name}${ab.passive ? ' · pasiva' : ''}</b><br>${ab.desc}`)}"><img src="assets/icons/${esc(ab.icon)}.png" alt=""><span>${'QFER'[i]}</span></div>`; }).join('')}</div>`;
+const refresh = () => (screen === 'practice' ? practiceScreen() : lobbyScreen());
+
 function lobbyScreen() {
   const r = net.room; if (!r) return homeScreen();
   const keep = { txt: $('#chatin', view)?.value || '', focus: document.activeElement?.id === 'chatin', sc: $('#champs', view)?.parentElement?.scrollTop || 0 };
@@ -105,10 +110,10 @@ function lobbyScreen() {
     <div class="col"><div class="panel"><h2>CÓDIGO DE SALA</h2><div class="code" data-a="copy" title="Clic para copiar">${esc(r.code)}</div><div style="text-align:center;color:var(--mut);font-size:14px;margin-top:4px">${pl.length}/${MAXP} jugadores · clic para copiar</div></div>
       <div class="panel scroll">${team(0)}${team(1)}</div></div>
     <div class="col"><div class="panel scroll"><h2>ELIGE TU CAMPEÓN</h2>
-      <div class="ctabs">${CLASS_TABS.map(c => `<button class="ctab ${clsFilter === c ? 'on' : ''}" data-cls="${c}" title="${esc(classLabel(c))}"><img src="assets/classes/${c}.png" alt="" onerror="this.style.display='none'"><span>${esc(classLabel(c))}</span><i>${c === 'todos' ? KEYS.length : KEYS.filter(k => CHAMPIONS[k].cls === c).length}</i></button>`).join('')}</div>
-      <div class="champs" id="champs">${KEYS.filter(k => clsFilter === 'todos' || CHAMPIONS[k].cls === clsFilter).map(k => `<div class="cc ${k === sel ? 'sel' : ''} ${pl.some(p => p.champ === k && p.id !== net.user.id) ? 'taken' : ''}" data-k="${k}"><div class="im" style="${faceCss(k)}"></div><div class="lb">${esc(CHAMPIONS[k].name)}</div></div>`).join('')}</div>
+      ${champTabs()}
+      ${champGrid(sel, k => pl.some(p => p.champ === k && p.id !== net.user.id))}
 </div>
-      <div class="panel info"><div class="abis">${ABILITY_KEYS.map((a, i) => { const ab = d.abilities[a]; return `<div class="abi" data-tip="${esc(`<b>[${'QFER'[i]}] ${ab.name}${ab.passive ? ' · pasiva' : ''}</b><br>${ab.desc}`)}"><img src="assets/icons/${esc(ab.icon)}.png" alt=""><span>${'QFER'[i]}</span></div>`; }).join('')}</div></div></div>
+      <div class="panel info">${abilityStrip(d)}</div></div>
     <div class="col"><div class="panel chat"><h2>CHAT</h2><div class="log" id="log"></div><input class="fld" id="chatin" maxlength="200" placeholder="Escribe y pulsa Enter" autocomplete="off"></div>
       <div class="panel"><div class="row" style="margin-bottom:10px"><button class="btn ${me?.ready ? 'warn' : 'go'}" data-a="ready">${me?.ready ? 'Cancelar listo' : 'Estoy listo'}</button><button class="btn ghost" data-a="leave">Salir</button></div>
       ${host ? `<button class="btn go" style="width:100%" data-a="start" ${allPicked ? '' : 'disabled'}>Iniciar partida${allReady ? '' : ' (hay jugadores sin marcar listo)'}</button>` : '<div style="text-align:center;color:var(--mut)">Esperando a que el anfitrión inicie la partida...</div>'}
@@ -118,6 +123,39 @@ function lobbyScreen() {
   ci.addEventListener('keydown', e => { if (e.key === 'Enter' && ci.value.trim()) { net.send('chat', { text: ci.value.trim() }); ci.value = ''; } });
   if (!first) $('#champs', view).parentElement.scrollTop = keep.sc;
   if (me && !me.champ && !picked) { picked = KEYS.filter(k => !pl.some(p => p.champ === k))[0] || KEYS[0]; net.send('pick_champ', { key: picked }); }   // everyone always has a champion
+}
+
+
+// ---- practice & training: same champion select as the lobby ----
+const prac = { mode: 1, me: 'leandro', team: 0, allies: [], enemies: [] };
+function pracFill(reroll = false) {   // keeps both teams the right size for the mode, filling new slots with random champions
+  const pool = () => KEYS[Math.random() * KEYS.length | 0], make = (arr, n, avoid) => { const out = reroll ? [] : arr.slice(0, n); while (out.length < n) { const free = KEYS.filter(c => !avoid.includes(c) && !out.includes(c)); out.push(free.length ? free[Math.random() * free.length | 0] : pool()); } return out; };
+  prac.allies = make(prac.allies, prac.mode - 1, [prac.me]); prac.enemies = make(prac.enemies, prac.mode, [prac.me, ...prac.allies]);
+}
+function practiceScreen() {
+  const first = screen !== 'practice'; screen = 'practice'; pracFill();
+  const d = CHAMPIONS[prac.me], keep = $('#champs', view)?.parentElement?.scrollTop || 0;
+  const slots = (arr, g) => (arr.length ? arr.map((k, i) => `<div class="pl slot" data-a="pslot" data-g="${g}" data-i="${i}" title="Clic para cambiar de campeón">${face(k)}<div class="nm">${esc(CHAMPIONS[k].name)}<div class="ch">${esc(CLASSES[CHAMPIONS[k].cls]?.label || '')}</div></div></div>`).join('') : '<div class="pl empty"><div class="nm ch">Sin aliados en 1 vs 1</div></div>');
+  const hdr = `<div class="hdr"><div class="logo">SUIKA <b>FIGTHER</b></div><div class="sp"></div><div class="vol">${['music', 'sfx'].map(k => `<span>${k === 'music' ? 'MÚSICA' : 'EFECTOS'}</span><input type="range" min="0" max="100" value="${Math.round(vol[k] * 100)}" data-vol="${k}" style="--v:${Math.round(vol[k] * 100)}%"><b class="pc" id="pc-${k}">${Math.round(vol[k] * 100)}%</b>`).join('')}</div><button class="btn sm ghost" data-a="pback">Volver</button></div>`;
+  view.innerHTML = `<div class="scr ${first ? '' : 'noanim'}">${hdr}<div class="lobby">
+    <div class="col"><div class="panel"><h2>MODO DE JUEGO</h2><div class="row">${[1, 3, 5].map(m => `<button class="btn mbtn ${prac.mode === m ? 'on' : ''}" data-a="pmode" data-m="${m}">${m} vs ${m}</button>`).join('')}</div>
+        <h2 style="margin-top:14px">TU BANDO</h2><div class="row"><button class="btn mbtn ${prac.team === 0 ? 'on' : ''}" data-a="pteam" data-t="0">AZUL</button><button class="btn mbtn red ${prac.team === 1 ? 'on' : ''}" data-a="pteam" data-t="1">ROJO</button></div>
+        <button class="btn ghost" style="width:100%;margin-top:14px" data-a="prand">Equipos al azar</button></div>
+      <div class="panel scroll"><div class="team t0"><h4>TUS ALIADOS (${prac.allies.length})</h4>${slots(prac.allies, 'allies')}</div><div class="team t1"><h4>EQUIPO ENEMIGO (${prac.enemies.length})</h4>${slots(prac.enemies, 'enemies')}</div></div></div>
+    <div class="col"><div class="panel scroll"><h2>ELIGE TU CAMPEÓN</h2>
+      ${champTabs()}
+      ${champGrid(prac.me)}
+</div>
+      <div class="panel info">${abilityStrip(d)}</div></div>
+    <div class="col"><div class="panel"><h2>JUGAR</h2><div class="acts">
+        <button class="btn big go" data-a="pplay">Jugar partida<small>${prac.mode} vs ${prac.mode} contra la IA, con oleadas, torres y nexos.</small></button>
+        <button class="btn big" data-a="ptrain">Zona de entrenamiento<small>Nivel 12, sin costo de maná y un muñeco para practicar.</small></button></div></div>
+      <div class="panel"><h2>CONTROLES</h2><div style="font-size:15px;line-height:1.5;color:var(--tx)">WASD mover · Shift correr · clic o J atacar<br>Q F E R poderes (clic para lanzar) · Ctrl + tecla sube el poder<br>B tienda en la base · 1-6 usar objetos · Esc menú</div></div></div></div></div>`;
+  if (!first) $('#champs', view).parentElement.scrollTop = keep;
+}
+function practiceStart(training) {
+  snd('ui_confirm'); stopMusic();
+  scene.scene.start('arena', { training, mode: training ? 1 : prac.mode, player: prac.me, enemies: prac.enemies.slice(0, training ? 1 : 99), allies: training ? [] : prac.allies, team: prac.team, haveSprites: scene.registry.get('sprites') });
 }
 
 function renderChat() {
@@ -132,7 +170,7 @@ function loading(players) {
   loadEl?.remove();
   loadEl = document.createElement('div'); loadEl.id = 'loading';
   const tm = t => `<div class="tm t${t}"><b>${t === 0 ? 'EQUIPO AZUL' : 'EQUIPO ROJO'}</b>${players.filter(p => p.team === t).map(p => `<div style="display:flex;gap:8px;align-items:center">${face(p.champ)}<span>${esc(p.name)} · ${esc(CHAMPIONS[p.champ]?.name || '')}</span></div>`).join('')}</div>`;
-  loadEl.innerHTML = `<div class="logo">DEV<b>BRAWL</b></div><div class="vs">${tm(0)}${tm(1)}</div><div class="bar"><i></i></div><div class="st"></div><div class="tip"></div>`;
+  loadEl.innerHTML = `<div class="logo">SUIKA <b>FIGTHER</b></div><div class="vs">${tm(0)}${tm(1)}</div><div class="bar"><i></i></div><div class="st"></div><div class="tip"></div>`;
   document.body.appendChild(loadEl);
   const TIPS = ['Las torres solo reciben daño de ataques básicos. Los súbditos sirven de escudo.', 'Vuelve a la base para curarte y comprar objetos (tecla B).', 'Mejora tus objetos con oro: gris, verde, azul, morado y rojo.', 'Ctrl + tecla de habilidad sube su rango.', 'Las definitivas se desbloquean en los niveles 4, 8 y 12.'];
   $('.tip', loadEl).textContent = 'CONSEJO: ' + TIPS[Math.random() * TIPS.length | 0];
@@ -179,7 +217,14 @@ function onNet(m) {
 
 const actions = {
   logout() { net.logout(); chat = []; loginScreen(); },
-  practice() { snd('ui_confirm'); scene.scene.start('menu'); },
+  practice() { snd('ui_confirm'); practiceScreen(); },
+  pback() { snd('ui_back'); route(); },
+  pmode(el) { prac.mode = +el.dataset.m; practiceScreen(); },
+  pteam(el) { prac.team = +el.dataset.t; practiceScreen(); },
+  prand() { pracFill(true); practiceScreen(); },
+  pslot(el) { const arr = prac[el.dataset.g], i = +el.dataset.i; arr[i] = KEYS[(KEYS.indexOf(arr[i]) + 1) % KEYS.length]; practiceScreen(); },
+  pplay() { practiceStart(false); },
+  ptrain() { practiceStart(true); },
   quick() { toast('Buscando partida...', true); send('quick_join'); },
   create() { send('create_room', { public: false }); },
   joinbox() { snd('ui_open'); joinModal(); },
@@ -204,8 +249,9 @@ export class Launcher extends Phaser.Scene {
     root.addEventListener('click', e => {
       if (musicWanted && music?.paused) music.play().catch(() => {});
       const t = e.target.closest('[data-a]'); if (t) { if (!['logout', 'leave', 'practice', 'quick', 'create', 'joinbox'].includes(t.dataset.a)) snd('ui_click'); actions[t.dataset.a]?.(t); return; }
-      const ct = e.target.closest('[data-cls]'); if (ct) { clsFilter = ct.dataset.cls; snd('ui_tab'); lobbyScreen(); return; }
-      const c = e.target.closest('.cc'); if (c && net.room) { picked = c.dataset.k; snd('ui_tab'); net.send('pick_champ', { key: picked }); lobbyScreen(); }
+      const ct = e.target.closest('[data-cls]'); if (ct) { clsFilter = ct.dataset.cls; snd('ui_tab'); refresh(); return; }
+      const c = e.target.closest('.cc'); if (c && screen === 'practice') { prac.me = c.dataset.k; snd('ui_tab'); practiceScreen(); return; }
+      if (c && net.room) { picked = c.dataset.k; snd('ui_tab'); net.send('pick_champ', { key: picked }); lobbyScreen(); }
       else if (e.target.closest('.btn') && !e.target.closest('[data-m],[data-tab]')) snd('ui_click');
     });
     root.addEventListener('input', e => { const k = e.target.dataset?.vol; if (!k) return; vol[k] = e.target.value / 100; saveVol(); e.target.style.setProperty('--v', e.target.value + '%'); const pc = $('#pc-' + k, root); if (pc) pc.textContent = e.target.value + '%'; if (k === 'music' && music) music.volume = Math.min(1, vol.music); });

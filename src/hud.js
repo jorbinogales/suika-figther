@@ -43,9 +43,9 @@ function sweep(cx, cy, half, frac) {
 }
 
 // tooltip table: ability field -> [label, unit]. Only array fields (one value per rank) are listed.
-const FIELD = { shieldFlat: ['Escudo fijo', ''], shieldPct: ['Escudo (% vida máx.)', '%'], shieldArmor: ['Escudo (x armadura)', ''], effectTime: ['Duración de mejoras', 's'], effectPower: ['Potencia de mejoras', '%'], packages: ['Cajas', ''], interval: ['Segundos por pieza', 's'], robots: ['Robots', ''], maxInvis: ['Invisibilidad máx.', 's'], control: ['Control', 's'], cd: ['Enfriamiento', 's'], mana: ['Maná', ''], dmg: ['Daño', ''], stun: ['Stun', 's'], slow: ['Ralentiza', '%'], poisonApScale: ['Veneno (xPoder IA)', ''],
+const FIELD = { shieldFlat: ['Escudo fijo', ''], shieldPct: ['Escudo (% vida máx.)', '%'], shieldArmor: ['Escudo (x armadura)', ''], effectTime: ['Duración de mejoras', 's'], effectPower: ['Potencia de mejoras', '%'], packages: ['Cajas', ''], interval: ['Golpes por pieza', ''], robots: ['Robots', ''], maxInvis: ['Invisibilidad máx.', 's'], control: ['Control', 's'], cd: ['Enfriamiento', 's'], mana: ['Maná', ''], dmg: ['Daño', ''], stun: ['Stun', 's'], slow: ['Ralentiza', '%'], poisonApScale: ['Veneno (xPoder IA)', ''],
   life: ['Duración', 's'], heal: ['Curación', ''], healHpPct: ['Curación extra (% vida)', '%'], maxStacks: ['Pilas máximas', ''], armorPer: ['Armadura por pila', ''],
-  mrPer: ['Res. mágica por pila', ''], silence: ['Silencio', 's'], stunAfter: ['Stun tras (s)', 's'], drops: ['Rondas de gotas', ''], amp: ['Curvatura', ''], blind: ['Ceguera', 's'], charm: ['Duración de control', 's'], hps: ['Curación por seg', ''], shield: ['Escudo', ''], speedBoost: ['Velocidad extra', '%'], time: ['Duración', 's'], critMult: ['Daño crítico (x)', ''], dashDist: ['Distancia del dash', ''], window: ['Tiempo para usar dashes', 's'], duration: ['Duración', 's'], hpMult: ['Vida (x)', ''], atkMult: ['Ataque (x)', ''], cdSpeed: ['Recarga de poderes (x)', ''], reqLvl: ['Nivel requerido', ''], radius: ['Radio', ''], melee: ['Bots cuerpo a cuerpo', ''], ranged: ['Bots a distancia', ''] };
+  mrPer: ['Res. a la IA por pila', ''], silence: ['Silencio', 's'], stunAfter: ['Stun tras (s)', 's'], drops: ['Rondas de gotas', ''], amp: ['Curvatura', ''], blind: ['Ceguera', 's'], charm: ['Duración de control', 's'], hps: ['Curación por seg', ''], shield: ['Escudo', ''], speedBoost: ['Velocidad extra', '%'], time: ['Duración', 's'], critMult: ['Daño crítico (x)', ''], dashDist: ['Distancia del dash', ''], window: ['Tiempo para usar dashes', 's'], duration: ['Duración', 's'], hpMult: ['Vida (x)', ''], atkMult: ['Ataque (x)', ''], cdSpeed: ['Recarga de poderes (x)', ''], reqLvl: ['Nivel requerido', ''], radius: ['Radio', ''], melee: ['Bots cuerpo a cuerpo', ''], ranged: ['Bots a distancia', ''] };
 const fmt = (k, v) => (FIELD[k][1] === '%' ? `${Math.round(v * 100)}%` : `${v}${FIELD[k][1]}`);
 
 export class Hud extends Phaser.Scene {
@@ -115,7 +115,7 @@ export class Hud extends Phaser.Scene {
     Object.values(this.panels).forEach(p => p.setVisible(false));
     const W = this.scale.width, H = this.scale.height, g = this.g, o = this.top, p = A.pc;
     g.clear(); o.clear(); this.tipG.clear(); this.redG.clear(); this.iconRects = []; this.upRects = []; this.boxes = [];
-    const u = Phaser.Math.Clamp(H / 900, 0.75, 1.5), m = 14 * u;
+    const u = Phaser.Math.Clamp(Math.min(H / 900, W / 1480), 0.42, 1.5), m = 14 * u;
 
     // ---- worm: darkness, only a small circle around the champion stays visible ----
     if (p.alive && p.blindT > 0) {   // darkened map with an irregular, blurred vision area (not a perfect circle, not pitch black)
@@ -351,7 +351,7 @@ export class Hud extends Phaser.Scene {
     sbtn('x', 'X', { x: x0 + pw - pad - 34 * u, y: y0 + pad * 0.5, w: 34 * u, h: 34 * u }, true, () => { this.shopOpen = false; }, 0x5c1d1d);
 
     // tabs
-    const gw = pw * 0.58 - pad, gx = x0 + pad, ty = y0 + 52 * u, SH = { all: 'TODOS', basic: 'BÁSICOS', ad: 'ATAQUE', ap: 'PODER IA', arm: 'ARMADURA', mr: 'RES. IA', hp: 'VIDA', util: 'UTILIDAD', rec: 'RECUP.' };
+    const gw = pw * 0.58 - pad, gx = x0 + pad, ty = y0 + 52 * u, SH = { all: 'TODOS', basic: 'BÁSICOS', ad: 'ATAQUE', ap: 'PODER IA', arm: 'ARMADURA', mr: 'RESIST. IA', hp: 'VIDA', util: 'UTILIDAD', rec: 'RECUP.' };
     const cats = Object.keys(SH), tw = gw / cats.length;
     cats.forEach((c, i) => sbtn('tab' + c, SH[c], { x: gx + i * tw, y: ty, w: tw - 3 * u, h: 28 * u }, true, () => { this.shopCat = c; this.shopScroll = 0; }, this.shopCat === c ? 0x2e6aa8 : 0x10213a, c === 'all' ? '#fff' : CAT_COL[c]));
 
@@ -480,7 +480,7 @@ export class Hud extends Phaser.Scene {
   // base values in white; when items / buffs add (or a debuff takes away) the difference is shown right beside it in green (red)
   statsBlock(id, q, f, mine, cols = 2) {
     const B = f.baseStats(), rows = [['VIDA', B.hp, f.maxHp], [f.isRage ? 'IRA' : 'MANA', f.isRage ? 100 : B.mana, f.isRage ? 100 : f.maxMana], ['ATQ FIS', B.atk, f.atk], ['PODER IA', B.ap, f.ap],
-      ['ARMADURA', B.armor, f.armor], ['RES MAG', B.mr, f.mr], ['VELOCIDAD', B.speed, f.speed], ['RANGO', f.def.stats.range, f.def.stats.range]];
+      ['ARMADURA', B.armor, f.armor], ['RES. IA', B.mr, f.mr], ['VELOCIDAD', B.speed, f.speed], ['RANGO', f.def.stats.range, f.def.stats.range]];
     const lh = cols === 1 ? q.h / 11 : q.h / 6.4, fs = Math.min(lh * 0.62, q.w / (cols === 1 ? 17 : 22)), pad = q.w * 0.04, colW = (q.w - pad * 2) / cols;
     this.T(id + 'h1', mine ? `${f.def.name.toUpperCase()} · ${(CLASSES[f.def.cls]?.label || f.def.name)}` : (CLASSES[f.def.cls]?.label || f.def.name), q.x + pad, q.y + lh * 0.15, { size: fs * 1.05, bold: true, stroke: 2 });
     this.T(id + 'h2', mine ? `NIVEL ${f.level}/${MAX_LEVEL} · XP ${f.level >= MAX_LEVEL ? 'MAX' : `${Math.floor(f.xp)}/${f.xpNeed}`}` : `NIVEL ${f.level}/${MAX_LEVEL} · ${Math.ceil(f.hp)}/${Math.ceil(f.maxHp)} HP`,

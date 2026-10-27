@@ -116,6 +116,16 @@ export class Fighter {
     return true;
   }
 
+  // Xeviche's Setup (passive): every few hits he lands (basic attacks that connect, abilities cast) adds a piece
+  setupHit() {
+    if (this.key !== 'xeviche' || !this.ranks.p3 || !this.alive) return;
+    const a = this.def.abilities.p3, max = rk(a.maxStacks, this.ranks.p3), w = this.w;
+    if (this.setupStacks >= max) { this.setupHits = 0; return; }
+    if ((this.setupHits = (this.setupHits || 0) + 1) < rk(a.interval, this.ranks.p3)) return;
+    this.setupHits = 0; this.setupStacks++;
+    w.audio.playAll('a_xeviche_p3', { at: this, vol: 0.8, gap: 0 }); w.vfx('buff', this.x, this.cy, { scale: 3 }); w.float(this.x, this.y - this.def.height - 40, `Setup x${this.setupStacks}`, '#7ee0ff');
+  }
+
   /* ---------- geometry ---------- */
   hiddenFor(me) { return this.away || ((this.invis || (this.antivirus && this.owner?.invis)) && this.baseTeam !== me.baseTeam); }
   breakInvis() { if (this.invis) { this.invis = null; if (this.key === 'luis') this.stab = 2.5; this.w.float(this.x, this.y - this.def.height - 30, 'visible', '#9be37a'); } }
@@ -173,7 +183,7 @@ export class Fighter {
     this.running = false;
     this.deadT = 0;
     this.in = { mx: 0, my: 0, run: false };
-    this.setupStacks = 0;
+    this.setupStacks = 0; this.setupHits = 0;
     this.cds = { p1: 0, p2: 0, p3: 0, ult: 0, basic: 0 };
     this.ink = null; this.inkDash = null; this.silenceT = 0; this.blindT = 0; this.shieldHp = 0; this.shieldT = 0; this.speedBoost = 0; this.speedT = 0; this.charmT = 0; this.team = this.baseTeam; this.malware = null;
     this.rage = 0; this.hen = false;
@@ -283,7 +293,7 @@ export class Fighter {
   tryCast(k) {
     const n = this.w.net;
     if (n?.role === 'client' && !n.replaying) return n.clientCast(this, k);
-    const ok = this._tryCast(k); if (ok && n?.role === 'host') n.sendCast(this, k); return ok;
+    const ok = this._tryCast(k); if (ok) { this.setupHit(); if (n?.role === 'host') n.sendCast(this, k); } return ok;
   }
   _tryBasic() {
     if (!this.free || this.cds.basic > 0) return false;
@@ -719,10 +729,6 @@ export class Fighter {
     }
     if (this.stab > 0) this.stab -= dt;
     if (this.isRage && !this.hen && this.rage > 0) { this.rageIdle = (this.rageIdle || 0) + dt; if (this.rageIdle > 2) this.rage = Math.max(0, this.rage - dt * 6); }   // no fighting for 2 s: rage drains
-    if (this.key === 'xeviche' && this.ranks.p3) {   // Setup (passive): a new piece every few seconds
-      const a = this.def.abilities.p3, max = rk(a.maxStacks, this.ranks.p3);
-      if (this.setupStacks < max) { this.setupT = (this.setupT || 0) + dt; if (this.setupT >= rk(a.interval, this.ranks.p3)) { this.setupT = 0; this.setupStacks++; w.audio.playAll('a_xeviche_p3', { at: this, vol: 0.8, gap: 0 }); w.vfx('buff', this.x, this.cy, { scale: 3 }); w.float(this.x, this.y - this.def.height - 40, `Setup x${this.setupStacks}`, '#7ee0ff'); } } else this.setupT = 0;
-    }
     if (this.hunted && (this.hunted.t -= dt) <= 0) this.hunted = null;
     if (this.silenceT > 0) this.silenceT -= dt;
     if (this.blindT > 0) this.blindT -= dt;

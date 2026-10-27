@@ -1,0 +1,13 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader', '--mute-audio'], defaultViewport: { width: 1366, height: 768 } });
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const p = await b.newPage(); p.on('pageerror', e => console.log('[pageerror]', e.message));
+await p.goto('http://localhost:5173/', { waitUntil: 'load' }); await sleep(9000);
+const n = 'zz' + Date.now().toString(36).slice(-5);
+await p.click('[data-tab=register]'); await p.type('input[name=name]', n); await p.type('input[name=email]', n + '@t.com'); await p.type('input[name=password]', 'secreto1'); await p.click('button[type=submit]'); await sleep(1500);
+await p.evaluate(`document.querySelector('[data-a=create]').click()`); await sleep(1500);
+await p.evaluate(`document.querySelector('[data-cls=programador]').click()`); await sleep(500);
+console.log('noanim after tab click:', await p.evaluate(`document.querySelector('.scr').classList.contains('noanim')`));
+await sleep(300);
+await p.screenshot({ path: 'D:/mycowork/game/shot_lobby4.png' });
+await b.close();

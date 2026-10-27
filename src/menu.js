@@ -44,7 +44,7 @@ export class Menu extends Phaser.Scene {
     for (let i = 0; i < 40; i++) g.fillStyle(0x3fd0ff, 0.05).fillRect((i * 97) % W, (i * 53) % H, k(60), 2);
     this.add.rectangle(k(12), k(12), k(130), k(28), 0x0f2038).setOrigin(0, 0).setStrokeStyle(2, 0x3fd0ff).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.scene.start('launcher'));
     this.txt(k(77), k(26), '◀ LAUNCHER', k(12), '#7ee0ff', { bold: true, origin: [0.5, 0.5], stroke: 2 });
-    this.txt(W / 2, k(10), 'DEV BRAWL', k(38), '#ffe066', { bold: true, origin: [0.5, 0], stroke: 6 });
+    this.txt(W / 2, k(10), 'SUIKA FIGTHER', k(38), '#ffe066', { bold: true, origin: [0.5, 0], stroke: 6 });
 
     const cardW = k(84), cardH = k(104), gap = k(10), rowW = LIST.length * cardW + (LIST.length - 1) * gap;
     const wide = W > k(1180), rx = wide ? k(40) : (W - rowW) / 2;
@@ -125,7 +125,7 @@ export class Menu extends Phaser.Scene {
       g.fillStyle(0x070b14, 0.92).fillRect(ix, iy, iw, ih).lineStyle(2, 0x3fd0ff, 0.9).strokeRect(ix, iy, iw, ih);
       this.txt(ix + k(18), iy + k(10), d.name.toUpperCase(), k(26), '#ffe066', { bold: true });
       this.txt(ix + k(18), iy + k(44), `${CLASSES[d.cls]?.label || ''} — ${CLASSES[d.cls]?.desc || ''}`, k(11), '#8aa0c8', { wrap: iw - k(36) });
-      const st = d.stats, line = `Vida ${st.hp}  ·  ${d.rage ? 'Ira' : 'Maná ' + st.mana}  ·  Ataque ${st.atk}  ·  Poder IA ${st.ap}\nArmadura ${st.armor}  ·  Res. mágica ${st.mr}  ·  Velocidad ${st.speed}  ·  Alcance ${st.range}`;
+      const st = d.stats, line = `Vida ${st.hp}  ·  ${d.rage ? 'Ira' : 'Maná ' + st.mana}  ·  Ataque ${st.atk}  ·  Poder IA ${st.ap}\nArmadura ${st.armor}  ·  Res. a la IA ${st.mr}  ·  Velocidad ${st.speed}  ·  Alcance ${st.range}`;
       this.txt(ix + k(18), iy + k(82), line, k(11), '#cfe3ff', { ls: 4, wrap: iw - k(36) });
       // abilities: only the icons (bottom of the box); the description shows while hovering an icon
       const isz = k(64), iyy = iy + ih - isz - k(18);

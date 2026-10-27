@@ -17,7 +17,12 @@
       "Mapa: se corrigieron las colisiones invisibles junto a los caminos; ahora se puede caminar por todo el terreno que se ve como camino.",
       "Corregido: al salir al menú y volver a entrar, la partida no empezaba; ahora se puede jugar varias partidas seguidas.",
       "El volumen de música, efectos y voz del anunciador ahora se controla con barras (launcher y menú de pausa), con porcentaje visible.",
-      "Pantalla de carga al abrir el juego: muestra el progreso mientras se descargan campeones, objetos y sonidos, y desaparece al llegar al launcher."
+      "Pantalla de carga al abrir el juego: muestra el progreso mientras se descargan campeones, objetos y sonidos, y desaparece al llegar al launcher.",
+      "El juego ahora se llama SUIKA FIGTHER.",
+      "La pasiva Setup de Xeviche ya no depende del tiempo: gana una pieza cada 4/3/2 golpes (según su rango) que da con ataques básicos o habilidades.",
+      "La resistencia mágica pasa a llamarse resistencia a la IA en las estadísticas y en los objetos (categoría «Resistencia a la IA»).",
+      "La pantalla de práctica y entrenamiento ahora tiene el mismo diseño que la selección de campeones del launcher (pestañas por tipo, habilidades con tooltip, equipos).",
+      "El launcher usa los mismos sonidos de interfaz que tenía el menú de entrenamiento."
     ]
   },
   {

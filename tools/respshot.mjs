@@ -1,0 +1,15 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader', '--mute-audio'], defaultViewport: { width: 1366, height: 768 } });
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const p = await b.newPage(); p.on('pageerror', e => console.log('[pageerror]', e.message));
+await p.goto('http://localhost:5173/', { waitUntil: 'load' }); await sleep(11000);
+const n = 'rs' + Date.now().toString(36).slice(-5);
+await p.click('[data-tab=register]'); await p.type('input[name=name]', n); await p.type('input[name=email]', n + '@t.com'); await p.type('input[name=password]', 'secreto1'); await p.click('button[type=submit]'); await sleep(1500);
+const W = (process.argv[2] || '1920,1024,768,420').split(',').map(Number);
+const shot = async (name, w, h) => { await p.setViewport({ width: w, height: h }); await sleep(500); const ov = await p.evaluate(`(() => { const s = document.documentElement; return { sw: s.scrollWidth, cw: s.clientWidth, over: [...document.querySelectorAll('#ui *')].filter(e => e.getBoundingClientRect().right > innerWidth + 2 && getComputedStyle(e).position !== 'fixed').length }; })()`); console.log(name, w, JSON.stringify(ov)); await p.screenshot({ path: `D:/mycowork/game/shot_r_${name}_${w}.png` }); };
+for (const w of W) await shot('home', w, Math.round(w * 0.56));
+await p.setViewport({ width: 1366, height: 768 }); await p.evaluate(`document.querySelector('[data-a=create]').click()`); await sleep(1500);
+for (const w of W) await shot('lobby', w, Math.round(w * 0.56));
+await p.setViewport({ width: 1366, height: 768 }); await p.evaluate(`document.querySelector('[data-a=leave]').click()`); await sleep(600); await p.evaluate(`document.querySelector('[data-a=practice]').click()`); await sleep(800);
+for (const w of W) await shot('prac', w, Math.round(w * 0.56));
+await b.close();
