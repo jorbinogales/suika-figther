@@ -573,7 +573,8 @@ export class Fighter {
       }
       case 'xeviche:p1': {
         const dmg = rk(a.dmg, rank) + this.atk * a.atkScale, stun = rk(a.stun, rank);
-        w.projectile(this, { speed: a.speed, dmg, type: 'physical', vfx: 'rock_throw', scale: 4.5, tint: 0xff3b30, spin: true, r: 26,
+        // throw the actual LEGO brick (the ability icon art) spinning, not a red-tinted rock
+        w.projectile(this, { speed: a.speed, dmg, type: 'physical', obj: 'icon_xeviche_p1', scale: 1.1, spin: true, r: 26,
           onHit: t => t.stun(stun) });
         break;
       }
@@ -897,17 +898,18 @@ export class Fighter {
       // Animated units used to render at the raw x/y with no weight at all, which is why they felt like gliding cutouts.
       const tt = time / 1000, ph = this.nid * 1.37;   // per-unit phase so a crowd doesn't bob in sync
       const jm = JUICE_MUL[this.key] || 1;   // per-champion motion strength
+      const wj = 1 + (jm - 1) * 0.3;   // locomotion stays gentler: the walk/run frames already sway, a strong layer on top reads as wobbling
       let oy = 0, rot = 0, sx = this.baseScale, sy = this.baseScale, ox = 0;
       if (this.alive) {
         if (this.state === 'idle') { const b = Math.sin(tt * 2.6 + ph); sy *= 1 + b * 0.015 * jm; sx *= 1 - b * 0.007 * jm; oy = -Math.abs(b) * 1.4 * jm; rot = Math.sin(tt * 1.3 + ph) * 0.012 * jm; }   // breathing + sway (carries champions whose idle frames barely change)
-        else if (this.state === 'walk') { oy = -Math.abs(Math.sin(tt * 10 + ph)) * 3.2 * jm; rot = Math.sin(tt * 10 + ph) * 0.018 * jm; }
-        else if (this.state === 'run') { oy = -Math.abs(Math.sin(tt * 13.5 + ph)) * 4.5 * jm; rot = 0.055 * this.facing * Math.min(jm, 1.6) + Math.sin(tt * 13.5 + ph) * 0.015 * jm; }
+        else if (this.state === 'walk') { oy = -Math.abs(Math.sin(tt * 10.5 + ph)) * 3.2 * wj; }
+        else if (this.state === 'run') { oy = -Math.abs(Math.sin(tt * 14.7 + ph)) * 4.5 * wj; rot = 0.055 * this.facing; }
         else if (this.state === 'stun') { rot = Math.sin(tt * 26) * 0.05 * Math.min(jm, 1.8); }
         else if (this.state === 'cast' && this.stateDur > 0) {
           const p = Math.min(1, Math.max(0, this.stateT / this.stateDur)), s = Math.sin(p * Math.PI);
           if (this.anim === 'attack' || this.anim === 'attack2' || this.anim === 'attack3') ox = s * 13 * Math.min(jm, 2) * this.facing;   // lunge into the hit
           else if (this.anim === 'dash') rot = 0.12 * this.facing;
-          else if (this.anim === 'run') { oy = -Math.abs(Math.sin(tt * 13.5 + ph)) * 4.5 * jm; rot = 0.055 * this.facing; }   // bike form keeps its run motion
+          else if (this.anim === 'run') { oy = -Math.abs(Math.sin(tt * 14.7 + ph)) * 4.5 * wj; rot = 0.055 * this.facing; }   // bike form keeps its run motion
           else { sy *= 1 - s * 0.05 * jm; sx *= 1 + s * 0.04 * jm; oy = -s * 7 * jm; }   // power wind-up squash
         }
         if (this.hitT > 0) {   // impact squash when hit (flash() arms hitT)
