@@ -1,0 +1,10 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--enable-unsafe-swiftshader', '--use-gl=angle', '--mute-audio'], defaultViewport: { width: 1280, height: 720 } });
+const p = await b.newPage(); p.on('pageerror', e => console.log('[pageerror]', e.message)); p.on('response', r => { if (r.status() >= 400 && !/favicon/.test(r.url())) console.log('[http]', r.status(), r.url()); });
+await p.goto('http://localhost:3055/', { waitUntil: 'load' }); await new Promise(r => setTimeout(r, 12000));
+console.log(await p.evaluate(`JSON.stringify({ launcher: !!document.querySelector('#ui'), overlay: !!document.querySelector('#loading') })`));
+const n = 'pd' + Date.now().toString(36).slice(-5);
+await p.click('[data-tab=register]'); await p.type('input[name=name]', n); await p.type('input[name=email]', n + '@t.com'); await p.type('input[name=password]', 'secreto1'); await p.click('button[type=submit]'); await new Promise(r => setTimeout(r, 1500));
+await p.evaluate(`document.querySelector('[data-a=create]').click()`); await new Promise(r => setTimeout(r, 1500));
+console.log('room code via websocket:', await p.$eval('.code', e => e.textContent).catch(() => 'FAILED'));
+await b.close();

@@ -8,7 +8,8 @@
     "server": "node server/index.js",
     "test:server": "node server/test.mjs",
     "build": "vite build",
-    "sprites": "python tools/process_sprites.py"
+    "sprites": "python tools/process_sprites.py",
+    "start": "node server/index.js"
   },
   "keywords": [],
   "author": "",

@@ -40,6 +40,7 @@ const userFromToken = (t) => {
 
 // ---------- REST ----------
 const app = express();
+app.set('trust proxy', 1);   // behind Caddy / nginx: req.ip is the real client (rate limit)
 app.use(express.json({ limit: '10kb' }));
 
 // ponytail: in-memory per-IP counter; use a shared store if the server is ever clustered.
@@ -91,6 +92,12 @@ app.get('/api/news', (req, res) => {
 });
 
 app.use('/api', (req, res) => res.status(404).json({ error: 'No encontrado' }));
+// production: the same process serves the built game (npm run build -> dist/); in development Vite does it
+const DIST = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../dist');
+if (fs.existsSync(path.join(DIST, 'index.html'))) {
+  app.use('/assets', express.static(path.join(DIST, 'assets'), { maxAge: '7d' }));
+  app.use(express.static(DIST, { maxAge: '5m' }));
+}
 app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ error: err.type === 'entity.parse.failed' ? 'JSON no válido' : 'Error del servidor' });
 });

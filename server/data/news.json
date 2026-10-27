@@ -22,7 +22,9 @@
       "La pasiva Setup de Xeviche ya no depende del tiempo: gana una pieza cada 4/3/2 golpes (según su rango) que da con ataques básicos o habilidades.",
       "La resistencia mágica pasa a llamarse resistencia a la IA en las estadísticas y en los objetos (categoría «Resistencia a la IA»).",
       "La pantalla de práctica y entrenamiento ahora tiene el mismo diseño que la selección de campeones del launcher (pestañas por tipo, habilidades con tooltip, equipos).",
-      "El launcher usa los mismos sonidos de interfaz que tenía el menú de entrenamiento."
+      "El launcher usa los mismos sonidos de interfaz que tenía el menú de entrenamiento.",
+      "El juego muestra un aviso cuando se abre desde un dispositivo móvil: no está disponible para móviles.",
+      "La interfaz del launcher se adapta al ancho de la pantalla."
     ]
   },
   {

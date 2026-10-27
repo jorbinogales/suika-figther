@@ -6,4 +6,16 @@
 #loading .logo{font:900 clamp(30px,5vw,60px) 'Orbitron','Rajdhani',sans-serif;letter-spacing:.18em;color:#fff;text-shadow:0 0 18px #3fd0ff}#loading .logo b{color:#ffd23f;text-shadow:0 0 18px #ffd23f}
 #loading .bar{width:min(640px,80vw);height:16px;border:1px solid #3fd0ff;padding:2px;background:rgba(2,8,18,.9)}#loading .bar i{display:block;height:100%;width:2%;background:linear-gradient(90deg,#3fd0ff,#5dff9a);box-shadow:0 0 14px #3fd0ff;transition:width .3s}
 #loading .st{letter-spacing:.2em;font-size:15px;color:#7ee0ff}#loading .tip{color:#7a8db3;font-size:15px}</style>
-</head><body><div id="loading"><div class="logo">SUIKA <b>FIGTHER</b></div><div class="bar"><i></i></div><div class="st">CARGANDO...</div><div class="tip">Preparando campeones, mapa, objetos y sonidos</div></div><script type="module" src="/src/main.js"></script></body></html>
+</head><body><div id="loading"><div class="logo">SUIKA <b>FIGTHER</b></div><div class="bar"><i></i></div><div class="st">CARGANDO...</div><div class="tip">Preparando campeones, mapa, objetos y sonidos</div></div><script>
+// The game needs keyboard + mouse: phones and tablets only get a notice (main.js does not start the game).
+(function () {
+  var ua = navigator.userAgent || '', touch = navigator.maxTouchPoints > 1;
+  var mobile = /Android|iPhone|iPad|iPod|Mobile|Opera Mini|IEMobile|BlackBerry|webOS/i.test(ua) || (touch && /Macintosh/.test(ua)) ||
+    (window.matchMedia && matchMedia('(pointer: coarse)').matches && !matchMedia('(hover: hover)').matches);
+  if (mobile) {
+    var l = document.getElementById('loading');
+    l.innerHTML = '<div class="logo">SUIKA <b>FIGTHER</b></div><div class="st" style="font-size:18px;letter-spacing:.12em;color:#ffd23f;text-align:center;padding:0 24px">NO DISPONIBLE PARA DISPOSITIVOS MÓVILES</div><div class="tip" style="max-width:420px;text-align:center;padding:0 24px;line-height:1.5">Este juego solo está disponible para computadoras (PC o laptop) con teclado y ratón. Abre esta página desde un equipo de escritorio para jugar.</div>';
+    window.__mobileBlocked = true;
+  }
+})();
+</script><script type="module" src="/src/main.js"></script></body></html>
