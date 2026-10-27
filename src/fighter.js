@@ -384,7 +384,7 @@ export class Fighter {
         for (let i = 0; i < n; i++) {
           const ang = n > 1 ? (i / (n - 1) - 0.5) * a.spread : 0;
           w.projectile(this, {
-            ang, speed: a.speed, dmg, type: 'magic', vfx: 'poison_dart', scale: 4, tint: 0xb0ff60, r: 18,
+            ang, speed: a.speed, dmg, type: 'magic', obj: 'contract', spin: true, scale: 0.13, r: 18,
             onHit: t => { t.poison(total / a.poisonTime, a.poisonTime, this); },
             onImpact: (x, y) => w.infectZone(this, x, y, rad, life, total, a.poisonTime),
           });
