@@ -1,0 +1,11 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader', '--mute-audio'], defaultViewport: { width: 1280, height: 720 } });
+const p = await b.newPage(); p.on('pageerror', e => console.log('[pageerror]', e.message));
+await p.goto('http://localhost:5173/#mode=5&keep=1', { waitUntil: 'load' }); await new Promise(r => setTimeout(r, 14000));
+await p.evaluate(`(() => { const a = window.__arena; a.handleInput = () => {}; a.player.ai = true; a.audio.play = () => {}; a.audio.playAll = () => {}; a.audio.voice = () => {};
+  const g = a.game, r = g.renderer, o = r.render.bind(r); window.__t = { render: 0, n: 0, upd: 0 }; r.render = function (...x) { const t = performance.now(); o(...x); window.__t.render += performance.now() - t; window.__t.n++; };
+  const ou = a.update.bind(a); a.update = function (...x) { const t = performance.now(); ou(...x); window.__t.upd += performance.now() - t; }; })()`);
+await new Promise(r => setTimeout(r, 30000));
+await p.evaluate(`window.__t = { render: 0, n: 0, upd: 0 }`); await new Promise(r => setTimeout(r, 8000));
+console.log(await p.evaluate(`(() => { const t = window.__t, a = window.__arena; return JSON.stringify({ frames: t.n, renderMsPerFrame: +(t.render / t.n).toFixed(2), updateMsPerFrame: +(t.upd / t.n).toFixed(2), displayObjects: a.children.list.length, fighters: a.fighters.length }); })()`));
+await b.close();

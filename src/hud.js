@@ -43,7 +43,7 @@ function sweep(cx, cy, half, frac) {
 }
 
 // tooltip table: ability field -> [label, unit]. Only array fields (one value per rank) are listed.
-const FIELD = { shieldFlat: ['Escudo fijo', ''], shieldPct: ['Escudo (% vida máx.)', '%'], shieldArmor: ['Escudo (x armadura)', ''], effectTime: ['Duración de mejoras', 's'], effectPower: ['Potencia de mejoras', '%'], packages: ['Cajas', ''], interval: ['Golpes por pieza', ''], robots: ['Robots', ''], maxInvis: ['Invisibilidad máx.', 's'], control: ['Control', 's'], cd: ['Enfriamiento', 's'], mana: ['Maná', ''], dmg: ['Daño', ''], stun: ['Stun', 's'], slow: ['Ralentiza', '%'], poisonApScale: ['Veneno (xPoder IA)', ''],
+const FIELD = { count: ['Contratos', ''], areaRadius: ['Radio del área', ''], areaLife: ['Duración del área', 's'], buffTime: ['Duración de efectos', 's'], pull: ['Atracción', ''], shieldFlat: ['Escudo fijo', ''], shieldPct: ['Escudo (% vida máx.)', '%'], shieldArmor: ['Escudo (x armadura)', ''], effectTime: ['Duración de mejoras', 's'], effectPower: ['Potencia de mejoras', '%'], packages: ['Cajas', ''], interval: ['Golpes por pieza', ''], robots: ['Robots', ''], maxInvis: ['Invisibilidad máx.', 's'], control: ['Control', 's'], cd: ['Enfriamiento', 's'], mana: ['Maná', ''], dmg: ['Daño', ''], stun: ['Stun', 's'], slow: ['Ralentiza', '%'], poisonApScale: ['Veneno (xPoder IA)', ''],
   life: ['Duración', 's'], heal: ['Curación', ''], healHpPct: ['Curación extra (% vida)', '%'], maxStacks: ['Pilas máximas', ''], armorPer: ['Armadura por pila', ''],
   mrPer: ['Res. a la IA por pila', ''], silence: ['Silencio', 's'], stunAfter: ['Stun tras (s)', 's'], drops: ['Rondas de gotas', ''], amp: ['Curvatura', ''], blind: ['Ceguera', 's'], charm: ['Duración de control', 's'], hps: ['Curación por seg', ''], shield: ['Escudo', ''], speedBoost: ['Velocidad extra', '%'], time: ['Duración', 's'], critMult: ['Daño crítico (x)', ''], dashDist: ['Distancia del dash', ''], window: ['Tiempo para usar dashes', 's'], duration: ['Duración', 's'], hpMult: ['Vida (x)', ''], atkMult: ['Ataque (x)', ''], cdSpeed: ['Recarga de poderes (x)', ''], reqLvl: ['Nivel requerido', ''], radius: ['Radio', ''], melee: ['Bots cuerpo a cuerpo', ''], ranged: ['Bots a distancia', ''] };
 const fmt = (k, v) => (FIELD[k][1] === '%' ? `${Math.round(v * 100)}%` : `${v}${FIELD[k][1]}`);
@@ -55,7 +55,7 @@ export class Hud extends Phaser.Scene {
     this.g = this.add.graphics().setDepth(1);        // dark fills behind the art + bars/minimap
     this.top = this.add.graphics().setDepth(3);      // overlays above icons (cooldown sweep, highlights)
     // the scene object survives restarts but its display objects do not: forget every pooled object / texture of the previous match
-    this.stImgs = {}; this.itImgs = {}; this.bnImgs = {}; this.blindImg = null; this.blindTex = null; this.blindWas = false; if (this.textures.exists('blindmask')) this.textures.remove('blindmask');
+    this.fogImg = null; this.stImgs = {}; this.itImgs = {}; this.bnImgs = {}; this.blindImg = null; this.blindTex = null; this.blindWas = false; if (this.textures.exists('blindmask')) this.textures.remove('blindmask');
     this.txt = {}; this.icons = []; this.pimg = {}; this.panels = {}; this.iconRects = []; this.upRects = []; this.helpRect = null;
     this.tipG = this.add.graphics().setDepth(6);
     this.redG = this.add.graphics().setDepth(0.5);   // red screen tint while dead
@@ -138,7 +138,8 @@ export class Hud extends Phaser.Scene {
     }
     this.blindWas = p.alive && p.blindT > 0; if (!this.blindWas) this.blindImg?.setVisible(false);
     if (p.alive && p.silenceT > 0) this.T('silT', `SILENCIADO ${p.silenceT.toFixed(1)}s`, W / 2, 64 * u, { size: 16 * u, bold: true, color: '#c77dff', origin: [0.5, 0], stroke: 4 });
-    if (p.alive && p.charmT > 0) this.T('charmT', `CONTROLADO ${p.charmT.toFixed(1)}s`, W / 2, 90 * u, { size: 18 * u, bold: true, color: '#ffd23f', origin: [0.5, 0], stroke: 4 });
+    const ctT = p.charmT > 0 ? p.charmT : (A.control?.mode === 'remote' && A.control.target === p ? A.control.t : 0);
+    if (p.alive && ctT > 0) this.T('charmT', `CONTROLADO ${ctT.toFixed(1)}s`, W / 2, 90 * u, { size: 18 * u, bold: true, color: '#ffd23f', origin: [0.5, 0], stroke: 4 });
 
     if (A.control && A.control.mode === 'ctrl') this.T('ctrlT', `CONTROLANDO a ${A.control.target.def.name.toUpperCase()} · ${A.control.t.toFixed(1)}s`, W / 2, 90 * u, { size: 18 * u, bold: true, color: '#33ff88', origin: [0.5, 0], stroke: 4 });
 
@@ -601,12 +602,13 @@ export class Hud extends Phaser.Scene {
 
   drawMinimap(A, g, o, q) {
     const fx = q.w / WORLD_W, fy = q.h / WORLD_H;     // stretched to fill the hole
-    g.fillStyle(0x5d7a2e).fillRect(q.x, q.y, q.w, q.h);
-    const dirt = 0xb98a5c;
+    g.fillStyle(0x7d8226).fillRect(q.x, q.y, q.w, q.h);
+    const dirt = 0x8c6a2c;
     for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) if (walk[j * GW + i]) g.fillStyle(dirt).fillRect(q.x + i * CELL * fx, q.y + j * CELL * fy, CELL * fx + 0.6, CELL * fy + 0.6);
     CAMPS.forEach(([cx, cy]) => g.fillStyle(0x8a6238).fillCircle(q.x + cx * fx, q.y + cy * fy, 4));
     g.fillStyle(0x3b82f6, 0.45).fillRect(q.x, q.y + 600 * fy, 340 * fx, 312 * fy);
     g.fillStyle(0xef4444, 0.45).fillRect(q.x + q.w - 340 * fx, q.y + 600 * fy, 340 * fx, 312 * fy);
+    if (A.fog) { if (!this.fogImg || !this.fogImg.scene) this.fogImg = this.add.image(0, 0, 'fogmask').setOrigin(0, 0).setDepth(1.6); this.fogImg.setPosition(q.x, q.y).setDisplaySize(q.w, q.h).setVisible(true); } else this.fogImg?.setVisible(false);
     A.fighters.forEach(ft => {
       if ((!ft.alive && !ft.isNexus) || ft.hiddenFor(A.player)) return;
       const me = A.player, cx = q.x + ft.x * fx, cy = q.y + ft.y * fy;

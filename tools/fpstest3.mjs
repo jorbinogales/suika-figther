@@ -1,0 +1,13 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader', '--mute-audio'], defaultViewport: { width: 1280, height: 720 } });
+const p = await b.newPage(); p.on('pageerror', e => console.log('[pageerror]', e.message));
+await p.goto('http://localhost:5173/#mode=5&keep=1', { waitUntil: 'load' }); await new Promise(r => setTimeout(r, 14000));
+await p.evaluate(`(() => { const a = window.__arena; a.handleInput = () => {}; a.player.ai = true; a.audio.play = () => {}; a.audio.playAll = () => {}; a.audio.voice = () => {}; })()`);
+await new Promise(r => setTimeout(r, 25000));
+const fps = () => p.evaluate(`new Promise(res => { let n = 0, t0 = performance.now(); const f = () => { n++; if (performance.now() - t0 > 6000) res(Math.round(n / ((performance.now() - t0) / 1000) * 10) / 10); else requestAnimationFrame(f); }; requestAnimationFrame(f); })`);
+console.log('baseline', await fps());
+await p.evaluate(`window.__arena.scene.get('hud').scene.setVisible(false)`); console.log('hud hidden', await fps());
+await p.evaluate(`window.__arena.scene.get('hud').scene.setVisible(true); window.__arena.drawBars = () => { window.__arena.gfx?.clear(); }`); console.log('no overhead bars', await fps());
+await p.evaluate(`(() => { window.__arena.scene.get('hud').scene.setVisible(false); const a = window.__arena; a.fighters.forEach(f => { f.shadow.setVisible(false); f.ring?.setVisible(false); f.bt && Object.values(f.bt).forEach(t => t.setVisible(false)); }); })()`); console.log('hud+bars+rings+shadows hidden', await fps());
+await p.evaluate(`(() => { const a = window.__arena; a.children.list.filter(o => o.type === 'Image' || o.type === 'Sprite').forEach(o => { if (!a.fighters.some(f => f.spr === o)) o.setVisible(false); }); })()`); console.log('+ map decor hidden', await fps());
+await b.close();

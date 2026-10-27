@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { ABILITY_KEYS, MAX_RANK, aimSpec, rk } from './data.js';
 import { Fighter, UNIT_DEFS, BODY_R, WORLD_W, WORLD_H, LANE_Y0, LANE_Y1, WALK_Y0, WALK_Y1, dist } from './fighter.js';
-import { walk, GW, GH, CELL, cellWalk, MID, CAMP_SITES } from './mapdata.js';
+import { walk, GW, GH, CELL, cellWalk, walkField, MID, CAMP_SITES } from './mapdata.js';
 import { Audio } from './audio.js';
 import { runChampAi } from './ai.js';
 import { bootScreen } from './bootscreen.js';
@@ -26,6 +26,7 @@ const CROPS = {
 const TREES_BIG = ['tree1', 'tree2', 'tree3'], BUSHES = ['bushA', 'bushB', 'bushC', 'bushD', 'bushE'];
 const ROCKS = ['rockA', 'rockB', 'rockC', 'rockD', 'rockE', 'rockF'];
 const MAP_SCALE = 2;
+const FOREST = ['wall1', 'wall2', 'wall3', 'tree1', 'tree2', 'tree3', 'tree4', 'bush1', 'bush2', 'trunk1', 'stone1', 'stone2', 'stone3', 'stone4', 'flower1', 'flower2', 'flower3', 'mush1', 'mush2', 'mush3', 'mush4', 'mush5', 'mush6'];
 const CHAMP_ORDER = ['leandro', 'xeviche', 'jorbi', 'axel', 'julio', 'luis', 'eliud', 'hector'];   // TAB cycles through these
 
 // circular XP gauge around the level number: gold arc from 12 o'clock, full ring = level up
@@ -65,6 +66,8 @@ export class Boot extends Phaser.Scene {
     this.load.spritesheet('ground', 'assets/map/ground.png', { frameWidth: 32, frameHeight: 32 });
     this.load.spritesheet('details', 'assets/map/details.png', { frameWidth: 32, frameHeight: 32 });
     ['trees', 'bushes', 'rocks'].forEach(n => this.load.image(n, `assets/map/${n}.png`));
+    this.load.image('f_trail', 'assets/map/forest/trail.png'); this.load.image('f_gt', 'assets/map/forest/gtrans.png');   // path + grass transition tiles (Brendon Bancer)
+    FOREST.forEach(n => this.load.image('f_' + n, `assets/map/forest/${n}.png`));   // forest props by Brendon Bancer (itch.io/brendon-bancer)
     VFX.forEach(n => this.load.spritesheet('vfx_' + n, `assets/vfx/${n}.png`, { frameWidth: 32, frameHeight: 32 }));
     this.load.on('loaderror', f => { if (!/^(manifest|uilayout)/.test(f.key)) console.warn('missing', f.src); });
   }
@@ -124,7 +127,7 @@ export class Arena extends Phaser.Scene {
   hasAnims(key) { const a = this.sprites[key]; return !!a && !!(a.idle || a.walk); }
 
   create() {
-    this.time.paused = false; this.tweens.resumeAll(); this.anims.resumeAll();
+    this.time.paused = false; this.tweens.resumeAll(); this.anims.resumeAll(); this.floatN = 0;
     this.fighters = []; this.projs = []; this.obstacles = []; this.audio = new Audio(this); this.audio.music('music_game'); this.events.once('shutdown', () => { this.audio.stopMusic(); this.audio.clearVoice(); }); this.timers = []; this.zones = []; this.castCtx = null; this.mortars = []; this.chains = []; this.eggs = []; this.spears = []; this.packages = []; this.grenades = []; this.towerRings = new Map(); this.control = null; this.ctrl = null; this.aimObjs = {}; this.rangeObjs = {}; this.gfx = null;
     this.rangeG = this.add.graphics();
     this.buildPlaceholderTextures();
@@ -178,10 +181,48 @@ export class Arena extends Phaser.Scene {
     this.input.on('pointermove', () => (this.mouseSeen = true));
     this.input.mouse?.disableContextMenu();
     this.buildKeys();
+    this.setupFog();
     this.setupNet();
     this.debugScenario();
     if (!this.scene.isActive('hud')) this.scene.launch('hud');
     this.game.events.emit('arena-ready');   // the launcher's loading screen waits for this
+  }
+
+  /* ---------- fog of war ----------
+     Enemy units are only shown while one of your units sees them (sight radius per unit type). The whole map is known (dimmed outside your sight).
+     A 128x60 canvas (25 world units per texel, smoothly scaled) is the overlay; the same texture dims the minimap. Off in the training zone (and with #nofog). */
+  setupFog() {
+    this.fogOn = !this.training && !new URLSearchParams(location.hash.slice(1)).has('nofog'); this.fog = null;
+    if (!this.fogOn) return;
+    const FW = 256, FH = 120;   // 12.5 world units per texel
+    if (this.textures.exists('fogmask')) this.textures.remove('fogmask');
+    const tex = this.textures.createCanvas('fogmask', FW, FH); tex.setFilter(Phaser.Textures.FilterMode.LINEAR);
+    this.fog = { FW, FH, cw: WORLD_W / FW, ch: WORLD_H / FH, explored: new Uint8Array(FW * FH).fill(1), tex, t: 0, img: this.add.image(0, 0, 'fogmask').setOrigin(0, 0).setDisplaySize(WORLD_W, WORLD_H).setDepth(90000) };
+    this.updateFog(1, true);
+  }
+  sightOf(f) { return f.isNexus ? 900 : f.isTower ? 850 : f.isChamp ? 820 : f.isBot ? 520 : 560; }
+  updateFog(dt, force) {
+    const F = this.fog; if (!F) return;
+    if ((F.t -= dt) > 0 && !force) return; F.t = 0.06;
+    const team = this.pc.team, src = this.fighters.filter(f => f.alive && !f.away && f.team === team), { FW, FH, cw, ch, explored } = F;
+    // explore the ground around every unit of ours
+    for (const s of src) {
+      const r = this.sightOf(s) * 0.92, i0 = Math.max(0, Math.floor((s.x - r) / cw)), i1 = Math.min(FW - 1, Math.floor((s.x + r) / cw)), j0 = Math.max(0, Math.floor((s.y - r) / ch)), j1 = Math.min(FH - 1, Math.floor((s.y + r) / ch));
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) if (Math.hypot((i + 0.5) * cw - s.x, (j + 0.5) * ch - s.y) <= r) explored[j * FW + i] = 1;
+    }
+    // who do we see? enemy units inside any sight circle; enemy structures once their ground has been explored
+    for (const f of this.fighters) {
+      if (f.team === team) { f.fogHidden = false; continue; }
+      if (f.isTower) { f.fogHidden = !explored[Math.min(FH - 1, Math.floor(f.y / ch)) * FW + Math.min(FW - 1, Math.floor(f.x / cw))]; continue; }
+      f.fogHidden = !src.some(s => Math.hypot(s.x - f.x, s.y - f.y) <= this.sightOf(s));
+    }
+    if (this.selected?.fogHidden) this.selected = null;
+    // paint the overlay: dark where unexplored, dimmed where explored, clear inside the sight circles
+    const ctx = F.tex.getContext(), id = ctx.createImageData(FW, FH), d = id.data;
+    for (let i = 0; i < FW * FH; i++) { d[i * 4] = 3; d[i * 4 + 1] = 6; d[i * 4 + 2] = 14; d[i * 4 + 3] = explored[i] ? 118 : 242; }
+    ctx.globalCompositeOperation = 'source-over'; ctx.putImageData(id, 0, 0); ctx.globalCompositeOperation = 'destination-out';
+    for (const s of src) { const x = s.x / cw, y = s.y / ch, r = this.sightOf(s) / cw, g = ctx.createRadialGradient(x, y, r * 0.7, x, y, r); g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.2832); ctx.fill(); }
+    ctx.globalCompositeOperation = 'source-over'; F.tex.refresh();
   }
 
   // ---- online matches (see netgame.js) ----
@@ -249,59 +290,77 @@ export class Arena extends Phaser.Scene {
     mk('bot_ranged', 16, 16, g => { g.fillStyle(0x223333).fillRect(3, 0, 10, 7).fillRect(2, 8, 12, 6); });
   }
 
+  /* ---------- ground: the forest pack's path + grass tiles ----------
+     16px tiles at half resolution (each tile = 32 world units). Grass is the pack's flat olive with speckles and darker grass patches; the path is its
+     dirt tile, and every grass tile touching the path gets the matching fringe tile (edge / corner pieces of trail.png). The path follows the walkability map. */
+  bakeGround() {
+    const K = 2, T = 16, TW = WORLD_W / K, TH = WORLD_H / K, cols = Math.ceil(TW / T), rows = Math.ceil(TH / T);
+    const trail = this.textures.get('f_trail').getSourceImage(), gt = this.textures.get('f_gt').getSourceImage(), R2 = rng(4242);
+    if (this.textures.exists('ground_baked')) this.textures.remove('ground_baked');
+    const tex = this.textures.createCanvas('ground_baked', cols * T, rows * T), ctx = tex.getContext();
+    const dm = new Uint8Array(cols * rows);
+    for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) dm[j * cols + i] = walkField((i + 0.5) * T * K, (j + 0.5) * T * K) >= 0.5 ? 1 : 0;
+    const D = (i, j) => (i < 0 || j < 0 || i >= cols || j >= rows ? 0 : dm[j * cols + i]);
+    for (let pass = 0; pass < 2; pass++) for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {   // close 1-tile gaps / notches so every fringe tile has a matching piece
+      if (D(i, j)) continue; const n = D(i, j - 1), so = D(i, j + 1), w = D(i - 1, j), e = D(i + 1, j);
+      if (n + so + w + e >= 3 || (n && so) || (w && e)) dm[j * cols + i] = 1;
+    }
+    ctx.fillStyle = 'rgb(150,148,32)'; ctx.fillRect(0, 0, cols * T, rows * T);
+    const specks = (pal, n, test) => { for (let k = 0; k < n; k++) { const x = R2() * cols * T | 0, y = R2() * rows * T | 0; if (!test(Math.floor(x / T), Math.floor(y / T))) continue; ctx.fillStyle = pal[R2() * pal.length | 0]; ctx.fillRect(x, y, R2() < 0.4 ? 2 : 1, 1); } };
+    specks(['rgb(136,138,30)', 'rgb(162,158,38)', 'rgb(124,128,34)', 'rgb(168,166,44)'], 9000, (i, j) => !D(i, j));
+    // darker grass patches (grass transition tiles) for tonal variety
+    const patches = [[0, 0, 48, 48], [48, 16, 32, 32], [80, 0, 48, 32]];
+    ctx.globalAlpha = 0.55;
+    for (let k = 0; k < 170; k++) { const pa = patches[R2() * patches.length | 0], x = (R2() * cols * T) | 0, y = (R2() * rows * T) | 0; if (D(Math.floor(x / T), Math.floor(y / T)) || D(Math.floor((x + pa[2]) / T), Math.floor((y + pa[3]) / T))) continue; ctx.drawImage(gt, pa[0], pa[1], pa[2], pa[3], x, y, pa[2], pa[3]); }
+    ctx.globalAlpha = 1;
+    const put = (tx, ty, i, j) => ctx.drawImage(trail, tx * T, ty * T, T, T, i * T, j * T, T, T);
+    for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+      if (D(i, j)) { put(1, 4, i, j); continue; }
+      const n = D(i, j - 1), so = D(i, j + 1), w = D(i - 1, j), e = D(i + 1, j);
+      if (n || so || w || e) {
+        if (n && w) put(0, 0, i, j); else if (n && e) put(2, 0, i, j); else if (so && w) put(0, 2, i, j); else if (so && e) put(2, 2, i, j);
+        else if (n) put(1, 0, i, j); else if (so) put(1, 2, i, j); else if (w) put(0, 1, i, j); else put(2, 1, i, j);
+      } else if (D(i - 1, j - 1)) put(2, 5, i, j); else if (D(i + 1, j - 1)) put(0, 5, i, j); else if (D(i - 1, j + 1)) put(2, 3, i, j); else if (D(i + 1, j + 1)) put(0, 3, i, j);
+    }
+    const inner = (i, j) => D(i, j) && D(i - 1, j) && D(i + 1, j) && D(i, j - 1) && D(i, j + 1);
+    for (let k = 0; k < 260; k++) {   // soft darker / lighter patches of packed earth
+      const x = R2() * cols * T | 0, y = R2() * rows * T | 0, w = 10 + (R2() * 26 | 0), h = 6 + (R2() * 14 | 0);
+      if (!inner(Math.floor(x / T), Math.floor(y / T)) || !inner(Math.floor((x + w) / T), Math.floor((y + h) / T))) continue;
+      ctx.fillStyle = R2() < 0.5 ? 'rgba(96,70,28,0.22)' : 'rgba(150,112,46,0.2)'; ctx.beginPath(); ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, 6.2832); ctx.fill();
+    }
+    specks(['rgb(112,82,30)', 'rgb(146,108,40)', 'rgb(100,74,28)', 'rgb(120,88,32)', 'rgb(154,116,48)'], 16000, inner);
+    tex.refresh();
+    this.add.image(0, 0, 'ground_baked').setOrigin(0, 0).setScale(K).setDepth(-1000);
+  }
+
   /* ---------- map: top-down, one horizontal lane ---------- */
   buildMap() {
     const S = MAP_SCALE, R = rng(12345), rnd = (a, b) => a + R() * (b - a);
-    const img = (sheet, frame, x, y, depth = y) => this.add.image(x, y, sheet, frame).setOrigin(0.5, 1).setScale(S).setDepth(depth);
+    const img = (sheet, frame, x, y, depth = y, sc = S) => this.add.image(x, y, sheet, frame).setOrigin(0.5, 1).setScale(sc).setDepth(depth);
+    const pick = a => a[R() * a.length | 0];
+    const BIGT = ['f_tree1', 'f_tree2', 'f_tree1', 'f_tree2', 'f_tree3'], SMALLT = ['f_tree4', 'f_tree4', 'f_tree1'], BUSH = ['f_bush1', 'f_bush2'], STONE = ['f_stone1', 'f_stone2', 'f_stone3', 'f_stone4'], TUFT = ['f_flower1', 'f_flower2', 'f_flower3', 'f_mush1', 'f_mush2', 'f_mush3', 'f_mush4', 'f_mush5', 'f_mush6', 'f_stone1', 'f_stone3'];
     const W = (i, j) => cellWalk(i, j);
-    // one baked ground texture: organic (noise-displaced, blurred) grass/dirt border, no tile seams, no square corners
-    {
-      const K = 2, TW = WORLD_W / K, TH = WORLD_H / K, src = this.textures.get('ground').getSourceImage();
-      const tile = f => { const c = document.createElement('canvas'); c.width = c.height = 32; const x = c.getContext('2d'); x.drawImage(src, (f % 12) * 32, Math.floor(f / 12) * 32, 32, 32, 0, 0, 32, 32); return x.getImageData(0, 0, 32, 32).data; };
-      const dirt = tile(10), grass = tile(11);
-      const vn = (x, y) => { const h = (a, b) => { let n = (a * 374761393 + b * 668265263) | 0; n = (n ^ (n >> 13)) * 1274126177; return ((n ^ (n >> 16)) >>> 0) / 4294967295; };
-        const xi = Math.floor(x), yi = Math.floor(y), fx = x - xi, fy = y - yi, u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy);
-        return (h(xi, yi) * (1 - u) + h(xi + 1, yi) * u) * (1 - v) + (h(xi, yi + 1) * (1 - u) + h(xi + 1, yi + 1) * u) * v; };
-      // blurred walkability at cell centres
-      const bl = new Float32Array(GW * GH);
-      for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) { let t = 0, w = 0; for (let dj = -2; dj <= 2; dj++) for (let di = -2; di <= 2; di++) { const wt = 1 / (1 + di * di + dj * dj); t += (W(i + di, j + dj) ? 1 : 0) * wt; w += wt; } bl[j * GW + i] = t / w; }
-      const at = (i, j) => bl[Math.max(0, Math.min(GH - 1, j)) * GW + Math.max(0, Math.min(GW - 1, i))];
-      const field = (wx, wy) => { const gx = wx / CELL - 0.5, gy = wy / CELL - 0.5, i = Math.floor(gx), j = Math.floor(gy), fx = gx - i, fy = gy - j;
-        return (at(i, j) * (1 - fx) + at(i + 1, j) * fx) * (1 - fy) + (at(i, j + 1) * (1 - fx) + at(i + 1, j + 1) * fx) * fy; };
-      if (this.textures.exists('ground_baked')) this.textures.remove('ground_baked');   // re-entering the arena: the old baked texture is still registered
-      const tex = this.textures.createCanvas('ground_baked', TW, TH), ctx = tex.getContext(), im = ctx.createImageData(TW, TH), d = im.data;
-      for (let y = 0; y < TH; y++) for (let x = 0; x < TW; x++) {
-        const wx = x * K, wy = y * K, n = (vn(wx / 46, wy / 46) - 0.5) * 0.34 + (vn(wx / 17, wy / 17) - 0.5) * 0.14, f = field(wx, wy) + n;
-        const tp = ((y % 32) * 32 + (x % 32)) * 4, o = (y * TW + x) * 4;
-        let r, g, b;
-        if (f >= 0.5) {                                   // dirt
-          r = dirt[tp]; g = dirt[tp + 1]; b = dirt[tp + 2];
-          if (f < 0.57) { r *= 0.72; g *= 0.68; b *= 0.62; }   // darker dirt rim
-        } else {                                          // grass
-          r = grass[tp]; g = grass[tp + 1]; b = grass[tp + 2];
-          if (f > 0.44) { r *= 0.78; g *= 0.82; b *= 0.7; }    // grass fringe
-        }
-        d[o] = r; d[o + 1] = g; d[o + 2] = b; d[o + 3] = 255;
-      }
-      ctx.putImageData(im, 0, 0); tex.refresh();
-      this.add.image(0, 0, 'ground_baked').setOrigin(0, 0).setScale(K).setDepth(-1000);
-    }
+    this.bakeGround();
     // distance (in cells) from every forest cell to the nearest walkable cell
     const near = (i, j) => { for (let d = 1; d <= 4; d++) for (let dj = -d; dj <= d; dj++) for (let di = -d; di <= d; di++) if (Math.max(Math.abs(di), Math.abs(dj)) === d && W(i + di, j + dj)) return d; return 5; };
+    // static forest decor far from any path never interacts with units: it is stamped once into a single texture instead of ~1200 live sprites (a big part of the frame cost)
+    const baked = [];
     // grass tufts on the forest floor
-    for (let i = 0; i < 700; i++) { const x = rnd(10, WORLD_W - 10), y = rnd(10, WORLD_H - 10); if (!cellWalk(Math.floor(x / CELL), Math.floor(y / CELL))) this.add.image(x, y, 'details', (R() * 4 | 0) * 12 + (R() * 8 | 0)).setScale(S).setDepth(-998); }
+    for (let i = 0; i < 700; i++) { const x = rnd(10, WORLD_W - 10), y = rnd(10, WORLD_H - 10); if (!cellWalk(Math.floor(x / CELL), Math.floor(y / CELL))) baked.push([pick(TUFT), null, x, y, 0.8, 2]); }
     // neutral camp clearings
     const g = this.add.graphics().setDepth(-997);
-    CAMP_SITES.forEach(({ x: cx, y: cy, entryX, entryY }) => {
-      g.fillStyle(0x9c7448, 0.95).fillEllipse(cx, cy, 190, 150).lineStyle(4, 0x6b4a2a, 0.9).strokeEllipse(cx, cy, 190, 150);
-      g.fillStyle(0xb98a5c, 0.9).fillEllipse(cx, cy, 130, 100);
+    CAMP_SITES.forEach(({ x: cx, y: cy, entryX, entryY }, ci) => {
+      // neutral camp: no solid disc, just small ground stones (and pebbles) scattered around the clearing
+      for (let k = 0; k < 15; k++) { const a = R() * 6.2832, rr = 18 + R() * 88; img(pick(STONE), null, cx + Math.cos(a) * rr, cy + Math.sin(a) * rr * 0.75 + 8, undefined, 2.2 + R() * 1.6); }
       const entryAngle = Math.atan2(entryY - cy, entryX - cx);
       for (let i = 0; i < 6; i++) {
         const a = i / 6 * Math.PI * 2 + 0.3;
         if (Math.cos(a - entryAngle) > 0.35) continue;   // leave the approach from the path open
-        img('rocks', ROCKS[3 + (R() * 3 | 0)], cx + Math.cos(a) * 112, cy + Math.sin(a) * 84 + 10).setScale(1.4);
+        img(pick(STONE), null, cx + Math.cos(a) * 112, cy + Math.sin(a) * 84 + 10, undefined, 3.2);
       }
     });
+    // upper boundary of the map: a ridge of the pack's cliff pieces (they mark the edge of the playable terrain together with the trees)
+    for (let x = -40, k = 0; x < WORLD_W + 120; x += 176, k++) img(k % 2 ? 'f_wall2' : 'f_wall1', null, x + rnd(-10, 10), 124 + rnd(-6, 6), 124, 1.45);
     // dense forest: bush hedge along every path edge, small trees behind it, big trees deep inside
     for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) {
       if (W(i, j)) continue;
@@ -310,10 +369,15 @@ export class Arena extends Phaser.Scene {
       let cx = cx0, by = cy + 22;
       if (W(i, j + 1)) by = Math.min(by, j * CELL + CELL - 4);   // keep hedge bushes inside their cell (they must not overhang the path)
       if (W(i - 1, j)) cx = Math.max(cx, i * CELL + CELL * 0.62); if (W(i + 1, j)) cx = Math.min(cx, i * CELL + CELL * 0.38);
-      if (d === 1) img('bushes', BUSHES[R() * 5 | 0], cx, by);
-      else if (d <= 3) { if (R() < 0.9) img('trees', R() < 0.5 ? 'treeS1' : 'treeS2', cx, cy + 30); if (R() < 0.25) img('rocks', ROCKS[3 + (R() * 3 | 0)], cx + rnd(-20, 20), cy + 20); }
-      else { if (R() < 0.45) img('trees', TREES_BIG[R() * 3 | 0], cx, cy + 40); else img('trees', R() < 0.5 ? 'treeS1' : 'treeS2', cx, cy + 30); }
+      const put = (key, x, y, sc, oy = 1) => (d >= 3 ? baked.push([key, null, x, y, oy, sc]) : img(key, null, x, y, y, sc).setOrigin(0.5, oy));
+      if (d === 1) { img(pick(BUSH), null, cx, by, by, 2.3); if (R() < 0.45) img(pick(BUSH), null, cx + rnd(-22, 22), by - rnd(10, 26), by - 12, 2.1); }
+      else if (d <= 3) { if (R() < 0.95) put(pick(SMALLT), cx, cy + 34, 1.25, 0.9); if (R() < 0.6) put(pick(SMALLT), cx + rnd(-26, 26), cy + rnd(0, 26), 1.1, 0.9); if (R() < 0.3) put(pick(STONE), cx + rnd(-20, 20), cy + 22, 2); if (R() < 0.12) put('f_trunk1', cx + rnd(-16, 16), cy + 26, 2); }
+      else { put(pick(BIGT), cx, cy + 44, 1.6, 0.9); if (R() < 0.7) put(pick(SMALLT), cx + rnd(-30, 30), cy + rnd(0, 30), 1.2, 0.9); }
     }
+    if (this.bakedDecor) this.bakedDecor.destroy();
+    const rt = this.bakedDecor = this.add.renderTexture(0, 0, WORLD_W, WORLD_H).setOrigin(0, 0).setDepth(-5);
+    baked.forEach(([sheet, frame, x, y, oy = 1, sc = S]) => rt.stamp(sheet, frame, x, y, { originX: 0.5, originY: oy, scale: sc }));
+    rt.render();
   }
 
   /* ---------- input ---------- */
@@ -340,7 +404,7 @@ export class Arena extends Phaser.Scene {
     this.prevLeft = left; this.prevRight = right;
     if (leftClick && !overUi && !this.aimKey) {   // click on a champion selects it (info panel, top-right)
       const m = ptr.positionToCamera(this.cameras.main);
-      const hit = this.fighters.find(f => f.isChamp && Math.abs(m.x - f.x) < 48 && m.y > f.y - f.def.height - 10 && m.y < f.y + 15);
+      const hit = this.fighters.find(f => f.isChamp && !f.hiddenFor(this.player) && Math.abs(m.x - f.x) < 48 && m.y > f.y - f.def.height - 10 && m.y < f.y + 15);
       this.selected = hit || null;
     }
     // powers: 1st press/click shows the preview, 2nd click (or same key) casts, right click / ESC cancels
@@ -521,7 +585,7 @@ export class Arena extends Phaser.Scene {
 
   // persistent ground decal for an active area effect (fades out)
   zoneDecal(x, y, r, color, life) {
-    if (!this.textures.exists('zone')) return;
+    if (!this.textures.exists('zone') || !this.inView(x, y, r)) return;
     const d = this.add.image(x, y, 'zone').setDepth(y - 3).setTint(color).setAlpha(0).setDisplaySize(r * 2.1, r * 2.1);
     this.tweens.add({ targets: d, alpha: 0.9, duration: 150 });
     this.tweens.add({ targets: d, alpha: 0, angle: 40, delay: life * 1000 - 400, duration: 400, onComplete: () => d.destroy() });
@@ -671,6 +735,58 @@ export class Arena extends Phaser.Scene {
     }
   }
 
+  // Leandro's contracts: green infected area
+  infectZone(o, x, y, r, life, total, poisonTime) {
+    this.zones.push({ kind: 'infect', owner: o, x, y, r, t: life, tick: 0.5, total, poisonTime, ctx: this.castCtx });
+    this.zoneDecal(x, y, r * 0.8, 0x7dff4a, 0.5); this.vfx('poison_cloud', x, y - 10, { scale: 3, alpha: 0.8 });
+  }
+  // Axel's Canaima: black hole + explosion
+  blackHole(o, x, y, r, life, pull, dmg) {
+    this.zones.push({ kind: 'blackhole', owner: o, x, y, r, t: life, T: life, pull, dmg, ctx: this.castCtx });
+    this.vfx('summon', x, y - 10, { scale: 4, below: true, tint: 0xa56bff });
+  }
+
+  /* ---------- Jorbi's "15 Minutos más": rewind ---------- */
+  recordHistory(dt) {   // positions of every minion / champion for the last ~6 s (10 samples per second); only the simulating side keeps it
+    this.histT = (this.histT || 0) - dt; if (this.histT > 0 || this.net?.role === 'client') return; this.histT = 0.1;
+    const d = new Map(); this.fighters.forEach(f => { if (f.alive && (f.isChamp || f.isMinion)) d.set(f.nid, [Math.round(f.x), Math.round(f.y)]); });
+    (this.hist ||= []).push({ t: this.gameT, d }); while (this.hist.length && this.gameT - this.hist[0].t > 6) this.hist.shift();
+  }
+  startRewind(owner, a, rank) {
+    if (this.net?.role === 'client') return;
+    const now = this.gameT, dur = a.travel, lines = [], units = this.fighters.filter(f => f.alive && !f.away && (f.isChamp || f.isMinion) && !f.owner);
+    for (const f of units) {
+      const path = []; for (const h of this.hist || []) { if (now - h.t > a.rewind + 0.05) continue; const e = h.d.get(f.nid); if (e) path.push(e); }
+      if (path.length < 2) continue; path.push([Math.round(f.x), Math.round(f.y)]);
+      f.rw = { path, t: 0, dur }; f.pending = null; f.stunT = 0; f.state = 'idle';
+      lines.push({ team: f.team, pts: path });
+    }
+    this.showRewind(lines, dur); this.net?.onRewind(lines, dur);
+    this.after(dur + 0.05, () => this.finishRewind(owner, a, rank, units));
+  }
+  finishRewind(owner, a, rank, units) {
+    const t = rk(a.buffTime, rank), sh = rk(a.shield, rank), sp = rk(a.speedBoost, rank), sl = rk(a.slow, rank);
+    this.castCtx = { f: owner, k: 'ult' };
+    units.forEach(f => {
+      if (!f.alive) return;
+      if (f.team === owner.team) { this.markSrc(f, 'shield'); this.markSrc(f, 'speed'); f.shieldHp = Math.max(f.shieldHp, sh + f.maxHp * a.shieldHpPct); f.shieldT = t; f.speedBoost = sp; f.speedT = t; this.vfx('buff', f.x, f.cy, { scale: 2.6 }); }
+      else { f.slow(sl, t); this.vfx('spark', f.x, f.cy, { scale: 3, tint: 0x66aaff }); }
+    });
+    this.castCtx = null; this.audio.play('ui_upgrade', { at: owner, vol: 0.8, gap: 0 });
+  }
+  showRewind(lines, dur) { this.rwTrail = { lines, t: 0, dur: dur + 1.4 }; }
+  drawRewind(dt) {
+    const R = this.rwTrail; if (!R) { this.rwG?.clear(); return; }
+    R.t += dt; const g = (this.rwG ||= this.add.graphics().setDepth(99980)); g.clear();
+    if (R.t > R.dur) { this.rwTrail = null; return; }
+    const alpha = Math.min(1, (R.dur - R.t) / 1.0), me = this.player.baseTeam;
+    for (const L of R.lines) {
+      const col = L.team === me ? 0x66d0ff : 0xff6a5a; g.lineStyle(3, col, 0.75 * alpha).beginPath();
+      L.pts.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]))); g.strokePath();
+      L.pts.forEach((p, i) => { if (i % 6 === 0) g.fillStyle(0xffffff, 0.8 * alpha).fillCircle(p[0], p[1], 3); });
+    }
+  }
+
   spawnWave(team) {
     if (team === 0) this.net?.onWave(this.waveN);
     if (this.waveN === 0 && team === 0) this.audio.voice('v_minions', 1, 'ann_minions', { title: '¡MINIONS DESPLEGADOS!', sub: 'La primera oleada avanza por el carril', team: 2 });
@@ -767,13 +883,13 @@ export class Arena extends Phaser.Scene {
     return best;
   }
   startControl(luis, t, dur) {
-    if (this.net) return;   // online: Luis' mind control is not supported yet
-   // Luis vanishes; his target fights for him
-    const mode = luis === this.player ? 'ctrl' : 'charm';
+    if (this.net?.role === 'client') return;   // online: only the host runs it; clients receive it in the snapshot
+   // Luis vanishes; his target fights for him. 'ctrl' = the local player drives it, 'remote' = another human (online) drives it, 'charm' = the AI does
+    const mode = luis === this.player ? 'ctrl' : luis.pid != null && this.net ? 'remote' : 'charm';
     this.control = { luis, target: t, t: dur, origin: { x: luis.x, y: luis.y }, mode };
     luis.away = true; luis.pending = null; luis.state = 'idle'; luis.in = { mx: 0, my: 0, run: false };
     t.team = luis.baseTeam; t.pending = null; t.stunT = 0; if (t.state === 'cast') { t.state = 'idle'; t.playAnim('idle'); }
-    if (mode === 'ctrl') this.ctrl = t; else t.charmT = dur;
+    if (mode === 'ctrl') this.ctrl = t; else if (mode === 'charm') t.charmT = dur;
     this.castCtx = { f: luis, k: 'ult' }; this.markSrc(t, 'charm'); this.castCtx = null;
     this.cancelAim();
     this.float(t.x, t.y - t.def.height - 34, '¡CONTROLADO!', '#33ff88');
@@ -1104,13 +1220,17 @@ export class Arena extends Phaser.Scene {
     this.tweens.add({ targets: im, alpha: 0, delay: life * 1000, duration: 500, onComplete: () => { im.destroy(); this.textures.remove(key); } });
   }
 
+  inView(x, y, m = 160) { const v = this.cameras.main.worldView; return x > v.x - m && x < v.right + m && y > v.y - m && y < v.bottom + m; }
   float(x, y, text, color = '#fff') {
+    if (!this.inView(x, y) || (this.floatN || 0) >= 36) return;   // nobody sees floating text far from the camera; also cap how many exist at once (each is a canvas texture)
+    this.floatN = (this.floatN || 0) + 1;
     const t = this.add.text(x, y, text, { fontFamily: 'monospace', fontSize: 16, fontStyle: 'bold', color, stroke: '#000', strokeThickness: 3 })
       .setOrigin(0.5).setDepth(100000);
-    this.tweens.add({ targets: t, y: y - 36, alpha: 0, duration: 900, onComplete: () => t.destroy() });
+    this.tweens.add({ targets: t, y: y - 36, alpha: 0, duration: 900, onComplete: () => { t.destroy(); this.floatN--; } });
   }
 
   vfx(name, x, y, { scale = 3, alpha = 1, tint = null, below = false } = {}) {
+    if (!this.inView(x, y, 260)) return null;   // effects outside the camera are never seen: do not even create them
     const s = this.add.sprite(x, y, 'vfx_' + name).setScale(scale).setDepth(below ? y - 2 : y + 2).setAlpha(alpha);
     if (tint) s.setTint(tint);
     s.play({ key: 'vfx_' + name, repeat: 0 });
@@ -1121,7 +1241,8 @@ export class Arena extends Phaser.Scene {
   shake() {  }
 
   projectile(owner, o) {
-    const { ax, ay } = owner;
+    let { ax, ay } = owner;
+    if (o.ang) { const c = Math.cos(o.ang), sn = Math.sin(o.ang); [ax, ay] = [ax * c - ay * sn, ax * sn + ay * c]; }   // fan shots
     const x = owner.x + ax * 45, y = owner.y + ay * 45, lift = owner.def.height * 0.55;
     let s;
     if (o.obj && this.textures.exists(o.obj)) {   // sprite object (e.g. a laptop) instead of a vfx sheet
@@ -1226,18 +1347,19 @@ export class Arena extends Phaser.Scene {
     this.camTarget.x = this.pc.x; this.camTarget.y = this.pc.y - 30;
 
     if (this.ctrl || this.over) this.player.in = { mx: 0, my: 0, run: false };
-    if (this.over) this.player.in = { mx: 0, my: 0, run: false }; else if (this.player.charmT > 0 && this.net?.role !== 'client') this.runAi(this.player, dt); else if (this.net && (this.paused || this.player.charmT > 0)) this.player.in = { mx: 0, my: 0, run: false }; else this.handleInput();
+    if (this.over) this.player.in = { mx: 0, my: 0, run: false }; else if (this.player.charmT > 0 && this.net?.role !== 'client') this.runAi(this.player, dt); else if (this.net && (this.paused || this.player.charmT > 0 || (this.control?.mode === 'remote' && this.control.target === this.player))) this.player.in = { mx: 0, my: 0, run: false }; else this.handleInput();
     this.net?.pre(dt);
     const due = []; this.timers = this.timers.filter(t => ((t.t -= dt) > 0) || (due.push(t), false)); due.forEach(t => { this.castCtx = t.ctx || null; t.fn(); this.castCtx = null; });
     if (this.training && this.enemy.alive && this.enemy.hp < this.enemy.maxHp) this.enemy.hp = Math.min(this.enemy.maxHp, this.enemy.hp + this.enemy.maxHp * 0.12 * dt);   // dummy regenerates
     this.gameT += dt;
     if (!this.over) this.waveT -= dt; if (this.waveT <= 0 && !this.over && this.net?.role !== 'client') { this.waveT = 28; this.spawnWave(0); this.spawnWave(1); this.waveN++; }
-    if (!this.over && this.net?.role !== 'client') this.fighters.forEach(f => { if ((f.ai && this.aiOn && f !== this.ctrl) || f.isBot || f.isMinion || f.isTower || f.charmT > 0) this.runAi(f, dt); });
+    if (!this.over && this.net?.role !== 'client') this.fighters.forEach(f => { if (this.control?.mode === 'remote' && f === this.control.target) return; if ((f.ai && this.aiOn && f !== this.ctrl) || f.isBot || f.isMinion || f.isTower || f.charmT > 0) this.runAi(f, dt); });
+    this.recordHistory(dt);
     this.fighters.forEach(f => f.update(dt));
     this.fighters.forEach(f => f.alive && !f.isTower && this.resolveSolids(f));
     // AI champions spend their skill points (ultimate first when available)
     this.champs.forEach(e => { if (e === this.player || e.pid != null || this.net?.role === 'client') return; while (e.points > 0) { const open = ABILITY_KEYS.filter(a => e.canSpend(a)); if (!open.length) break; e.spend(open.includes('ult') ? 'ult' : open[Math.random() * open.length | 0]); } });
-    if (this.control) { this.control.t -= dt; if (this.control.t <= 0 || !this.control.target.alive || !this.control.luis.alive) this.endControl(); }
+    if (this.control && this.net?.role !== 'client') { this.control.t -= dt; if (this.control.t <= 0 || !this.control.target.alive || !this.control.luis.alive) this.endControl(); }
     this.updateEliud(dt);
     this.updateMortars(dt);
     this.updateChains(dt);
@@ -1251,6 +1373,8 @@ export class Arena extends Phaser.Scene {
     this.drawTowerRanges();
     this.drawAim();
     this.drawRangeHint();
+    this.drawRewind(dt);
+    this.updateFog(dt);
     this.net?.post(dt);
   }
 
@@ -1262,6 +1386,40 @@ export class Arena extends Phaser.Scene {
         if (z.t <= 0) { z.spr.destroy(); return false; }
         z.tick += dt;
         if (z.tick >= 0.5) { z.tick -= 0.5; this.enemiesNear(o.team, z.x, z.y, z.r).forEach(t => this.damage(o, t, z.dmg, 'physical', true)); }
+        return true;
+      }
+      if (z.kind === 'infect') {   // Leandro's contracts: a green infected area that poisons everyone inside
+        if (z.t <= 0) { z.decal?.destroy(); return false; }
+        if (this.textures.exists('zone')) z.decal ||= this.add.image(z.x, z.y, 'zone').setTint(0x7dff4a).setAlpha(0.7).setDepth(z.y - 3).setDisplaySize(z.r * 2.1, z.r * 1.7);
+        z.decal?.setAngle(z.decal.angle + dt * 22).setAlpha(Math.min(0.7, z.t * 0.7));
+        z.tick += dt;
+        if (z.tick >= 0.5) {
+          z.tick -= 0.5; this.vfx('poison_cloud', z.x + Phaser.Math.Between(-z.r * 0.6, z.r * 0.6), z.y + Phaser.Math.Between(-z.r * 0.4, z.r * 0.4) - 10, { scale: 2.2, alpha: 0.7, below: true });
+          this.enemiesNear(o.team, z.x, z.y, z.r).forEach(t => { if (t.isTower) return; t.poisons = t.poisons.filter(p => p.tag !== z); t.poison(z.total / z.poisonTime, Math.max(1, z.poisonTime * 0.6), o); t.poisons[t.poisons.length - 1].tag = z; });
+        }
+        return true;
+      }
+      if (z.kind === 'blackhole') {   // Axel's Canaima: drags enemies to the centre, then explodes
+        const dead = z.t <= 0 || !o.alive;
+        z.fx ||= this.add.graphics();
+        if (this.textures.exists('laptop_white')) z.icon ||= this.add.image(z.x, z.y - 6, 'laptop_white').setDisplaySize(78, 62);
+        const g = z.fx, T = this.time.now / 1000, life = Math.max(0, z.t / z.T);
+        g.clear().setDepth(z.y - 2);
+        for (let k = 0; k < 4; k++) { const rr = z.r * (1 - k * 0.2); g.fillStyle(0x12041f, 0.16 + 0.1 * k).fillEllipse(z.x, z.y, rr * 2, rr * 1.5); }
+        for (let arm = 0; arm < 3; arm++) { g.lineStyle(3, 0xa56bff, 0.55); g.beginPath(); for (let u = 0; u <= 1; u += 0.05) { const ang = T * 3 + arm * 2.094 + u * 5.5, rr = z.r * (1 - u) * 0.95; const px = z.x + Math.cos(ang) * rr, py = z.y + Math.sin(ang) * rr * 0.75; if (u === 0) g.moveTo(px, py); else g.lineTo(px, py); } g.strokePath(); }
+        g.lineStyle(3, 0xc9a0ff, 0.5 + 0.4 * (1 - life)).strokeEllipse(z.x, z.y, z.r * 2, z.r * 1.5);
+        z.icon?.setPosition(z.x, z.y - 6 + Math.sin(T * 5) * 3).setDepth(z.y + 30).setAngle(Math.sin(T * 7) * 6);
+        if (this.net?.role !== 'client') this.enemiesNear(o.team, z.x, z.y, z.r).forEach(t => {
+          if (t.isTower || t.away || t.rw) return;
+          const dx = z.x - t.x, dy = z.y - t.y, d = Math.hypot(dx, dy); if (d < 14) return;
+          const m = Math.min(z.pull * dt, d - 10); t.tryMove(t.x + dx / d * m, t.y + dy / d * m);
+        });
+        if (dead) {   // boom
+          this.vfx('shockwave', z.x, z.y - 10, { scale: z.r / 32 * 1.4, below: true, tint: 0xa56bff }); this.vfx('spark', z.x, z.y - 20, { scale: 6, tint: 0xc9a0ff });
+          this.zoneDecal(z.x, z.y, z.r, 0xa56bff, 0.9); this.audio.play('explosion', { at: { x: z.x, y: z.y }, vol: 0.9, gap: 60 });
+          this.castCtx = z.ctx || null; this.enemiesNear(o.team, z.x, z.y, z.r).forEach(t => this.damage(o, t, z.dmg, 'magic')); this.castCtx = null;
+          g.destroy(); z.icon?.destroy(); return false;
+        }
         return true;
       }
       if (z.kind === 'malware') {   // infected zone: stays for a while, anyone enemy that walks in is affected

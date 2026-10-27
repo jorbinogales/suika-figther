@@ -31,8 +31,8 @@ export const CHAMPIONS = {
             desc: 'Cactus aparecen en una zona a tu elección (dentro de su alcance), causan daño de IA (escala fuerte con tu poder IA) y stunean a los enemigos.',
             stun: [0.8, 1.0, 1.2], radius: 130, range: 360, dmg: [30, 50, 70], apScale: 0.7 },
       p2: { name: 'Lanzamiento de contrato', icon: 'leandro_p2', cd: [8, 7, 6], mana: [35, 40, 45], windup: 0.35, dur: 0.6,
-            desc: 'Contrato envenenado: causa daño de IA, ralentiza y envenena. El daño directo y el veneno escalan con tu poder IA.',
-            speed: 480, slow: [0.35, 0.45, 0.55], slowTime: 3, poisonTime: 4, poisonApScale: [0.9, 1.2, 1.5], dmg: [20, 35, 50], apScale: 0.6 },
+            desc: 'Lanza varios contratos hacia el frente en abanico: se van alejando y separando más. Al impactar a un enemigo infectan el área a su alrededor (zona verde) y envenenan a todos los que estén dentro. El daño y el veneno escalan con tu poder de IA.',
+            speed: 480, count: [3, 4, 5], spread: 0.75, areaRadius: [95, 110, 125], areaLife: [3, 3.5, 4], poisonTime: 4, poisonApScale: [0.9, 1.2, 1.5], dmg: [20, 35, 50], apScale: 0.6 },
       p3: { name: '4 Cauchos', icon: 'leandro_p3', cd: [14, 13, 12], mana: [50, 50, 50], windup: 0.3, dur: 0.55,
             desc: 'Muro de 4 cauchos al frente: bloquea cualquier proyectil.',
             life: [4, 5, 6], offset: 110 },
@@ -79,9 +79,9 @@ CHAMPIONS.jorbi = {
     p3: { name: 'Hora de ponerse mamado', icon: 'jorbi_p3', passive: true,
           desc: 'Pasiva: cada tercer ataque básico es un golpe fuerte que causa daño crítico.',
           critMult: [1.8, 2.3, 2.8] },
-    ult: { name: 'Peneflexionada', icon: 'jorbi_ult', cd: [80, 70, 60], mana: [100, 100, 100], windup: 0.9, dur: 1.4,
-           desc: 'Jorbi se transforma: más musculoso, se arranca las mangas, gana vida y ataque y sus poderes se recargan más rápido.',
-           duration: [15, 18, 21], hpMult: [1.25, 1.35, 1.5], atkMult: [1.3, 1.4, 1.5], cdSpeed: [1.5, 1.7, 1.9] },
+    ult: { name: '15 Minutos más', icon: 'jorbi_ult', cd: [80, 70, 60], mana: [100, 100, 100], windup: 0.9, dur: 1.4,
+           desc: 'Retrocede la partida 5 segundos: los súbditos vivos y los campeones vivos, aliados y enemigos, regresan a donde estaban hace 5 segundos (se muestra el camino que recorrieron). Al terminar, los aliados ganan un escudo y velocidad de movimiento y los enemigos quedan ralentizados durante unos segundos.',
+           rewind: 5, travel: 1.3, buffTime: [2.5, 3, 3.5], shield: [90, 140, 190], shieldHpPct: 0.06, speedBoost: [0.3, 0.35, 0.4], slow: [0.4, 0.5, 0.6] },
   },
 };
 
@@ -99,9 +99,9 @@ CHAMPIONS.axel = {
     p2: { name: 'Proveedor humilde', icon: 'axel_p2', cd: [22, 20, 18], mana: [60, 65, 70], windup: 0.3, dur: 0.8,
           desc: 'Crea una zona de curación a su alrededor que lo acompaña mientras se mueve, durante unos segundos, mientras lee mangas.',
           radius: [170, 190, 210], life: [6, 7, 8], hps: [20, 30, 40], apScale: 0.25 },
-    p3: { name: 'Regateador hábil', icon: 'axel_p3', cd: [16, 15, 14], mana: [45, 45, 45], windup: 0.3, dur: 0.7,
-          desc: 'Regatea con el destino: él y los aliados cercanos ganan un escudo y velocidad por unos segundos.',
-          radius: 260, shield: [90, 140, 190], apScale: 0.4, speedBoost: [0.25, 0.3, 0.35], time: [4, 4.5, 5] },
+    p3: { name: 'Regateador hábil', icon: 'axel_p3', cd: [18, 17, 16], mana: [60, 60, 60], windup: 0.3, dur: 0.7,
+          desc: 'Deja una laptop Canaima en el suelo que funciona como un agujero negro: arrastra hacia su centro a todos los enemigos que estén en el área de eventos. Tras unos segundos explota y causa daño de IA a quienes sigan dentro.',
+          range: 400, radius: [170, 190, 210], life: [3, 3.5, 4], pull: 240, dmg: [70, 110, 150], apScale: 0.6 },
     ult: { name: 'No estoy solo', icon: 'axel_ult', cd: [90, 80, 70], mana: [100, 100, 100], windup: 0.8, dur: 1.3,
            desc: 'Al alzar la voz, los campeones y tropas rivales en un área elegida se vuelven aliados por unos segundos: no ejecutan poderes y atacan con básicos a su aliado más cercano.',
            radius: [220, 260, 300], range: 420, charm: [3, 4, 5] },
@@ -210,7 +210,7 @@ export function aimSpec(champ, key, rank, f) {
   const a = CHAMPIONS[champ].abilities[key];
   switch (champ + ':' + key) {
     case 'leandro:p1':  return { type: 'zone', max: a.range, radius: a.radius, color: 0x7dff5a };
-    case 'leandro:p2':  return { type: 'line', range: 900, width: 40, color: 0xb0ff60 };
+    case 'leandro:p2':  return { type: 'trapezoid', length: 760, nearW: 70, farW: 560, color: 0xb0ff60 };
     case 'leandro:p3':  return { type: 'wall', min: 80, max: 260, count: 4, spacing: 44, color: 0x9ad7ff };
     case 'leandro:ult': return { type: 'circle', radius: 160, color: 0x66ffcc };
     case 'xeviche:p1':  return { type: 'line', range: 900, width: 56, color: 0xff5a4a };
@@ -234,11 +234,11 @@ export function aimSpec(champ, key, rank, f) {
     case 'hector:ult':  return { type: 'line', range: rk(a.dist, rank), width: 80, color: 0xff7a3a };
     case 'axel:p1':     return { type: 'line', range: 900, width: 44, color: 0xc77dff };
     case 'axel:p2':     return { type: 'circle', radius: rk(a.radius, rank), color: 0x5dff8a };
-    case 'axel:p3':     return { type: 'circle', radius: a.radius, color: 0x7ee0ff };
+    case 'axel:p3':     return { type: 'zone', max: a.range, radius: rk(a.radius, rank), color: 0x9a5cff };
     case 'axel:ult':    return { type: 'zone', max: a.range, radius: rk(a.radius, rank), color: 0xffd23f };
     case 'jorbi:p1':    return { type: 'trapezoid', length: a.length, nearW: a.nearW, farW: a.farW, color: 0x7dff8a };
     case 'jorbi:p2':    return { type: 'line', range: rk(a.dashDist, rank), width: 46, color: 0xffd23f };
-    case 'jorbi:ult':   return { type: 'circle', radius: 95, color: 0xff5a4a };
+    case 'jorbi:ult':   return { type: 'circle', radius: 95, color: 0x66d0ff };
     case 'xeviche:ult': return { type: 'circle', radius: rk(a.radius, rank), color: 0xff5a4a };
   }
   return { type: 'circle', radius: 80, color: 0xffffff };

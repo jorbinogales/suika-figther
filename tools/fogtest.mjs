@@ -1,0 +1,11 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader', '--mute-audio'], defaultViewport: { width: 1280, height: 720 } });
+const p = await b.newPage(); p.on('pageerror', e => console.log('[pageerror]', e.message));
+await p.goto('http://localhost:5173/#mode=3&keep=1&noai=1', { waitUntil: 'load' }); await new Promise(r => setTimeout(r, 14000));
+console.log(await p.evaluate(`(() => { const a = window.__arena; a.handleInput = () => {}; a.audio.play = () => {}; a.audio.playAll = () => {}; a.audio.voice = () => {};
+  for (let i = 0; i < 60 * 40; i++) a.update(a.time.now + i * 16, 16.7);
+  const en = a.fighters.filter(f => f.team !== a.player.team && f.alive); return JSON.stringify({ fog: !!a.fog, enemies: en.length, hidden: en.filter(f => f.fogHidden).length, hiddenChamps: en.filter(f => f.isChamp && f.fogHidden).length, explored: a.fog && a.fog.explored.reduce((s, v) => s + v, 0) }); })()`));
+await p.screenshot({ path: 'D:/mycowork/game/shot_fog.png' });
+await p.evaluate(`(() => { const a = window.__arena; a.cameras.main.stopFollow(); a.cameras.main.centerOn(1600, 750); a.cameras.main.setZoom(0.4); })()`);
+await new Promise(r => setTimeout(r, 600)); await p.screenshot({ path: 'D:/mycowork/game/shot_fog2.png' });
+await b.close();

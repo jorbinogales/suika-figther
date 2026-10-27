@@ -15,6 +15,7 @@ const TYPES = ['physical', 'magic', 'true'];
 export class NetGame {
   constructor(w, role, hostId) {
     this.w = w; this.role = role; this.hostId = hostId; this.live = false; this.replaying = false;
+    this.snapDt = (w.cfg.roster || []).filter(r => r.pid != null).length >= 7 ? 1 / 10 : SNAP;   // big rooms: fewer, compressed snapshots (the client keeps simulating between them)
     this.ev = []; this.snapT = 0; this.inT = 0; this.atkT = 0; this.clock = 0; this.remote = new Map(); this.mortarImgs = [];
     for (const f of w.champs) if (f.pid != null && f.pid !== conn.user.id && role === 'host') this.remote.set(f.pid, { f, in: { mx: 0, my: 0, run: false }, ax: f.ax, ay: f.ay, atk: 0, at: 0 });
     this.off = conn.on(m => this.onMsg(m));
@@ -47,17 +48,22 @@ export class NetGame {
   onClientData(from, d) {
     const r = this.remote.get(from); if (!r) return; const f = r.f, w = this.w;
     if (d.k === 'in') { r.in = { mx: d.mx, my: d.my, run: !!d.run }; r.ax = d.ax; r.ay = d.ay; r.at = this.clock; r.atk = d.atk ? this.clock + 0.12 : 0; }
-    else if (d.k === 'cast') { if (!f.alive) return; f.setAim(d.ax, d.ay); f.castPoint = d.cp ? { x: d.cp[0], y: d.cp[1] } : null; if (!f.tryCast(d.c)) f.castPoint = null; }
+    else if (d.k === 'cast') { const c = w.control; if (c?.mode === 'remote' && c.target === f) return; const a = this.actor(r); if (!a.alive) return; a.setAim(d.ax, d.ay); a.castPoint = d.cp ? { x: d.cp[0], y: d.cp[1] } : null; if (!a.tryCast(d.c)) a.castPoint = null; }
     else if (d.k === 'op') {
       if (['buy', 'sell'].includes(d.op) && !w.canShop(f)) return;   // the shop only works in the base
       if (d.op === 'buy') f.buyItem(d.a); else if (d.op === 'sell') f.sellItem(d.a); else if (d.op === 'use') f.useItem(d.a); else if (d.op === 'spend') f.spend(d.a);
     }
   }
+  // the unit a remote player is driving: his own champion, or the enemy he is mind-controlling with Luis' ultimate
+  actor(r) { const c = this.w.control; return c && c.mode === 'remote' && c.luis === r.f && c.target.alive ? c.target : r.f; }
   pre(dt) {
     this.clock += dt;
     if (this.role !== 'host') return;
+    const ctl = this.w.control;
     for (const r of this.remote.values()) {
-      const f = r.f; if (!f.alive || f.charmT > 0) continue;
+      if (ctl?.mode === 'remote' && ctl.target === r.f) { r.f.in = { mx: 0, my: 0, run: false }; continue; }   // being mind-controlled: its own player cannot move it
+      if (ctl?.mode === 'remote' && ctl.luis === r.f) r.f.in = { mx: 0, my: 0, run: false };
+      const f = this.actor(r); if (!f.alive || f.charmT > 0) continue;
       const stale = this.clock - r.at > 1;
       f.in = stale ? { mx: 0, my: 0, run: false } : r.in;
       if (f.state !== 'cast') f.setAim(r.ax, r.ay);
@@ -65,7 +71,7 @@ export class NetGame {
     }
   }
   post(dt) {
-    if (this.role === 'host') { this.snapT += dt; if (this.snapT >= SNAP) { this.snapT = 0; this.flush(); this.sendSnap(); } }
+    if (this.role === 'host') { this.snapT += dt; if (this.snapT >= this.snapDt) { this.snapT = 0; this.flush(); this.sendSnap(); } }
     else this.sendInput(dt);
   }
   sendCast(f, k) { this.ev.push(['c', f.nid, k, r2(f.ax), r2(f.ay), f.castPoint ? r1(f.castPoint.x) : null, f.castPoint ? r1(f.castPoint.y) : null]); }
@@ -73,6 +79,7 @@ export class NetGame {
   onDmg(src, t, dmg, type, dot) { if (this.role === 'host' && !dot) this.ev.push(['d', t.nid, r1(dmg), Math.max(0, TYPES.indexOf(type)), t.isNexus ? 2 : t.isTower ? 1 : 0]); }
   onDie(v, killer) { if (this.role === 'host') this.ev.push(['k', v.nid, killer?.nid ?? -1]); }
   onWave(n) { if (this.role === 'host') this.ev.push(['w', n]); }
+  onRewind(lines, dur) { if (this.role === 'host') this.ev.push(['r', r2(dur), lines.map(l => [l.team, l.pts.filter((p, i) => i % 3 === 0 || i === l.pts.length - 1).flat()])]); }
   onShell(sx, sy, tx, ty) { if (this.role === 'host') this.ev.push(['s', r1(sx), r1(sy), r1(tx), r1(ty)]); }
   flush() { if (this.ev.length) { this.send(null, { k: 'ev', l: this.ev }); this.ev = []; } }
 
@@ -87,6 +94,7 @@ export class NetGame {
     if (f.slows.length) o.sw = f.slows.map(s => [r2(s.pct), r2(s.t)]);
     if (f.poisons.length) o.pn = r2(Math.max(...f.poisons.map(p => p.t)));
     if (f.invis) o.iv = f.invis.t === Infinity ? -1 : r2(f.invis.t); if (f.ink) o.ik = r2(f.ink.t); if (f.away) o.aw = 1;
+    if (this.w.control?.mode === 'remote' && this.w.control.target === f) o.ch = r2(this.w.control.t);   // shows 'controlled' on that player's screen
     if (f.recall) o.rc = r2(f.recall.t); if (f.protein) o.pr = r2(f.protein.t);
     if (f.isChamp) {
       o.m = r1(f.mana); o.lv = f.level; o.xp = r1(f.xp); o.gd = r1(f.gold); o.pt = f.points;
@@ -102,20 +110,21 @@ export class NetGame {
   }
   sendSnap() {
     const w = this.w;
-    this.send(null, { k: 'snap', f: w.fighters.map(f => this.packF(f)), m: w.mortars.map(m => [r1(m.x), r1(m.y)]), g: r1(w.gameT) });
+    const c = w.control;
+    this.send(null, { k: 'snap', f: w.fighters.map(f => this.packF(f)), m: w.mortars.map(m => [r1(m.x), r1(m.y)]), g: r1(w.gameT), ctl: c ? [c.luis.nid, c.target.nid, r2(c.t)] : 0 });
   }
 
   /* ======================= CLIENT ======================= */
-  clientBasic(f) { if (f !== this.w.player) return false; this.atkT = 0.12; return true; }
+  clientBasic(f) { if (f !== this.w.pc) return false; this.atkT = 0.12; return true; }
   clientCast(f, k) {
-    if (f !== this.w.player) return false;
+    if (f !== this.w.pc) return false;
     const cp = f.castPoint; f.castPoint = null;
     this.send(this.hostId, { k: 'cast', c: k, ax: r2(f.ax), ay: r2(f.ay), cp: cp ? [r1(cp.x), r1(cp.y)] : null }); return true;
   }
   op(op, a) { this.send(this.hostId, { k: 'op', op, a }); return true; }
   sendInput(dt) {
     this.atkT -= dt; this.inT += dt; if (this.inT < INP) return; this.inT = 0;
-    const p = this.w.player, i = p.in || { mx: 0, my: 0, run: false };
+    const p = this.w.pc, i = p.in || { mx: 0, my: 0, run: false };
     this.send(this.hostId, { k: 'in', mx: r2(i.mx), my: r2(i.my), run: i.run ? 1 : 0, ax: r2(p.ax), ay: r2(p.ay), atk: this.atkT > 0 ? 1 : 0 });
   }
   onHostData(d) {
@@ -133,6 +142,9 @@ export class NetGame {
     const w = this.w, seen = new Set();
     for (const o of s.f) { let f = w.byNid.get(o.i); if (!f) f = this.spawnFor(o); if (!f) continue; seen.add(o.i); this.unpack(f, o); }
     for (const f of w.fighters) if (f.nid >= 1000 && !seen.has(f.nid) && f.alive && !f.dispose) f.dispose = true;   // vanished on the host (expired summon, ...)
+    // Luis' mind control: the controller's camera and HUD follow the controlled champion
+    if (s.ctl) { const L = w.byNid.get(s.ctl[0]), T = w.byNid.get(s.ctl[1]); if (L && T) { const mine = L === w.player; w.control = { luis: L, target: T, t: s.ctl[2], mode: mine ? 'ctrl' : 'view' }; w.ctrl = mine ? T : null; } }
+    else if (w.control) { w.control = null; w.ctrl = null; w.cancelAim(); }
     // mortars (item): the host owns them, we only draw them
     s.m.forEach((m, i) => { let im = this.mortarImgs[i]; if (!im) { im = this.mortarImgs[i] = w.add.image(0, 0, 'item_mortero_portatil').setOrigin(0.5, 0.9); im.setScale(70 / Math.max(im.width, im.height)); } im.setPosition(m[0], m[1]).setDepth(m[1]); });
     while (this.mortarImgs.length > s.m.length) this.mortarImgs.pop().destroy();
@@ -152,7 +164,7 @@ export class NetGame {
     f.shieldHp = o.sd ? o.sd[0] : 0; f.shieldT = o.sd ? o.sd[1] : 0; f.speedBoost = o.sp ? o.sp[0] : 0; f.speedT = o.sp ? o.sp[1] : 0;
     f.slows = (o.sw || []).map(a => ({ pct: a[0], t: a[1] }));
     f.poisons = o.pn ? [{ dps: 0, t: o.pn, tick: 0, src: f }] : [];
-    f.invis = o.iv != null ? { t: o.iv < 0 ? Infinity : o.iv, trail: 1.5 } : null; f.ink = o.ik ? { t: o.ik, src: null } : null; f.away = !!o.aw;
+    const ivT = o.iv < 0 ? Infinity : o.iv; f.invis = o.iv != null ? (f.invis ? Object.assign(f.invis, { t: ivT }) : { t: ivT, trail: 0.15 }) : null;   // keep the trail timer: resetting it every snapshot meant Luis' silhouettes never appeared f.ink = o.ik ? { t: o.ik, src: null } : null; f.away = !!o.aw;
     f.recall = o.rc != null ? { t: o.rc } : null; f.protein = o.pr != null ? { t: o.pr, tick: 0, hps: 0 } : null;
     if (f.isChamp) {
       if (!first && o.lv > f.level) { w.audio.play('levelup', { at: f, vol: local ? 1 : 0.5, gap: 0 }); w.vfx('levelup', f.x, f.y - 20, { scale: 3.2 }); w.float(f.x, f.y - f.def.height - 30, `NIVEL ${o.lv}`, '#ffe066'); }
@@ -186,9 +198,11 @@ export class NetGame {
       this.replay(f, () => f._tryCast(k)); f.castPoint = null;
     } else if (e[0] === 'b') {
       const f = this.fighter(e[1]); if (!f || !f.alive) return;
+      if (f !== w.pc && !w.inView(f.x, f.y, 450)) return;   // basic attacks far from the camera are not replayed (nobody sees them)
       f.ax = e[2]; f.ay = e[3]; f.cds.basic = 0; this.replay(f, () => f._tryBasic());
     } else if (e[0] === 'd') {
       const t = this.fighter(e[1]); if (!t) return; const dmg = e[2], type = TYPES[e[3]];
+      if (!w.inView(t.x, t.y, 200)) return;
       w.audio.play(e[4] === 2 ? 'hit_heavy' : e[4] === 1 ? 'hit_metal' : type === 'physical' ? 'hit_flesh' : 'debuff', { at: t, vol: e[4] ? 0.5 : 0.55, gap: 90 });
       if (!e[4]) t.flash();
       w.float(t.x + Phaser.Math.Between(-15, 15), t.y - t.def.height - 5, `${dmg}`, type === 'magic' ? '#c77dff' : type === 'physical' ? '#ffffff' : '#9be37a');
@@ -198,6 +212,8 @@ export class NetGame {
     } else if (e[0] === 'w') {
       if (e[1] === 0) w.audio.voice('v_minions', 1, 'ann_minions', { title: '¡MINIONS DESPLEGADOS!', sub: 'La primera oleada avanza por el carril', team: 2 });
       w.audio.play('minion_yell', { at: { x: 260, y: w.laneY }, vol: 0.5, gap: 200 });
+    } else if (e[0] === 'r') {   // Jorbi's rewind trails
+      w.showRewind(e[2].map(([team, flat]) => ({ team, pts: Array.from({ length: flat.length / 2 }, (_, i) => [flat[i * 2], flat[i * 2 + 1]]) })), e[1]);
     } else if (e[0] === 's') {
       const [, sx, sy, tx, ty] = e, shell = w.add.circle(sx, sy, 7, 0x333333).setDepth(100000);
       w.tweens.add({ targets: shell, x: tx, y: { value: ty - 8, ease: 'Sine.In' }, scale: 1.8, duration: 800, onComplete: () => { shell.destroy(); w.vfx('shockwave', tx, ty, { scale: 3, below: true }); w.vfx('spark', tx, ty - 20, { scale: 4, tint: 0xffb020 }); w.audio.play('explosion', { at: { x: tx, y: ty }, vol: 0.8, gap: 60 }); } });

@@ -19,6 +19,7 @@ export class Audio {
   gain(at) {
     if (!at) return 1;
     const cam = this.s.cameras?.main; if (!cam) return 1;
+    if (this.s.inView && !this.s.inView(at.x, at.y, 60)) return 0;   // outside the screen: silence
     const c = cam.midPoint, d = Math.hypot(at.x - c.x, at.y - c.y);
     return d < 450 ? 1 : Math.max(0.0, 1 - (d - 450) / 1100);
   }

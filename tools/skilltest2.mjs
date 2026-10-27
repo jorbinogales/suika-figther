@@ -1,0 +1,7 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader', '--mute-audio'], defaultViewport: { width: 1280, height: 720 } });
+const p = await b.newPage(); p.on('pageerror', e => console.log('[pageerror]', e.message)); await p.goto('http://localhost:5173/#char=axel&train=1&keep=1&noai=1', { waitUntil: 'load' }); await new Promise(r => setTimeout(r, 12000));
+console.log(await p.evaluate(`(() => { const a = window.__arena; a.handleInput = () => {}; a.audio.play = () => {}; a.audio.playAll = () => {}; a.audio.voice = () => {}; const step = n => { for (let i = 0; i < n; i++) a.update(a.time.now + i * 16, 16.7); };
+ const x = a.player, e = a.enemy; x.ranks.p3 = 3; x.cds.p3 = 0; x.mana = 999; x.setAim(1, 0); e.x = x.x + 330; e.y = x.y; x.castPoint = { x: x.x + 300, y: x.y }; const log = []; const od = a.damage.bind(a); a.damage = (s, t, raw, type, dot) => { const r = od(s, t, raw, type, dot); if (t === e) log.push([Math.round(raw), type, dot ? 'dot' : 'hit', Math.round(a.gameT * 10) / 10]); return r; };
+ console.log; x.tryCast('p3'); step(60 * 5); return JSON.stringify({ ap: Math.round(x.ap), n: log.length, first: log.slice(0, 8), sum: log.reduce((s, l) => s + l[0], 0), hp: Math.round(e.hp) }); })()`));
+await b.close();

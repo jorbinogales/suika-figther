@@ -26,7 +26,18 @@
       "El juego muestra un aviso cuando se abre desde un dispositivo móvil: no está disponible para móviles.",
       "La interfaz del launcher se adapta al ancho de la pantalla.",
       "Rendimiento: se quitó el brillo por sprite (muy costoso) y se reemplazó por anillos de equipo en el suelo; las partidas con muchas unidades van mucho más fluidas.",
-      "Las comunicaciones del servidor ahora van comprimidas, usando menos ancho de banda en salas llenas."
+      "Las comunicaciones del servidor ahora van comprimidas, usando menos ancho de banda en salas llenas.",
+      "Online: la habilidad definitiva de Luis (control mental) ya funciona en partidas multijugador; quien la lanza controla al campeón enemigo y su cámara lo sigue.",
+      "Rendimiento para salas de 10 jugadores: el decorado lejano del mapa se dibuja en una sola textura, los efectos y números fuera de cámara ya no se crean y las salas grandes reciben menos actualizaciones por segundo.",
+      "Niebla de guerra: solo ves a los enemigos que tus unidades pueden ver; todo el mapa está explorado: fuera de tu visión se ve atenuado y solo se ocultan las unidades enemigas. También en el minimapa. (No se aplica en la zona de entrenamiento.)",
+      "Los sonidos y efectos fuera de la cámara ya no se reproducen.",
+      "Online: el rastro de siluetas de la F de Luis (Amenaza) ahora se ve en el multijugador.",
+      "Mapa: nuevos árboles, arbustos, rocas, flores y hongos (pack de Brendon Bancer), con un bosque más denso.",
+      "Mapa: el suelo ahora usa también los caminos de tierra y las gramas del pack de Brendon Bancer, con bordes de transición, manchas de hierba oscura y variación en la tierra.",
+      "Mapa: los campamentos neutrales se marcan con piedras pequeñas del suelo y el límite superior del mapa usa los riscos del pack junto a los árboles.",
+      "Leandro: «Lanzamiento de contrato» ahora lanza varios contratos en abanico que se separan al avanzar; al impactar infectan el área (zona verde) y envenenan a todos los que estén dentro. Escala con poder de IA.",
+      "Jorbi: la definitiva pasa a llamarse «15 Minutos más»: retrocede 5 segundos a súbditos y campeones vivos mostrando el camino recorrido; al terminar los aliados ganan escudo y velocidad y los enemigos quedan ralentizados.",
+      "Axel: «Regateador hábil» ahora crea una laptop Canaima que funciona como agujero negro: arrastra a los enemigos del área hacia el centro y explota al final causando daño de IA."
     ]
   },
   {

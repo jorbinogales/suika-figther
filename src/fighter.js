@@ -127,7 +127,7 @@ export class Fighter {
   }
 
   /* ---------- geometry ---------- */
-  hiddenFor(me) { return this.away || ((this.invis || (this.antivirus && this.owner?.invis)) && this.baseTeam !== me.baseTeam); }
+  hiddenFor(me) { return this.away || this.fogHidden || ((this.invis || (this.antivirus && this.owner?.invis)) && this.baseTeam !== me.baseTeam); }
   breakInvis() { if (this.invis) { this.invis = null; if (this.key === 'luis') this.stab = 2.5; this.w.float(this.x, this.y - this.def.height - 30, 'visible', '#9be37a'); } }
   tryMove(nx, ny) {   // forest (trees / bushes) is impassable: slide along walls
     if (isWalk(nx, this.y)) this.x = nx;
@@ -183,7 +183,7 @@ export class Fighter {
     this.running = false;
     this.deadT = 0;
     this.in = { mx: 0, my: 0, run: false };
-    this.setupStacks = 0; this.setupHits = 0;
+    this.setupStacks = 0; this.setupHits = 0; this.rw = null;
     this.cds = { p1: 0, p2: 0, p3: 0, ult: 0, basic: 0 };
     this.ink = null; this.inkDash = null; this.silenceT = 0; this.blindT = 0; this.shieldHp = 0; this.shieldT = 0; this.speedBoost = 0; this.speedT = 0; this.charmT = 0; this.team = this.baseTeam; this.malware = null;
     this.rage = 0; this.hen = false;
@@ -273,7 +273,7 @@ export class Fighter {
   }
 
   /* ---------- actions ---------- */
-  get free() { return this.alive && this.stunT <= 0 && this.state !== 'cast'; }
+  get free() { return this.alive && this.stunT <= 0 && this.state !== 'cast' && !this.rw; }
 
   startAction(anim, windup, dur, fn) {
     this.state = 'cast'; this.anim = anim;
@@ -379,12 +379,16 @@ export class Fighter {
         w.after(0.25, () => w.enemiesNear(this.team, c.x, c.y, a.radius).forEach(t => { w.damage(this, t, dmg, 'magic'); t.stun(stun); }));
         break;
       }
-      case 'leandro:p2': {
-        const total = rk(a.poisonApScale, rank) * this.ap, slow = rk(a.slow, rank);
-        w.projectile(this, {
-          speed: a.speed, dmg: rk(a.dmg, rank) + this.ap * a.apScale, type: 'magic', vfx: 'poison_dart', scale: 4.5, tint: 0xb0ff60, r: 18,
-          onHit: t => { t.slow(slow, a.slowTime); t.poison(total / a.poisonTime, a.poisonTime, this); },
-        });
+      case 'leandro:p2': {   // contracts fan out toward the front; each one that hits an enemy infects the area around it
+        const n = rk(a.count, rank), total = rk(a.poisonApScale, rank) * this.ap, rad = rk(a.areaRadius, rank), life = rk(a.areaLife, rank), dmg = rk(a.dmg, rank) + this.ap * a.apScale;
+        for (let i = 0; i < n; i++) {
+          const ang = n > 1 ? (i / (n - 1) - 0.5) * a.spread : 0;
+          w.projectile(this, {
+            ang, speed: a.speed, dmg, type: 'magic', vfx: 'poison_dart', scale: 4, tint: 0xb0ff60, r: 18,
+            onHit: t => { t.poison(total / a.poisonTime, a.poisonTime, this); },
+            onImpact: (x, y) => w.infectZone(this, x, y, rad, life, total, a.poisonTime),
+          });
+        }
         break;
       }
       case 'leandro:p3':
@@ -522,13 +526,9 @@ export class Fighter {
         w.vfx('heal', this.x, this.cy, { scale: 5 });
         break;
       }
-      case 'axel:p3': {   // shield + speed for him and nearby allies
-        w.fighters.filter(f => f.isChamp && f.alive && f.team === this.team && dist(f, this) <= a.radius).forEach(f => {
-          w.markSrc(f, 'shield'); w.markSrc(f, 'speed');
-          f.shieldHp = rk(a.shield, rank) + this.ap * a.apScale; f.shieldT = rk(a.time, rank);
-          f.speedBoost = rk(a.speedBoost, rank); f.speedT = rk(a.time, rank);
-        });
-        w.float(this.x, this.y - this.def.height - 34, '¡Escudo!', '#7ee0ff');
+      case 'axel:p3': {   // Canaima laptop: a black hole that drags nearby enemies to its centre, then explodes
+        const c = this.castPoint || w.aiPoint(this, a.range); this.castPoint = null;
+        w.blackHole(this, c.x, c.y, rk(a.radius, rank), rk(a.life, rank), a.pull, rk(a.dmg, rank) + this.ap * a.apScale);
         break;
       }
       case 'axel:ult': {   // enemies in the area switch sides, fight their own team, cannot cast
@@ -554,17 +554,11 @@ export class Fighter {
         w.moneyBurst(this, L, a.nearW, a.farW);
         break;
       }
-      case 'jorbi:ult': {   // Peneflexionada: stronger form, faster cooldowns
-        const hpBefore = this.maxHp;
-        w.markSrc(this, 'buff');
-        this.buff = { t: rk(a.duration, rank), hpMult: rk(a.hpMult, rank), atkMult: rk(a.atkMult, rank), cdSpeed: rk(a.cdSpeed, rank) };
-        this.hp += this.maxHp - hpBefore;
-        if (this.w.hasAnims(this.key + '_buff')) this.setSkin(this.key + '_buff');
-        else this.setSkin(this.key + '_buff');
-        w.zoneDecal(this.x, this.y - 6, 110, 0xff5a4a, 1.4);
-        w.vfx('buff', this.x, this.cy, { scale: 4 });
-        
-        w.float(this.x, this.y - this.def.height - 34, '¡PENEFLEXIONADA!', '#ff6a4a');
+      case 'jorbi:ult': {   // 15 Minutos más: rewinds minions and champions 5 s, then shields/speeds allies and slows enemies
+        w.zoneDecal(this.x, this.y - 6, 120, 0x66d0ff, 1.2);
+        w.vfx('shockwave', this.x, this.y - 10, { scale: 5, below: true, tint: 0x66d0ff });
+        w.float(this.x, this.y - this.def.height - 34, '¡15 MINUTOS MÁS!', '#7ee0ff');
+        w.startRewind(this, a, rank);
         break;
       }
       case 'xeviche:p1': {
@@ -702,6 +696,15 @@ export class Fighter {
     if (this.isBot) {
       this.life -= dt;
       if (this.life <= 0 || (this.owner && !this.owner.alive)) { this.dispose = true; return; }
+    }
+    if (this.rw) {   // being rewound by Jorbi's ultimate: slide back along the recorded path
+      const rw = this.rw; rw.t += dt;
+      const p = Math.min(1, rw.t / rw.dur), e = p * p * (3 - 2 * p), k = (1 - e) * (rw.path.length - 1), i = Math.floor(k), fr = k - i, A = rw.path[i], B = rw.path[Math.min(rw.path.length - 1, i + 1)];
+      this.x = A[0] + (B[0] - A[0]) * fr; this.y = A[1] + (B[1] - A[1]) * fr; this.in = { mx: 0, my: 0, run: false };
+      if (A !== B) this.setAim(A[0] - B[0], A[1] - B[1]);
+      if (this.state !== 'run') { this.state = 'run'; this.pending = null; this.playAnim('run'); }
+      if (p >= 1) { this.rw = null; this.state = 'idle'; this.playAnim('idle'); }
+      return;
     }
     for (const k in this.cds) this.cds[k] = Math.max(0, this.cds[k] - dt * (k !== 'basic' ? (this.buff ? this.buff.cdSpeed : 1) * (1 + this.it.cdr) : 1));
     if (this.ink && (this.ink.t -= dt) <= 0) this.ink = null;
@@ -876,7 +879,7 @@ export class Fighter {
       if (rk !== this.ringKey) { this.ringKey = rk; this.isChamp ? this.ring.setStrokeStyle(sel ? 5 : 3, col, sel ? 1 : 0.85).setFillStyle(col, sel ? 0.22 : 0.1) : this.ring.setStrokeStyle(sel ? 3 : 2, col, sel ? 1 : 0.75).setFillStyle(col, sel ? 0.25 : 0.14); }   // restyle only when something changed
     }
     this.shadow.setPosition(this.x, this.y).setDepth(this.y - 1).setAlpha(this.alive ? 0.45 : 0.25);
-    if (this.away || this.invis || (this.antivirus && this.owner?.invis)) { const hid = this.hiddenFor(this.w.player), al = hid ? 0 : 0.4; spr.setAlpha(al); this.shadow.setAlpha(al * 0.45); }
+    if (this.away || this.fogHidden || this.invis || (this.antivirus && this.owner?.invis)) { const hid = this.hiddenFor(this.w.player), al = hid ? 0 : 0.4; spr.setAlpha(al); this.shadow.setAlpha(al * 0.45); }
     if (this.isTower && !this.alive) { spr.setPosition(this.x, this.y).setAlpha(1).setDepth(this.y - 4); return; }   // wreck/rubble stays on the ground
     if (this.dirFrames) {   // tower: pick the sprite that points where it shoots
       if (!this.alive) { spr.setPosition(this.x, this.y).setAlpha(1).setDepth(this.y - 4); return; }   // wreck/rubble stays on the ground
