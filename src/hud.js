@@ -5,7 +5,7 @@ import { walk, GW, GH, CELL } from './mapdata.js';
 import { levelGauge } from './world.js';
 import { vol, saveVol } from './audio.js';
 import { net } from './net.js';
-import { ITEMS, ITEM_BY_ID, CATS, CAT_COL, STAT_LABEL, fmtStat, sellValue, buyPlan, recipeTree } from './items.js';
+import { ITEMS, ITEM_BY_ID, CATS, CAT_COL, STAT_LABEL, fmtStat, sellValue, buyPlan, recipeTree, PERMS, PERM_BY_ID, PERM_COST } from './items.js';
 
 // HUD = separate floating modules built on Codex art (art/raw/ui -> tools/process_ui.py -> public/assets/ui).
 // Each element is placed in its hole. Layout (empty space between modules on purpose):
@@ -48,6 +48,8 @@ const FIELD = { count: ['Contratos', ''], areaRadius: ['Radio del área', ''], a
   mrPer: ['Res. a la IA por pila', ''], silence: ['Silencio', 's'], stunAfter: ['Stun tras (s)', 's'], drops: ['Rondas de gotas', ''], amp: ['Curvatura', ''], blind: ['Ceguera', 's'], charm: ['Duración de control', 's'], hps: ['Curación por seg', ''], shield: ['Escudo', ''], speedBoost: ['Velocidad extra', '%'], time: ['Duración', 's'], critMult: ['Daño crítico (x)', ''], dashDist: ['Distancia del dash', ''], window: ['Tiempo para usar dashes', 's'], duration: ['Duración', 's'], hpMult: ['Vida (x)', ''], atkMult: ['Ataque (x)', ''], cdSpeed: ['Recarga de poderes (x)', ''], reqLvl: ['Nivel requerido', ''], radius: ['Radio', ''], melee: ['Bots cuerpo a cuerpo', ''], ranged: ['Bots a distancia', ''] };
 const fmt = (k, v) => (FIELD[k][1] === '%' ? `${Math.round(v * 100)}%` : `${v}${FIELD[k][1]}`);
 
+const LV_COL = { 1: 0x9aa0ab, 2: 0x3fbf5f, 3: 0xa45cff, perm: 0xff4a4a }, LV_HEX = { 1: '#c4c9d3', 2: '#6dff93', 3: '#c9a0ff', perm: '#ff8a8a' };
+
 export class Hud extends Phaser.Scene {
   constructor() { super('hud'); }
 
@@ -66,7 +68,8 @@ export class Hud extends Phaser.Scene {
       this.layout[n] = L[n] || MODS[n];
       if (this.textures.exists('ui_' + n)) this.panels[n] = this.add.image(0, 0, 'ui_' + n).setOrigin(0, 0).setDepth(2.5);
     });
-    this.shopOpen = false; this.shopCat = 'all'; this.shopSel = null; this.shopScroll = 0; this.shopBtns = []; this.slotBtns = [];
+    let sv = {}; try { sv = JSON.parse(localStorage.getItem('suika_shop') || '{}'); } catch (e) { /* ignore */ }   // shop tab / filter survive closing the shop, new matches and reloads
+    this.shopOpen = false; this.shopStat = sv.stat || null; this.shopCat = sv.cat || 'all'; this.shopSel = null; this.shopScroll = 0; this.shopBtns = []; this.slotBtns = [];
     this.shopG = this.add.graphics().setDepth(30);
     this.input.on('wheel', (ptr, over, dx, dy) => { if (this.shopOpen) this.shopScroll += dy > 0 ? 1 : -1; });
     this.input.on('pointerdown', ptr => {
@@ -144,6 +147,7 @@ export class Hud extends Phaser.Scene {
     if (A.control && A.control.mode === 'ctrl') this.T('ctrlT', `CONTROLANDO a ${A.control.target.def.name.toUpperCase()} · ${A.control.t.toFixed(1)}s`, W / 2, 90 * u, { size: 18 * u, bold: true, color: '#33ff88', origin: [0.5, 0], stroke: 4 });
 
     this.drawBanner(A, u, W);
+    if (A.net && (!net.online || A.netLost)) this.T('reconn', 'RECONECTANDO…', W / 2, H / 2 - 120 * u, { size: 30 * u, bold: true, color: '#ffd23f', origin: [0.5, 0.5], stroke: 6, depth: 25 });
     {   // Jorbi's "15 Minutos más": golden glow around every player's screen while it lasts, and an hourglass announcement
       const G = A.rwGlow, gg = this.glowG || (this.glowG = this.add.graphics().setDepth(0.6)); gg.clear();
       if (G) {
@@ -230,6 +234,8 @@ export class Hud extends Phaser.Scene {
     if (tipSlot >= 0) this.itemTip(p.inv[tipSlot], Ri('item' + tipSlot), u);
     const gx0 = m * 0.6 + this.layout.hud_items.w * u / 2, gy0 = iy + this.layout.hud_items.h * u + 6 * u;
     this.T('gold', `ORO ${Math.floor(p.gold)}`, gx0, gy0, { size: 15 * u, color: '#ffd23f', bold: true, origin: [0.5, 0] });
+    { const own = Object.keys(p.perm || {}).filter(k => p.perm[k] > 0);   // permanent upgrades you own: small red chips under the gold
+      own.forEach((k, i) => { const x = gx0 - 52 * u + (i % 6) * 18 * u, y = gy0 + 54 * u + Math.floor(i / 6) * 18 * u; g.fillStyle(0x3a0d10, 1).fillRect(x, y, 16 * u, 16 * u).lineStyle(1, 0xff4a4a, 1).strokeRect(x, y, 16 * u, 16 * u); if (this.textures.exists('stat_' + k)) this.iconImg('pmh' + k, 'stat_' + k, x + 8 * u, y + 8 * u, 13 * u, 3.4); this.T('pmc' + k, `${p.perm[k]}`, x + 16 * u, y + 15 * u, { size: 8 * u, bold: true, origin: [1, 1], color: '#ffe27a', depth: 5 }); }); }
     this.shopPrompt = A.canShop(p) && !this.shopOpen ? { x: gx0 - 58 * u, y: gy0 + 24 * u, w: 116 * u, h: 26 * u } : null;
     if (this.shopPrompt) {
       const sp = this.shopPrompt, ptrS = this.input.activePointer, overS = ptrS.x >= sp.x && ptrS.x <= sp.x + sp.w && ptrS.y >= sp.y && ptrS.y <= sp.y + sp.h;
@@ -320,17 +326,38 @@ export class Hud extends Phaser.Scene {
   // neutral square behind the item icon; small pips show the crafting level (1-3)
   tile(g, key, id, q, depth, alpha = 1) {
     const it = ITEM_BY_ID[id];
-    g.fillStyle(0x1b2436, alpha).fillRect(q.x, q.y, q.w, q.h).fillStyle(0x2a3650, 0.5 * alpha).fillRect(q.x, q.y, q.w, q.h * 0.45).lineStyle(2, 0x56688a, alpha).strokeRect(q.x, q.y, q.w, q.h);
+    const col = LV_COL[it.lvl];   // crafting level colour: basic = grey, level 2 = green, level 3 = purple
+    g.fillStyle(col, 0.34 * alpha).fillRect(q.x, q.y, q.w, q.h).fillStyle(col, 0.2 * alpha).fillRect(q.x, q.y, q.w, q.h * 0.45).lineStyle(2, col, alpha).strokeRect(q.x, q.y, q.w, q.h);
     const tex = 'item_' + id, sz = Math.min(q.w, q.h) * 0.86;
     if (this.textures.exists(tex)) this.iconImg(key, tex, q.x + q.w / 2, q.y + q.h / 2, sz, depth + 0.2).setAlpha(alpha);
     else this.T(key + 'f', it.name.slice(0, 2).toUpperCase(), q.x + q.w / 2, q.y + q.h / 2, { size: q.h * 0.4, bold: true, origin: [0.5, 0.5], depth: depth + 0.5 });
-    const ps = Math.max(3, q.w * 0.08); for (let i = 0; i < it.lvl; i++) g.fillStyle(0xdfe8ff, alpha).fillRect(q.x + 3 + i * (ps + 2), q.y + q.h - ps - 3, ps, ps);
+    const ps = Math.max(3, q.w * 0.08); for (let i = 0; i < it.lvl; i++) g.fillStyle(col, alpha).fillRect(q.x + 3 + i * (ps + 2), q.y + q.h - ps - 3, ps, ps);
   }
   statStr(it) {
     const parts = Object.keys(it.stats).map(k => `${fmtStat(k, it.stats[k])} ${STAT_LABEL[k]}`);
     if (it.consumable) { const c = it.consumable; if (c.hp) parts.push(`cura ${c.hp} vida`); if (c.mana) parts.push(`${c.mana} maná`); }
     if (it.active) parts.push(`activo (enfriamiento ${it.active.cd}s)`);
     return parts.join(' · ') || '—';
+  }
+  // permanent-upgrade card: red "prompt" card with the advantage's logo
+  permTile(g, key, pm, q, depth, have, alpha = 1) {
+    g.fillStyle(0x3a0d10, alpha).fillRect(q.x, q.y, q.w, q.h).fillStyle(0xff4a4a, 0.3 * alpha).fillRect(q.x, q.y, q.w, q.h * 0.45).lineStyle(2, 0xff4a4a, alpha).strokeRect(q.x, q.y, q.w, q.h);
+    g.fillStyle(0x1a0507, alpha).fillRect(q.x + 5, q.y + 5, q.w - 10, q.h * 0.2); this.T(key + 'pr', '> prompt_', q.x + 7, q.y + 6, { size: Math.max(7, q.w * 0.14), color: '#ff8a8a', depth: depth + 0.5, stroke: 0 }).setAlpha(alpha);
+    const tx = 'stat_' + pm.stat;
+    if (this.textures.exists(tx)) this.iconImg(key + 'ic', tx, q.x + q.w / 2, q.y + q.h * 0.6, q.w * 0.56, depth + 0.2).setAlpha(alpha);
+    if (have > 0) this.T(key + 'ct', `x${have}`, q.x + q.w - 3, q.y + q.h - 2, { size: Math.max(9, q.w * 0.2), bold: true, origin: [1, 1], color: '#ffe27a', depth: depth + 0.6, stroke: 3 });
+  }
+  permPanel(g, p, pm, dx, dw, top, bottom, u, D, bev, head, sbtn) {
+    const have = p.perm[pm.stat] || 0, nxt = PERM_COST, q = { x: dx + dw / 2 - 40 * u, y: top + 30 * u, w: 80 * u, h: 80 * u };
+    this.T('pmN', pm.name.toUpperCase(), dx + 4 * u, top, { size: 17 * u, bold: true, color: '#ff8a8a', depth: D + 1 }).setWordWrapWidth(dw, true);
+    bev(dx - 4 * u, top + 26 * u, dw + 8 * u, bottom - top - 36 * u, 8 * u, 0x0a1224, 1, 0xff4a4a, 0.5, 1);
+    this.permTile(g, 'pmBig', pm, q, D, have, 1);
+    this.T('pmV', `${STAT_LABEL[pm.stat]}  ${fmtStat(pm.stat, pm.per)} por compra`, dx + dw / 2, q.y + q.h + 12 * u, { size: 14 * u, bold: true, color: '#ffe27a', origin: [0.5, 0], depth: D + 1, stroke: 2 });
+    this.T('pmL', `Compradas: ${have}`, dx + dw / 2, q.y + q.h + 36 * u, { size: 14 * u, color: '#ffffff', origin: [0.5, 0], depth: D + 1, stroke: 2 });
+    this.T('pmT', `Total ahora: ${have ? fmtStat(pm.stat, pm.per * have) : '+0'}   →   al comprar: ${fmtStat(pm.stat, pm.per * (have + 1))}`, dx + dw / 2, q.y + q.h + 62 * u, { size: 12 * u, color: '#9fe8ff', origin: [0.5, 0], depth: D + 1, stroke: 2 });
+    const d = this.T('pmD', pm.desc, dx + 10 * u, q.y + q.h + 96 * u, { size: 12 * u, color: '#aab8d0', depth: D + 1, stroke: 2 }); d.setWordWrapWidth(dw - 20 * u, true);
+    const by = bottom, bh = 44 * u, label = p.gold < nxt ? `FALTA ORO (${nxt})` : `COMPRAR ${nxt}`;
+    sbtn('pbuy', label, { x: dx, y: by, w: dw, h: bh }, p.canBuyPerm(pm.stat), () => p.buyPerm(pm.stat), 0x7a1d22);
   }
   itemTip(sl, q, u) {
     const it = ITEM_BY_ID[sl.id], g = this.tipG, w = 270 * u, x = q.x + q.w + 14 * u;
@@ -341,6 +368,7 @@ export class Hud extends Phaser.Scene {
     h += 8 * u; g.fillStyle(0x070b14, 0.96).fillRect(x, y, w, h).lineStyle(2, 0x56688a, 0.95).strokeRect(x, y, w, h);
     let yy = y + 6 * u; ts.forEach(r => { r.t.setPosition(x + 10 * u, yy); yy += r.h; });
   }
+  saveShop() { try { localStorage.setItem('suika_shop', JSON.stringify({ cat: this.shopCat, stat: this.shopStat })); } catch (e) { /* ignore */ } }
   toggleShop() {
     const A = this.scene.get('arena');
     if (this.shopOpen) { this.shopOpen = false; return; }
@@ -350,46 +378,87 @@ export class Hud extends Phaser.Scene {
     this.shopBtns = []; const g = this.shopG; g.clear();
     if (this.shopOpen && (!A.canShop(p) || A.paused || (A.over && A.over.t > 2.4))) this.shopOpen = false;
     if (!this.shopOpen) return;
-    const pw = Math.min(W - 30, 1100 * u), ph = Math.min(H - 30, 660 * u), x0 = (W - pw) / 2, y0 = (H - ph) / 2, pad = 14 * u, D = 32;
+    const pw = Math.min(W - 24, 1200 * u), ph = Math.min(H - 24, 690 * u), x0 = (W - pw) / 2, y0 = (H - ph) / 2, pad = 16 * u, D = 32;
     this.boxes.push({ x: 0, y: 0, w: W, h: H });
-    g.fillStyle(0x000000, 0.6).fillRect(0, 0, W, H).fillStyle(0x070b14, 0.98).fillRect(x0, y0, pw, ph).lineStyle(3, 0x3fd0ff, 0.9).strokeRect(x0, y0, pw, ph);
+    // chamfered panels (same look as the launcher windows)
+    const bev = (x, y, w, h, c, fc, fa, lc, la, lw = 2) => { const P = [{ x: x + c, y }, { x: x + w - c, y }, { x: x + w, y: y + c }, { x: x + w, y: y + h - c }, { x: x + w - c, y: y + h }, { x: x + c, y: y + h }, { x, y: y + h - c }, { x, y: y + c }]; g.fillStyle(fc, fa).fillPoints(P, true); g.lineStyle(lw, lc, la).strokePoints(P, true); };
+    const head = (id, label, x, y) => { g.fillStyle(0xffd23f, 1).fillRect(x, y + 2 * u, 4 * u, 14 * u); this.T(id, label, x + 11 * u, y, { size: 13 * u, bold: true, color: '#7ee0ff', depth: D + 1, stroke: 2 }); };
+    g.fillStyle(0x000000, 0.66).fillRect(0, 0, W, H);
+    bev(x0, y0, pw, ph, 16 * u, 0x070d1a, 0.985, 0x3fd0ff, 0.95, 3);
+    g.lineStyle(1, 0x3fd0ff, 0.25).strokeRect(x0 + 8 * u, y0 + 8 * u, pw - 16 * u, ph - 16 * u);
     const ptr = this.input.activePointer, over = q => ptr.x >= q.x && ptr.x <= q.x + q.w && ptr.y >= q.y && ptr.y <= q.y + q.h;
     const sbtn = (id, label, q, en, fn, col = 0x1d3a5c, tc = '#fff') => {
-      g.fillStyle(!en ? 0x1a1f2a : over(q) ? 0x2e6aa8 : col).fillRect(q.x, q.y, q.w, q.h).lineStyle(2, en ? 0x3fd0ff : 0x3a4252, 0.9).strokeRect(q.x, q.y, q.w, q.h);
+      bev(q.x, q.y, q.w, q.h, Math.min(8 * u, q.h * 0.3), !en ? 0x151a24 : over(q) ? 0x2e6aa8 : col, 1, en ? 0x3fd0ff : 0x3a4252, 0.95);
+      if (en) g.fillStyle(0xffffff, 0.12).fillRect(q.x + 8 * u, q.y + 3, q.w - 16 * u, Math.max(2, q.h * 0.16));
       this.T('sb' + id, label, q.x + q.w / 2, q.y + q.h / 2, { size: Math.min(q.h * 0.42, q.w / (label.length * 0.62)), bold: true, origin: [0.5, 0.5], color: en ? tc : '#5d6676', stroke: 2, depth: D + 1 });
       if (en) this.shopBtns.push({ ...q, fn });
     };
-    this.T('shT', 'TIENDA DE LA BASE', x0 + pad, y0 + pad * 0.7, { size: 22 * u, bold: true, color: '#7ee0ff', depth: D + 1 });
-    this.T('shGold', `ORO ${Math.floor(p.gold)}`, x0 + pw - pad * 2 - 40 * u, y0 + pad * 0.8, { size: 20 * u, bold: true, color: '#ffd23f', origin: [1, 0], depth: D + 1 });
-    sbtn('x', 'X', { x: x0 + pw - pad - 34 * u, y: y0 + pad * 0.5, w: 34 * u, h: 34 * u }, true, () => { this.shopOpen = false; }, 0x5c1d1d);
+    head('shT', 'TIENDA DE LA BASE', x0 + pad * 1.4, y0 + 14 * u);
+    this.T('shGold', `ORO  ${Math.floor(p.gold)}`, x0 + pw - pad * 2 - 50 * u, y0 + 13 * u, { size: 20 * u, bold: true, color: '#ffd23f', origin: [1, 0], depth: D + 1 });
+    sbtn('x', 'X', { x: x0 + pw - pad - 34 * u, y: y0 + 10 * u, w: 34 * u, h: 30 * u }, true, () => { this.shopOpen = false; }, 0x5c1d1d);
 
-    // tabs
-    const gw = pw * 0.58 - pad, gx = x0 + pad, ty = y0 + 52 * u, SH = { all: 'TODOS', basic: 'BÁSICOS', ad: 'ATAQUE', ap: 'PODER IA', arm: 'ARMADURA', mr: 'RESIST. IA', hp: 'VIDA', util: 'UTILIDAD', rec: 'RECUP.' };
+    // ---- left column: category tabs + items grouped by level ----
+    const fcw = 50 * u, gw = pw * 0.56 - pad - fcw - 8 * u, gx = x0 + pad * 1.4 + fcw + 8 * u, gx0 = x0 + pad * 1.4, ty = y0 + 52 * u, SH = { all: 'TODOS', basic: 'BÁSICOS', ad: 'ATAQUE', ap: 'PODER IA', arm: 'ARMADURA', mr: 'RESIST. IA', hp: 'VIDA', util: 'UTILIDAD', rec: 'RECUP.', perm: 'MEJORAS' };
     const cats = Object.keys(SH), tw = gw / cats.length;
-    cats.forEach((c, i) => sbtn('tab' + c, SH[c], { x: gx + i * tw, y: ty, w: tw - 3 * u, h: 28 * u }, true, () => { this.shopCat = c; this.shopScroll = 0; }, this.shopCat === c ? 0x2e6aa8 : 0x10213a, c === 'all' ? '#fff' : CAT_COL[c]));
-
-    // grid
-    const cs = 60 * u, gap = 8 * u, cellH = cs + 17 * u, gy = ty + 38 * u, invH = 104 * u, gh = ph - (gy - y0) - invH - pad, cols = Math.max(1, Math.floor((gw + gap) / (cs + gap)));
-    const list = ITEMS.filter(i => this.shopCat === 'all' || (this.shopCat === 'basic' ? i.lvl === 1 : i.cat === this.shopCat)).sort((a, b) => a.lvl - b.lvl), vis = Math.max(1, Math.floor((gh + gap) / (cellH + gap))), maxS = Math.max(0, Math.ceil(list.length / cols) - vis);
+    cats.forEach((c, i) => sbtn('tab' + c, SH[c], { x: gx + i * tw, y: ty, w: tw - 3 * u, h: 28 * u }, true, () => { this.shopCat = c; this.shopScroll = 0; this.saveShop(); }, this.shopCat === c ? 0x2e6aa8 : 0x10213a, c === 'all' ? '#fff' : c === 'basic' ? '#dfe8ff' : c === 'perm' ? '#ff8a8a' : CAT_COL[c]));
+    const cs = 60 * u, gap = 8 * u, cellH = cs + 17 * u, gy = ty + 38 * u, invH = 110 * u, gh = ph - (gy - y0) - invH - pad * 1.3, cols = Math.max(1, Math.floor((gw + gap) / (cs + gap)));
+    bev(gx - 6 * u, gy - 6 * u, gw + 12 * u, gh + 12 * u, 8 * u, 0x0a1224, 1, 0x2a3650, 1, 1);
+    const STAT_KEYS = ['atk', 'ap', 'armor', 'mr', 'hp', 'mana', 'speed', 'aspd', 'lifesteal', 'cdr', 'hpRegen', 'manaRegen'], fl = this.shopStat;
+    {   // filter by advantage: vertical column on the left; the first entry (TODOS) clears the filter
+      const colTop = ty, colH = (y0 + ph - pad * 1.3 - 62 * u - 30 * u) - colTop, n13 = STAT_KEYS.length + 1, cg = 4 * u, cc = Math.min(fcw - 8 * u, (colH - 20 * u - (n13 - 1) * cg) / n13);
+      bev(gx0 - 4 * u, colTop, fcw + 4 * u, colH, 8 * u, 0x0a1224, 1, 0x2a3650, 1, 1);
+      let hov = null;
+      for (let i = 0; i < n13; i++) {
+        const k = i === 0 ? null : STAT_KEYS[i - 1], q = { x: gx0 + (fcw - cc) / 2 - 2 * u, y: colTop + 10 * u + i * (cc + cg), w: cc, h: cc }, on = fl === k, tx = 'stat_' + k;
+        g.fillStyle(on ? 0x3a3014 : 0x121b2e, 1).fillRect(q.x, q.y, q.w, q.h).lineStyle(on ? 3 : 1, on ? 0xffd23f : over(q) ? 0x7ee0ff : 0x36486a, 1).strokeRect(q.x, q.y, q.w, q.h);
+        if (k === null) this.T('flAll', 'TODOS', q.x + q.w / 2, q.y + q.h / 2, { size: cc * 0.27, bold: true, origin: [0.5, 0.5], color: on ? '#ffd23f' : '#9fe8ff', depth: D + 1, stroke: 2 });
+        else if (this.textures.exists(tx)) this.iconImg('flt' + i, tx, q.x + q.w / 2, q.y + q.h / 2, q.w * 0.8, D + 0.4);
+        else this.T('fl' + k, STAT_LABEL[k].slice(0, 3).toUpperCase(), q.x + q.w / 2, q.y + q.h / 2, { size: q.h * 0.3, bold: true, origin: [0.5, 0.5], color: '#9fe8ff', depth: D + 1 });
+        if (over(q)) hov = k === null ? 'Todos los objetos' : STAT_LABEL[k];
+        this.shopBtns.push({ ...q, fn: () => { this.shopStat = k; this.shopScroll = 0; this.saveShop(); } });
+      }
+      this.fltHover = hov;
+    }
+    const list = ITEMS.filter(i => this.shopCat !== 'perm' && (this.shopCat === 'all' || (this.shopCat === 'basic' ? i.lvl === 1 : i.cat === this.shopCat)) && (!fl || i.stats[fl] > 0 || (fl === 'hp' && i.consumable?.hp) || (fl === 'mana' && i.consumable?.mana)));
+    const LVT = { 1: 'NIVEL 1 · COMPONENTES BÁSICOS', 2: 'NIVEL 2 · OBJETOS COMBINADOS', 3: 'NIVEL 3 · OBJETOS AVANZADOS' }, rows = [];
+    for (const lv of [1, 2, 3]) { const its = list.filter(i => i.lvl === lv); if (!its.length) continue; rows.push({ hdr: LVT[lv], lv, h: 26 * u }); for (let k = 0; k < its.length; k += cols) rows.push({ its: its.slice(k, k + cols), h: cellH + gap }); }
+    const pl2 = (this.shopCat === 'all' || this.shopCat === 'perm') ? PERMS.filter(q => !fl || q.stat === fl) : [];
+    if (pl2.length) { rows.push({ hdr: 'MEJORAS PERMANENTES · se compran varias veces', lv: 'perm', h: 26 * u }); for (let k = 0; k < pl2.length; k += cols) rows.push({ its: pl2.slice(k, k + cols), h: cellH + gap }); }
+    let maxS = 0; { let acc = 0; for (let i = rows.length - 1; i >= 0; i--) { acc += rows[i].h; if (acc > gh) { maxS = i + 1; break; } } }
     this.shopScroll = Phaser.Math.Clamp(this.shopScroll, 0, maxS);
-    for (let r = 0; r < vis; r++) for (let c = 0; c < cols; c++) {
-      const it = list[(r + this.shopScroll) * cols + c]; if (!it) continue;
-      const q = { x: gx + c * (cs + gap), y: gy + r * (cellH + gap), w: cs, h: cs }, si = p.slotOf(it.id), pl = buyPlan(p.inv, it.id), afford = pl.ok && p.gold >= pl.gold, key = 'g' + (r * cols + c);
-      this.tile(g, key, it.id, q, D, afford || si >= 0 ? 1 : 0.5);
-      if (this.shopSel === it.id) g.lineStyle(3, 0xffffff, 1).strokeRect(q.x - 2, q.y - 2, q.w + 4, q.h + 4);
-      this.T('gp' + key, si >= 0 ? 'TIENES' : `${pl.gold}`, q.x + q.w / 2, q.y + q.h + 2 * u, { size: 11 * u, bold: true, origin: [0.5, 0], color: si >= 0 ? '#7dff9a' : afford ? '#ffd23f' : '#ff6a6a', stroke: 2, depth: D + 1 });
-      this.shopBtns.push({ x: q.x, y: q.y, w: cs, h: cellH, fn: () => { this.shopSel = it.id; this.shopSlot = null; } });
+    let yy = gy, n = 0;
+    if (!rows.length) this.T('shNone', 'Ningún objeto da esa ventaja en esta categoría', gx + gw / 2, gy + 40 * u, { size: 13 * u, color: '#7a8db3', origin: [0.5, 0], depth: D + 1 });
+    for (let ri = this.shopScroll; ri < rows.length; ri++) {
+      const row = rows[ri]; if (yy + row.h > gy + gh + gap) break;
+      if (row.hdr) { g.fillStyle(LV_COL[row.lv], 1).fillRect(gx, yy + 4 * u, 5 * u, 14 * u); g.fillStyle(LV_COL[row.lv], 0.3).fillRect(gx + 10 * u, yy + 11 * u, gw - 10 * u, 1); this.T('shH' + n, row.hdr, gx + 12 * u, yy + 2 * u, { size: 11 * u, bold: true, color: LV_HEX[row.lv], depth: D + 1, stroke: 2 }); yy += row.h; n++; continue; }
+      row.its.forEach((it, c) => {
+        if (it.perm) {   // permanent upgrade card: always the same red card, only the logo changes
+          const q = { x: gx + c * (cs + gap), y: yy, w: cs, h: cs }, have = p.perm[it.stat] || 0, key = 'pm' + n + '_' + c, afford = p.canBuyPerm(it.stat);
+          this.permTile(g, key, it, q, D, have, afford ? 1 : 0.55);
+          if (this.shopSel === it.id) g.lineStyle(3, 0xffffff, 1).strokeRect(q.x - 2, q.y - 2, q.w + 4, q.h + 4);
+          this.T('gp' + key, `${PERM_COST}`, q.x + q.w / 2, q.y + q.h + 2 * u, { size: 11 * u, bold: true, origin: [0.5, 0], color: afford ? '#ffd23f' : '#ff6a6a', stroke: 2, depth: D + 1 });
+          this.shopBtns.push({ x: q.x, y: q.y, w: cs, h: cellH, fn: () => { this.shopSel = it.id; this.shopSlot = null; } });
+          return;
+        }
+        const q = { x: gx + c * (cs + gap), y: yy, w: cs, h: cs }, si = p.slotOf(it.id), pl = buyPlan(p.inv, it.id), afford = pl.ok && p.gold >= pl.gold, key = 'g' + n + '_' + c;
+        this.tile(g, key, it.id, q, D, afford || si >= 0 ? 1 : 0.5);
+        Object.keys(it.stats).slice(0, 2).forEach((k, j) => { const tx = 'stat_' + k; if (this.textures.exists(tx)) this.iconImg(key + 's' + j, tx, q.x + q.w - 9 * u, q.y + 9 * u + j * 17 * u, 15 * u, D + 0.6); });   // the advantages it gives
+        if (this.shopSel === it.id) g.lineStyle(3, 0xffffff, 1).strokeRect(q.x - 2, q.y - 2, q.w + 4, q.h + 4);
+        this.T('gp' + key, si >= 0 ? 'TIENES' : `${pl.gold}`, q.x + q.w / 2, q.y + q.h + 2 * u, { size: 11 * u, bold: true, origin: [0.5, 0], color: si >= 0 ? '#7dff9a' : afford ? '#ffd23f' : '#ff6a6a', stroke: 2, depth: D + 1 });
+        this.shopBtns.push({ x: q.x, y: q.y, w: cs, h: cellH, fn: () => { this.shopSel = it.id; this.shopSlot = null; } });
+      });
+      yy += row.h; n++;
     }
     if (maxS > 0) {
-      sbtn('up', '▲', { x: gx + gw - 56 * u, y: gy + gh + 4 * u, w: 26 * u, h: 24 * u }, this.shopScroll > 0, () => { this.shopScroll--; });
-      sbtn('dn', '▼', { x: gx + gw - 26 * u, y: gy + gh + 4 * u, w: 26 * u, h: 24 * u }, this.shopScroll < maxS, () => { this.shopScroll++; });
+      sbtn('up', '▲', { x: gx + gw - 60 * u, y: gy + gh + 10 * u, w: 28 * u, h: 24 * u }, this.shopScroll > 0, () => { this.shopScroll--; });
+      sbtn('dn', '▼', { x: gx + gw - 28 * u, y: gy + gh + 10 * u, w: 28 * u, h: 24 * u }, this.shopScroll < maxS, () => { this.shopScroll++; });
     }
 
     // inventory strip
-    const iy = y0 + ph - pad - invH + 30 * u;
-    this.T('shInv', 'INVENTARIO (clic para ver · teclas 1-6 para usar)', gx, iy - 22 * u, { size: 11 * u, bold: true, color: '#7ee0ff', stroke: 2, depth: D + 1 });
+    const iy = y0 + ph - pad * 1.3 - 62 * u;
+    head('shInv', 'INVENTARIO · clic para ver · teclas 1-6 para usar', gx0, iy - 24 * u);
     for (let i = 0; i < 6; i++) {
-      const q = { x: gx + i * (58 * u + 10 * u), y: iy, w: 58 * u, h: 58 * u }, sl = p.inv[i];
+      const q = { x: gx0 + i * (58 * u + 10 * u), y: iy, w: 58 * u, h: 58 * u }, sl = p.inv[i];
       if (!sl) { g.fillStyle(0x0d1422, 1).fillRect(q.x, q.y, q.w, q.h).lineStyle(1, 0x2a3650, 1).strokeRect(q.x, q.y, q.w, q.h); continue; }
       this.tile(g, 'inv' + i, sl.id, q, D);
       if (this.shopSel === sl.id && (this.shopSlot ?? i) === i) g.lineStyle(3, 0xffffff, 1).strokeRect(q.x - 2, q.y - 2, q.w + 4, q.h + 4);
@@ -398,34 +467,49 @@ export class Hud extends Phaser.Scene {
     }
 
     // right column: title, recipe tree, action buttons
-    const dx = gx + gw + pad * 1.5, dw = x0 + pw - pad - dx, it = ITEM_BY_ID[this.shopSel || ITEMS[0].id];
+    const dx = gx + gw + pad * 1.5, dw = x0 + pw - pad - dx;
+    if (PERM_BY_ID[this.shopSel]) { this.permPanel(g, p, PERM_BY_ID[this.shopSel], dx, dw, y0 + 52 * u, y0 + ph - pad * 1.3 - 46 * u, u, D, bev, head, sbtn); return; }
+    const it = ITEM_BY_ID[this.shopSel] || ITEMS[0];
     const owned = p.inv.map((sl, i) => (sl && sl.id === it.id ? i : -1)).filter(i => i >= 0), sellSlot = owned.includes(this.shopSlot) ? this.shopSlot : owned[0], sl = sellSlot !== undefined ? p.inv[sellSlot] : null;
-    let dy = y0 + 52 * u;
-    this.T('dN', it.name.toUpperCase(), dx, dy, { size: 18 * u, bold: true, color: '#ffffff', depth: D + 1 }).setWordWrapWidth(dw, true); dy += 28 * u;
-    const st = this.T('dS', this.statStr(it), dx, dy, { size: 11 * u, color: '#9fe8ff', depth: D + 1, stroke: 2 }); st.setWordWrapWidth(dw, true); dy += st.height + 6 * u;
+    const fy = y0 + 52 * u;
+    let dy = fy;
+    this.T('dN', it.name.toUpperCase(), dx + 4 * u, dy, { size: 17 * u, bold: true, color: '#ffffff', depth: D + 1 }).setWordWrapWidth(dw, true); dy += 26 * u;
+    const st = this.T('dS', this.statStr(it), dx + 4 * u, dy, { size: 11 * u, color: '#9fe8ff', depth: D + 1, stroke: 2 }); st.setWordWrapWidth(dw, true); dy += st.height + 6 * u;
+    const ups = ITEMS.filter(i => i.recipe && i.recipe.includes(it.id));   // what this item can become one level up
     {   // recipe tree: the item on top, its components below (up to 3 crafting levels). Owned components are marked: they are consumed when you craft.
-      const by0 = y0 + ph - pad - 46 * u, tx = dx, tt0 = dy, th = by0 - 10 * u - tt0, rowH = (th - 24 * u) / 3, ts = Math.min(52 * u, rowH - 26 * u), tree = recipeTree(p.inv, it.id);
-      g.fillStyle(0x0a1224, 1).fillRect(tx, tt0, dw, th).lineStyle(1, 0x2a3650, 1).strokeRect(tx, tt0, dw, th);
-      this.T('trH', 'ÁRBOL DE CRAFTEO', tx + 10 * u, tt0 + 6 * u, { size: 12 * u, bold: true, color: '#7ee0ff', depth: D + 1, stroke: 2 });
+      const upH = ups.length ? 74 * u : 0, by0 = y0 + ph - pad * 1.3 - 46 * u, tx = dx, tt0 = dy, th = by0 - 10 * u - tt0 - upH, rowH = (th - 24 * u) / 3, ts = Math.min(52 * u, rowH - 26 * u), tree = recipeTree(p.inv, it.id), GOLD = 0xffd23f;
+      const done = nd => nd.owned || (nd.children.length > 0 && nd.children.every(done));   // a node is complete when you own it or own everything under it
+      const pulse = 0.65 + 0.35 * Math.sin(this.time.now / 260);
+      bev(tx - 4 * u, tt0, dw + 8 * u, th, 8 * u, 0x0a1224, 1, 0x2a3650, 1, 1);
+      head('trH', 'ÁRBOL DE CRAFTEO', tx + 4 * u, tt0 + 6 * u);
       let n = 0;
+      const glow = (q, w) => { g.lineStyle(w + 6, GOLD, 0.25 * pulse).strokeRect(q.x - 4, q.y - 4, q.w + 8, q.h + 8); g.lineStyle(w, 0xffe27a, 1).strokeRect(q.x - 2, q.y - 2, q.w + 4, q.h + 4); };
       const place = (node, depth, xl, xr, parent) => {
-        const cx = (xl + xr) / 2, cy = tt0 + 24 * u + depth * rowH, q = { x: cx - ts / 2, y: cy, w: ts, h: ts }, c = ITEM_BY_ID[node.id], k = n++;
-        if (parent) g.lineStyle(2, 0x4b5870, 1).lineBetween(parent.x, parent.y + ts, cx, cy);
-        this.tile(g, 'tr' + k, node.id, q, D, depth === 0 || node.owned ? 1 : 0.75);
-        g.lineStyle(depth === 0 ? 3 : 2, depth === 0 ? 0xffffff : node.owned ? 0x5dff8a : 0x56688a, 1).strokeRect(q.x - 2, q.y - 2, q.w + 4, q.h + 4);
-        const lw = Math.max(60 * u, Math.min(dw / (depth === 2 ? 4 : depth === 1 ? 2 : 1), 150 * u)), lab = this.T('trL' + k, c.name, cx, cy + ts + 3 * u, { size: 10 * u, color: '#cfe0ff', depth: D + 1, stroke: 2, origin: [0.5, 0] }); lab.setWordWrapWidth(lw, true).setAlign('center');
-        this.T('trP' + k, node.owned ? '✔ TIENES' : depth === 0 ? '' : `${c.cost}`, cx, cy + ts + 3 * u + lab.height, { size: 10 * u, bold: true, color: node.owned ? '#7dff9a' : '#ffd23f', depth: D + 1, stroke: 2, origin: [0.5, 0] });
+        const cx = (xl + xr) / 2, cy = tt0 + 24 * u + depth * rowH, q = { x: cx - ts / 2, y: cy, w: ts, h: ts }, c = ITEM_BY_ID[node.id], k = n++, dn = done(node);
+        if (parent) { const lit = dn; if (lit) g.lineStyle(7, GOLD, 0.22 * pulse).lineBetween(parent.x, parent.y + ts, cx, cy); g.lineStyle(lit ? 3 : 2, lit ? 0xffe27a : 0x4b5870, 1).lineBetween(parent.x, parent.y + ts, cx, cy); }
+        this.tile(g, 'tr' + k, node.id, q, D, depth <= 1 || node.owned ? 1 : 0.8);
+        if (depth <= 1 || dn) glow(q, 3);   // the item being crafted, its ingredients and anything already completed
+        else g.lineStyle(2, LV_COL[c.lvl], 1).strokeRect(q.x - 2, q.y - 2, q.w + 4, q.h + 4);
+        const lw = Math.max(60 * u, Math.min(dw / (depth === 2 ? 4 : depth === 1 ? 2 : 1), 150 * u)), lab = this.T('trL' + k, c.name, cx, cy + ts + 3 * u, { size: 10 * u, color: depth <= 1 ? '#ffe9a0' : '#cfe0ff', depth: D + 1, stroke: 2, origin: [0.5, 0] }); lab.setWordWrapWidth(lw, true).setAlign('center');
+        this.T('trP' + k, node.owned ? '✔ TIENES' : depth === 0 ? '' : `${c.cost}`, cx, cy + ts + 3 * u + lab.height, { size: 10 * u, bold: true, color: node.owned ? '#ffd23f' : '#ffffff', depth: D + 1, stroke: 2, origin: [0.5, 0] });
         if (depth > 0) this.shopBtns.push({ x: cx - lw / 2, y: cy, w: lw, h: ts + 26 * u, fn: () => { this.shopSel = node.id; this.shopSlot = null; } });
         const w2 = (xr - xl) / Math.max(1, node.children.length);
         node.children.forEach((ch, i) => place(ch, depth + 1, xl + i * w2, xl + (i + 1) * w2, { x: cx, y: cy }));
       };
       place(tree, 0, tx + 6 * u, tx + dw - 6 * u, null);
+      if (ups.length) {   // items that use this one as an ingredient (one crafting level up)
+        const uy = tt0 + th + 8 * u; bev(tx - 4 * u, uy, dw + 8 * u, upH - 4 * u, 8 * u, 0x0a1224, 1, 0x2a3650, 1, 1);
+        head('upH', 'SE USA PARA CREAR', tx + 4 * u, uy + 5 * u);
+        const us = Math.min(36 * u, (dw - 12 * u) / Math.max(ups.length, 1) - 6 * u);
+        ups.forEach((ui, i) => { const q = { x: tx + 8 * u + i * (us + 6 * u), y: uy + 26 * u, w: us, h: us }; this.tile(g, 'up' + i, ui.id, q, D, 1); glow(q, 2); this.shopBtns.push({ ...q, fn: () => { this.shopSel = ui.id; this.shopSlot = null; } }); });
+      }
     }
-    const by = y0 + ph - pad - 46 * u, bh = 44 * u, bw1 = (dw - 8 * u) * 0.62, bw2 = dw - 8 * u - bw1, pl = buyPlan(p.inv, it.id);
+    const by = y0 + ph - pad * 1.3 - 46 * u, bh = 44 * u, bw1 = (dw - 8 * u) * 0.62, bw2 = dw - 8 * u - bw1, pl = buyPlan(p.inv, it.id);
     const label = !pl.ok ? pl.reason : p.gold < pl.gold ? `FALTA ORO (${pl.gold})` : `${it.recipe ? 'ARMAR' : 'COMPRAR'} ${pl.gold}`;
     sbtn('buy', label, { x: dx, y: by, w: bw1, h: bh }, p.canBuy(it.id), () => p.buyItem(it.id), 0x14583a);
     const sv = sl ? sellValue(it) * (it.consumable ? Math.max(1, sl.charges) : 1) : 0;
     sbtn('sell', sl ? `VENDER ${sv}` : 'VENDER', { x: dx + bw1 + 8 * u, y: by, w: bw2, h: bh }, !!sl, () => p.sellItem(sellSlot), 0x5c3a1d);
+    if (fl || this.fltHover) { const txt = this.fltHover || `Filtro: ${STAT_LABEL[fl]}`, t = this.T('fltName', txt, this.fltHover ? ptr.x + 16 * u : gx + 4 * u, this.fltHover ? ptr.y - 6 * u : ty + 46 * u, { size: 12 * u, bold: true, color: '#ffd23f', depth: D + 6, stroke: 4 }); if (!this.fltHover) t.setText(`Filtro: ${STAT_LABEL[fl]}`).setPosition(gx + gw - t.width - 4 * u, ty + 8 * u).setVisible(false); }
   }
 
   setVol(bar, x) {

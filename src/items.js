@@ -75,6 +75,8 @@ C('filtro_spam', 'Filtro de spam', 'mr', ['antivirus_portatil', 'escudo_antimalw
 C('firewall_magico', 'Firewall mágico', 'mr', ['antivirus_portatil', 'amuleto_logico'], 'Muro contra la IA.');
 C('servidor_redundante', 'Servidor redundante', 'hp', ['bateria_extendida', 'sistema_raid'], 'Mucha vida.');
 C('corazon_silicio', 'Corazón de silicio', 'hp', ['bateria_extendida', 'proteina_extra'], 'Un corazón de chips.');
+C('garras_vampiricas', 'Garras vampíricas', 'ad', ['navaja_suiza', 'guantes_tacticos'], 'Ataque, velocidad de ataque y mucho robo de vida.');
+C('botas_hipersonicas', 'Botas hipersónicas', 'util', ['botas_turbo', 'botas_reforzadas'], 'La mayor velocidad de movimiento, con algo de armadura.');
 C('dron_combate', 'Dron de combate', 'util', ['bot_prompts', 'cable_fibra'], 'Activo: un dron te acompaña y dispara.', { active: { type: 'drone', cd: 50, life: 18 } });
 C('elixir_mixto', 'Elixir mixto', 'rec', ['pocion_vida_gde', 'pocion_mana_gde'], 'Consumible: vida y maná en 4 s.', { consumable: { hp: 190, mana: 150, time: 4, charges: 3 } });
 
@@ -122,3 +124,10 @@ export function nextAffordable(inv, id, gold) {
   const t = recipeTree(inv, id), walk = n => { for (const c of n.children) { if (c.owned) continue; if (buyPlan(inv, c.id).gold <= gold && buyPlan(inv, c.id).ok) return c.id; const d = walk(c); if (d) return d; } return null; };
   return walk(t);
 }
+
+// Permanent upgrades ("prompts"): not items (they take no slot). One per advantage, same red card, only the logo changes. Unlimited: every purchase costs the same PERM_COST.
+export const PERM_COST = 300;   // flat price, unlimited purchases
+const PV = { atk: 4, ap: 6, armor: 4, mr: 4, hp: 45, mana: 30, speed: 0.015, aspd: 0.03, lifesteal: 0.015, cdr: 0.02, hpRegen: 0.8, manaRegen: 0.6 };
+export const PERM_KEYS = Object.keys(PV);
+export const PERMS = PERM_KEYS.map(k => ({ id: 'p_' + k, stat: k, perm: true, name: 'Prompt de ' + STAT_LABEL[k].toLowerCase(), per: PV[k], lvl: 0, cat: 'perm', stats: { [k]: PV[k] }, desc: 'Mejora permanente: se queda contigo toda la partida y se puede comprar sin límite, siempre por 300 de oro.' }));
+export const PERM_BY_ID = Object.fromEntries(PERMS.map(p => [p.id, p]));

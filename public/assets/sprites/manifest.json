@@ -259,6 +259,20 @@
   "aim_ring",
   "zone"
  ],
+ "stats": [
+  "atk",
+  "ap",
+  "armor",
+  "mr",
+  "hp",
+  "mana",
+  "speed",
+  "aspd",
+  "lifesteal",
+  "cdr",
+  "hpRegen",
+  "manaRegen"
+ ],
  "items": [
   "teclado_mecanico",
   "guantes_tacticos",
@@ -321,7 +335,9 @@
   "b_reloj",
   "b_botiquin",
   "b_cargador",
-  "b_colmillo"
+  "b_colmillo",
+  "garras_vampiricas",
+  "botas_hipersonicas"
  ],
  "classes": [
   "todos",

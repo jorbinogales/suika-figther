@@ -7,6 +7,7 @@ import { bootScreen } from './bootscreen.js';
 
 // Launcher: login / register, news, room buttons, lobby with champion pick and the loading screen.
 // It is plain HTML/CSS over the (idle) Phaser canvas; the Phaser scene only owns its lifetime.
+const BUILD = typeof __BUILD_ID__ === 'undefined' ? Date.now() : __BUILD_ID__;   // new build -> icons are fetched again
 const KEYS = Object.keys(CHAMPIONS), MAXP = 10, PER_TEAM = 5;
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const $ = (sel, el = document) => el.querySelector(sel);
@@ -93,7 +94,7 @@ function send(t, o) { if (!net.online) { toast('Sin conexión con el servidor. R
 
 const champTabs = () => `<div class="ctabs">${CLASS_TABS.map(c => `<button class="ctab ${clsFilter === c ? 'on' : ''}" data-cls="${c}" title="${esc(classLabel(c))}"><img src="assets/classes/${c}.png" alt="" onerror="this.style.display='none'"><span>${esc(classLabel(c))}</span><i>${c === 'todos' ? KEYS.length : KEYS.filter(k => CHAMPIONS[k].cls === c).length}</i></button>`).join('')}</div>`;
 const champGrid = (sel, taken = () => false) => `<div class="champs" id="champs">${KEYS.filter(k => clsFilter === 'todos' || CHAMPIONS[k].cls === clsFilter).map(k => `<div class="cc ${k === sel ? 'sel' : ''} ${taken(k) ? 'taken' : ''}" data-k="${k}"><div class="im" style="${faceCss(k)}"></div><div class="lb">${esc(CHAMPIONS[k].name)}</div></div>`).join('')}</div>`;
-const abilityStrip = d => `<div class="abis">${ABILITY_KEYS.map((a, i) => { const ab = d.abilities[a]; return `<div class="abi" data-tip="${esc(`<b>[${'QFER'[i]}] ${ab.name}${ab.passive ? ' · pasiva' : ''}</b><br>${ab.desc}`)}"><img src="assets/icons/${esc(ab.icon)}.png" alt=""><span>${'QFER'[i]}</span></div>`; }).join('')}</div>`;
+const abilityStrip = d => `<div class="abis">${ABILITY_KEYS.map((a, i) => { const ab = d.abilities[a]; return `<div class="abi" data-tip="${esc(`<b>[${'QFER'[i]}] ${ab.name}${ab.passive ? ' · pasiva' : ''}</b><br>${ab.desc}`)}"><img src="assets/icons/${esc(ab.icon)}.png?v=${BUILD}" alt=""><span>${'QFER'[i]}</span></div>`; }).join('')}</div>`;
 const refresh = () => (screen === 'practice' ? practiceScreen() : lobbyScreen());
 
 function lobbyScreen() {
@@ -191,6 +192,7 @@ function buildCfg(players, seed) {
 }
 
 function beginGame(m) {
+  if (m.rejoin && net.user.id === m.host) { net.send('leave_room'); net.room = null; route(); return toast('Tu partida terminó al cerrar la página: el anfitrión no puede reconectarse.'); }   // the host's match lived in the page that closed
   const players = m.players || net.room?.players || [], prog = loading(players);
   prog(8, 'SINCRONIZANDO SALA...'); snd('ui_start'); stopMusic();
   let sent = false, done = false;
@@ -199,7 +201,7 @@ function beginGame(m) {
   const ready = () => { if (sent) return; sent = true; prog(88, 'ESPERANDO A LOS DEMÁS JUGADORES...'); net.send('loaded'); };
   scene.game.events.once('arena-ready', ready);
   setTimeout(() => prog(30, 'CARGANDO CAMPEONES, MAPA Y OBJETOS...'), 300);
-  setTimeout(() => { prog(55, 'CONSTRUYENDO EL MAPA...'); scene.scene.start('arena', buildCfg(players, m.seed ?? 1)); }, 900);
+  setTimeout(() => { prog(55, 'CONSTRUYENDO EL MAPA...'); scene.scene.start('arena', { ...buildCfg(players, m.seed ?? 1), rejoin: !!m.rejoin && m.state === 'playing' }); if (m.rejoin && m.state === 'playing') { done = true; setTimeout(hideLoading, 1800); off(); } }, 900);
 }
 
 /* ---------- routing & events ---------- */

@@ -84,6 +84,7 @@ export class Boot extends Phaser.Scene {
     const sfx = this.cache.json.get('sfx') || {};
     Object.values(sfx).flat().forEach(f => this.load.audio('sfx_' + f, 'assets/sfx/' + f));
     (m.classes || []).forEach(n => this.load.image('class_' + n, `assets/classes/${n}.png?${t}`));
+    (m.stats || []).forEach(n => this.load.image('stat_' + n, `assets/stats/${n}.png?${t}`));
     (m.items || []).forEach(n => this.load.image('item_' + n, `assets/items/${n}.png?${t}`));
     (m.aim || []).forEach(n => this.load.image(n, `assets/aim/${n}.png?${t}`));
     (m.objects || []).forEach(n => this.load.image(n, `assets/objects/${n}.png?${t}`));

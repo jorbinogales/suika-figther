@@ -100,7 +100,8 @@ app.use('/api', (req, res) => res.status(404).json({ error: 'No encontrado' }));
 // production: the same process serves the built game (npm run build -> dist/); in development Vite does it
 const DIST = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../dist');
 if (fs.existsSync(path.join(DIST, 'index.html'))) {
-  app.use('/assets', express.static(path.join(DIST, 'assets'), { maxAge: '7d' }));
+  // only Vite's hashed bundles are cached for good; art/sound files keep their name when they change, so they are revalidated every time (the icons of new abilities were stuck in old caches)
+  app.use('/assets', express.static(path.join(DIST, 'assets'), { maxAge: 0, etag: true, setHeaders: (res, f) => { res.set('Cache-Control', /index-[\w-]+\.(js|css)$/.test(f) ? 'public, max-age=31536000, immutable' : 'no-cache'); } }));
   app.use(express.static(DIST, { maxAge: 0, etag: true, setHeaders: (res, f) => { if (/\.html$|version\.json$/.test(f)) res.set('Cache-Control', 'no-cache, no-store, must-revalidate'); } }));
 }
 app.use((err, req, res, next) => {
@@ -251,7 +252,8 @@ const handlers = {
     room.state = 'loading';
     room.loaded = new Set();
     room.loadTimer = setTimeout(() => go(room), LOAD_MS);
-    toRoom(room, { t: 'start', seed: crypto.randomInt(2 ** 31), players: playerList(room) });
+    room.seed = crypto.randomInt(2 ** 31); room.startPlayers = playerList(room);
+    toRoom(room, { t: 'start', seed: room.seed, players: room.startPlayers });
     pushRoom(room);
   },
   loaded(ws, user) {
@@ -300,7 +302,11 @@ function connect(ws, user) {
   send(ws, { t: 'hello', user });
   const room = rooms.get(userRoom.get(user.id));
   const p = room?.players.get(user.id);
-  if (p) { p.connected = true; clearTimeout(p.timer); pushRoom(room); }
+  if (p) {
+    p.connected = true; clearTimeout(p.timer); pushRoom(room);
+    // match in progress: hand the player the start data again so a fresh page (refresh / closed tab / new device) drops straight back into the game
+    if (room.seed != null && (room.state === 'loading' || room.state === 'playing')) send(ws, { t: 'start', seed: room.seed, players: room.startPlayers, rejoin: true, state: room.state, host: room.host });
+  }
 
   ws.on('message', (buf) => {
     const raw = buf.toString();

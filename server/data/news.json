@@ -41,7 +41,15 @@
       "Jorbi: al usar «15 Minutos más» aparece un anuncio en la pantalla de todos los jugadores («Jorbi usó su reloj»); retrocede 5, 10 o 15 segundos según el rango (1, 2 o 3).",
       "El juego se actualiza solo: si hay una versión nueva se limpia la caché y se recarga la página.",
       "Las áreas de los poderes ahora son elipses inclinadas como el mapa, no círculos perfectos.",
-      "Arte nuevo: iconos de Leandro (contrato), Axel (Regateador hábil) y Jorbi (15 Minutos más), animaciones de Axel E y Jorbi R, sprite del contrato y reloj de arena en pantalla."
+      "Arte nuevo: iconos de Leandro (contrato), Axel (Regateador hábil) y Jorbi (15 Minutos más), animaciones de Axel E y Jorbi R, sprite del contrato y reloj de arena en pantalla.",
+      "Reconexión: si pierdes la conexión durante una partida online el juego intenta volver solo; si cierras o recargas la página, regresas directo a la partida en curso (no al menú). Tu campeón lo controla la IA mientras estás fuera.",
+      "Tienda rediseñada con el estilo del launcher: objetos agrupados por nivel, filtro por ventaja (ataque, armadura, resistencia a la IA, velocidad de ataque, robo de vida…) con un icono para cada ventaja, y cada objeto muestra las ventajas que da.",
+      "Corregido: los iconos de habilidades nuevas no se veían por la caché del navegador.",
+      "Los objetos se distinguen por nivel de crafteo: básicos en gris, nivel 2 en verde y nivel 3 en morado (tienda, casillas del inventario y árbol de crafteo).",
+      "Tienda: el filtro por ventaja ahora es una columna a la izquierda con la opción «Todos»; en el árbol de crafteo el objeto a fabricar y sus ingredientes brillan en dorado, y las líneas de lo ya completado se iluminan; abajo aparece «Se usa para crear» con los objetos de un nivel más arriba.",
+      "Dos objetos de nivel 3 nuevos: Garras vampíricas (ataque, velocidad de ataque y robo de vida) y Botas hipersónicas (la mayor velocidad de movimiento).",
+      "La tienda recuerda la pestaña y el filtro elegidos al cerrarla, entre partidas y al recargar la página.",
+      "Mejoras permanentes («prompts»): una por ventaja (ataque, poder de IA, armadura, resistencia a la IA, vida, maná, velocidad, velocidad de ataque, robo de vida, recarga y regeneraciones). Son rojas, no ocupan espacio, se pueden comprar sin límite y cada una cuesta 300 de oro. Pestaña «Mejoras» en la tienda."
     ]
   },
   {

@@ -87,6 +87,8 @@ function itemAi(w, f, c, dt) {
       const part = nextAffordable(f.inv, target, f.gold); if (part && f.canBuy(part)) { f.buyItem(part); continue; }
       break;
     }
+    { const want = f.def.cls === 'cyber' ? ['hp', 'armor', 'mr', 'speed'] : f.def.stats.ap > f.def.stats.atk ? ['ap', 'cdr', 'mana', 'speed'] : ['atk', 'aspd', 'lifesteal', 'hp'];   // spare gold goes into permanent upgrades
+      const k = want.find(x => f.canBuyPerm(x) && f.gold > 700); if (k) f.buyPerm(k); }
     const pot = f.slotOf('pocion_vida_peq'); if (pot >= 0 && f.inv[pot].charges < 3 && f.canBuy('pocion_vida_peq')) f.buyItem('pocion_vida_peq');
   }
   // trip home to spend gold when it is safe and something is affordable

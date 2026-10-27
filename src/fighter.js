@@ -1,5 +1,5 @@
 import { CHAMPIONS, ABILITY_KEYS, MAX_LEVEL, MAX_RANK, ULT_LEVELS, rk } from './data.js';
-import { ITEM_BY_ID, SLOTS, sellValue, buyPlan } from './items.js';
+import { ITEM_BY_ID, SLOTS, sellValue, buyPlan, PERM_KEYS, PERM_BY_ID, PERM_COST } from './items.js';
 
 // World geometry: top-down map, one horizontal lane.
 import { WORLD_W, WORLD_H, CAMPS, isWalk } from './mapdata.js';
@@ -49,7 +49,7 @@ export class Fighter {
     this.isMinion = this.def.kind === 'minion'; this.isNexus = this.def.kind === 'nexus'; this.isTower = this.def.kind === 'tower' || this.isNexus;
     this.isChamp = !this.isBot && !this.isMinion && !this.isTower;
     this.xp = 0; this.gold = this.isChamp ? 500 : 0;
-    this.inv = Array(SLOTS).fill(null); this.it = this.zeroStats(); this.potions = []; this.potionCd = 0; this.recall = null; this.skin = key; this.buff = null;
+    this.inv = Array(SLOTS).fill(null); this.perm = {}; this.it = this.zeroStats(); this.potions = []; this.potionCd = 0; this.recall = null; this.skin = key; this.buff = null;
     this.team = team; this.baseTeam = team;
     this.x = x; this.y = y;
     this.spawn = { x, y };
@@ -74,6 +74,7 @@ export class Fighter {
   recomputeItems() {
     const hpR = this.hp / (this.maxHp || 1), mR = this.maxMana ? this.mana / this.maxMana : 0, t = this.zeroStats();
     this.inv.forEach(sl => { if (!sl) return; const st = ITEM_BY_ID[sl.id].stats; for (const k in st) t[k] += st[k]; });
+    for (const k in this.perm) t[k] += this.perm[k] * PERM_BY_ID['p_' + k].per;   // permanent upgrades
     this.it = t;
     if (this.maxHp) this.hp = Math.min(this.maxHp, Math.max(this.hp, this.maxHp * hpR));   // buying never lowers current health; the new max HP is granted proportionally
     if (this.maxMana) this.mana = Math.min(this.maxMana, Math.max(this.mana, this.maxMana * mR));
@@ -90,6 +91,13 @@ export class Fighter {
     this.recomputeItems(); this.w.audio.play(p.use.length ? 'ui_upgrade' : 'ui_confirm', { gap: 0, vol: 0.7 });
     if (p.use.length) this.w.vfx('levelup', this.x, this.y - 20, { scale: 3 });
     return true;
+  }
+  canBuyPerm(k) { return this.isChamp && this.alive && this.gold >= PERM_COST; }
+  buyPerm(k) {
+    if (this.w.net?.role === 'client') return this.w.net.op('perm', k);
+    if (!this.canBuyPerm(k)) return false;
+    this.gold -= PERM_COST; this.perm[k] = (this.perm[k] || 0) + 1; this.recomputeItems();
+    this.w.audio.play('ui_upgrade', { gap: 0, vol: 0.8 }); this.w.vfx('levelup', this.x, this.y - 20, { scale: 3 }); return true;
   }
   sellItem(slot) {
     if (this.w.net?.role === 'client') return this.w.net.op('sell', slot);

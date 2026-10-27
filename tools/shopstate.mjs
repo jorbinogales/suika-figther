@@ -1,0 +1,11 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--enable-unsafe-swiftshader', '--use-gl=angle', '--mute-audio'], defaultViewport: { width: 1280, height: 720 } });
+const p = await b.newPage(); p.on('pageerror', e => console.log('[pageerror]', e.message));
+await p.goto('http://localhost:5173/#mode=3&keep=1&noai=1', { waitUntil: 'load' }); await new Promise(r => setTimeout(r, 14000));
+console.log(await p.evaluate(`(async () => { const a = window.__arena, f = a.player, h = a.scene.get('hud'); a.handleInput = () => {}; f.x = f.spawn.x; f.gold = 3000;
+  const w = n => new Promise(r => setTimeout(r, n)); h.toggleShop(); await w(300); h.shopCat = 'ad'; h.shopStat = 'aspd'; h.shopScroll = 1; await w(200);
+  h.shopOpen = false; await w(300); h.toggleShop(); await w(300); const reopen1 = [h.shopCat, h.shopStat];
+  f.x = 1500; await w(500); const autoClosed = !h.shopOpen; f.x = f.spawn.x; await w(300); h.toggleShop(); await w(300);
+  const perm = (() => { h.shopSel = 'p_atk'; return f.buyPerm('atk'), f.buyPerm('atk'), [f.perm.atk, Math.round(f.atk), Math.round(f.gold)]; })(); await w(500);
+  return JSON.stringify({ reopen1, autoClosed, afterAutoClose: [h.shopCat, h.shopStat], perm }); })()`));
+await p.screenshot({ path: 'D:/mycowork/game/shot_perm.png' }); await b.close();

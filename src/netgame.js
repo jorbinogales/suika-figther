@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { net as conn } from './net.js';
 import { Fighter } from './fighter.js';
 import { ABILITY_KEYS } from './data.js';
+import { PERM_KEYS } from './items.js';
 
 // Online match, host-authoritative. Every room member runs the same Arena:
 //  host   : simulates everything (AI, waves, damage, rewards, shop) and applies the inputs of remote players.
@@ -14,7 +15,7 @@ const TYPES = ['physical', 'magic', 'true'];
 
 export class NetGame {
   constructor(w, role, hostId) {
-    this.w = w; this.role = role; this.hostId = hostId; this.live = false; this.replaying = false;
+    this.w = w; this.role = role; this.hostId = hostId; this.live = !!w.cfg.rejoin; this.hostGone = 0;   // rejoining a running match: no waiting for 'go' this.replaying = false;
     this.snapDt = (w.cfg.roster || []).filter(r => r.pid != null).length >= 7 ? 1 / 10 : SNAP;   // big rooms: fewer, compressed snapshots (the client keeps simulating between them)
     this.ev = []; this.snapT = 0; this.inT = 0; this.atkT = 0; this.clock = 0; this.remote = new Map(); this.mortarImgs = [];
     for (const f of w.champs) if (f.pid != null && f.pid !== conn.user.id && role === 'host') this.remote.set(f.pid, { f, in: { mx: 0, my: 0, run: false }, ax: f.ax, ay: f.ay, atk: 0, at: 0 });
@@ -28,15 +29,21 @@ export class NetGame {
   onMsg(m) {
     if (m.t === 'go') { this.live = true; return; }
     if (m.t === 'room') return this.onRoom(m);
-    if (m.t === '_offline' && this.role === 'client') return this.hostLost();
+    if (m.t === '_offline') { this.w.netLost = true; return; }   // our own connection dropped: the match goes on, conn.js keeps retrying
+    if (m.t === '_online') { this.w.netLost = false; return; }
     if (m.t !== 'relay' || !m.data) return;
     if (this.role === 'host') this.onClientData(m.from, m.data); else if (m.from === this.hostId) this.onHostData(m.data);
   }
   onRoom(m) {
     const ps = m.players || [];
-    if (this.role === 'host') {   // a player who left is replaced by the AI
-      for (const [pid, r] of this.remote) { const p = ps.find(x => x.id === pid); if (!p || p.connected === false) { r.f.ai = true; r.f.in = { mx: 0, my: 0, run: false }; this.remote.delete(pid); this.w.float(r.f.x, r.f.y - 120, 'jugador desconectado', '#ff9a7a'); } }
-    } else { const h = ps.find(x => x.id === this.hostId); if (!h || h.connected === false) this.hostLost(); }
+    if (this.role === 'host') {   // a player that drops is played by the AI until he is back; one that left the room for good is replaced for good
+      for (const [pid, r] of this.remote) {
+        const p = ps.find(x => x.id === pid);
+        if (!p) { r.f.ai = true; r.f.in = { mx: 0, my: 0, run: false }; this.remote.delete(pid); this.w.float(r.f.x, r.f.y - 120, 'jugador desconectado', '#ff9a7a'); }
+        else if (p.connected === false && !r.off) { r.off = true; r.f.ai = true; r.f.in = { mx: 0, my: 0, run: false }; this.w.float(r.f.x, r.f.y - 120, 'jugador desconectado', '#ff9a7a'); }
+        else if (p.connected !== false && r.off) { r.off = false; r.f.ai = false; r.at = this.clock; this.w.float(r.f.x, r.f.y - 120, 'jugador reconectado', '#7dff9a'); }
+      }
+    } else { const h = ps.find(x => x.id === this.hostId); if (!h) this.hostLost(); else if (h.connected === false) this.hostGone = this.hostGone || performance.now(); else this.hostGone = 0; }
   }
   hostLost() {
     const w = this.w; if (this.lost || w.over) return; this.lost = true;
@@ -47,22 +54,24 @@ export class NetGame {
   /* ======================= HOST ======================= */
   onClientData(from, d) {
     const r = this.remote.get(from); if (!r) return; const f = r.f, w = this.w;
-    if (d.k === 'in') { r.in = { mx: d.mx, my: d.my, run: !!d.run }; r.ax = d.ax; r.ay = d.ay; r.at = this.clock; r.atk = d.atk ? this.clock + 0.12 : 0; }
+    if (r.off) return; if (d.k === 'in') { r.in = { mx: d.mx, my: d.my, run: !!d.run }; r.ax = d.ax; r.ay = d.ay; r.at = this.clock; r.atk = d.atk ? this.clock + 0.12 : 0; }
     else if (d.k === 'cast') { const c = w.control; if (c?.mode === 'remote' && c.target === f) return; const a = this.actor(r); if (!a.alive) return; a.setAim(d.ax, d.ay); a.castPoint = d.cp ? { x: d.cp[0], y: d.cp[1] } : null; if (!a.tryCast(d.c)) a.castPoint = null; }
     else if (d.k === 'op') {
-      if (['buy', 'sell'].includes(d.op) && !w.canShop(f)) return;   // the shop only works in the base
-      if (d.op === 'buy') f.buyItem(d.a); else if (d.op === 'sell') f.sellItem(d.a); else if (d.op === 'use') f.useItem(d.a); else if (d.op === 'spend') f.spend(d.a);
+      if (['buy', 'sell', 'perm'].includes(d.op) && !w.canShop(f)) return;   // the shop only works in the base
+      if (d.op === 'perm') f.buyPerm(d.a); else if (d.op === 'buy') f.buyItem(d.a); else if (d.op === 'sell') f.sellItem(d.a); else if (d.op === 'use') f.useItem(d.a); else if (d.op === 'spend') f.spend(d.a);
     }
   }
   // the unit a remote player is driving: his own champion, or the enemy he is mind-controlling with Luis' ultimate
   actor(r) { const c = this.w.control; return c && c.mode === 'remote' && c.luis === r.f && c.target.alive ? c.target : r.f; }
   pre(dt) {
     this.clock += dt;
+    if (this.role === 'client' && this.hostGone && performance.now() - this.hostGone > 45000) this.hostLost();   // the host has been gone for 45 s: give up
     if (this.role !== 'host') return;
     const ctl = this.w.control;
     for (const r of this.remote.values()) {
       if (ctl?.mode === 'remote' && ctl.target === r.f) { r.f.in = { mx: 0, my: 0, run: false }; continue; }   // being mind-controlled: its own player cannot move it
       if (ctl?.mode === 'remote' && ctl.luis === r.f) r.f.in = { mx: 0, my: 0, run: false };
+      if (r.off) continue;
       const f = this.actor(r); if (!f.alive || f.charmT > 0) continue;
       const stale = this.clock - r.at > 1;
       f.in = stale ? { mx: 0, my: 0, run: false } : r.in;
@@ -99,6 +108,7 @@ export class NetGame {
     if (f.isChamp) {
       o.m = r1(f.mana); o.lv = f.level; o.xp = r1(f.xp); o.gd = r1(f.gold); o.pt = f.points;
       o.rk = ABILITY_KEYS.map(a => f.ranks[a]); o.cd = [...ABILITY_KEYS.map(a => r2(f.cds[a])), r2(f.cds.basic)];
+      o.pm = PERM_KEYS.map(k => f.perm[k] || 0);
       o.inv = f.inv.map(s => (s ? [s.id, r1(s.cd), s.charges] : 0)); o.dc = f.dashCharges; o.ss = f.setupStacks; o.rg = r1(f.rage);
       if (f.potions.length) o.po = f.potions.map(p => r2(p.t));
       if (f.hen) o.hen = [r1(f.henHp), r1(f.henMax)];
@@ -170,6 +180,7 @@ export class NetGame {
       if (!first && o.lv > f.level) { w.audio.play('levelup', { at: f, vol: local ? 1 : 0.5, gap: 0 }); w.vfx('levelup', f.x, f.y - 20, { scale: 3.2 }); w.float(f.x, f.y - f.def.height - 30, `NIVEL ${o.lv}`, '#ffe066'); }
       f.level = o.lv; f.xp = o.xp; f.gold = o.gd; f.points = o.pt;
       ABILITY_KEYS.forEach((a, i) => { f.ranks[a] = o.rk[i]; f.cds[a] = o.cd[i]; }); f.cds.basic = o.cd[4];
+      if (o.pm) { const ps = o.pm.join(); if (ps !== f.permSig) { f.permSig = ps; f.perm = {}; PERM_KEYS.forEach((k, i) => { if (o.pm[i]) f.perm[k] = o.pm[i]; }); f.recomputeItems(); } }
       const sig = JSON.stringify(o.inv); if (sig !== f.invSig) { f.invSig = sig; f.inv = o.inv.map(a => (a ? { id: a[0], cd: a[1], charges: a[2] } : null)); f.recomputeItems(); }
       else f.inv.forEach((sl, i) => { if (sl) sl.cd = o.inv[i][1]; });
       f.dashCharges = o.dc; f.setupStacks = o.ss; f.rage = o.rg; f.potions = (o.po || []).map(t => ({ hp: 0, mana: 0, t, T: t }));

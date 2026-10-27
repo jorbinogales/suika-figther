@@ -81,6 +81,29 @@ def main():
             cell = cell.crop(bb); k = min(56 / cell.width, 56 / cell.height)
             icon = Image.new("RGBA", (64, 64)); r = cell.resize((max(1, round(cell.width * k)), max(1, round(cell.height * k))), Image.NEAREST)
             icon.paste(r, ((64 - r.width) // 2, (64 - r.height) // 2), r); icon.save(pub / "items" / f"{bid}.png"); got.append(bid)
+    # advantage (stat) icons: art/raw/items/stats.png (4x3 cells of 128px) -> public/assets/stats/<key>.png (48px)
+    sids = ["atk", "ap", "armor", "mr", "hp", "mana", "speed", "aspd", "lifesteal", "cdr", "hpRegen", "manaRegen"]; sgot = []
+    ssrc = RAW / "items" / "stats.png"
+    if ssrc.exists():
+        (pub / "stats").mkdir(parents=True, exist_ok=True)
+        sh = Image.open(ssrc).convert("RGB"); cw, ch = sh.width // 4, sh.height // 3
+        for i, sid in enumerate(sids):
+            cell = key(sh.crop(((i % 4) * cw, (i // 4) * ch, (i % 4 + 1) * cw, (i // 4 + 1) * ch))); bb = cell.getbbox()
+            if not bb: continue
+            cell = cell.crop(bb); k = min(44 / cell.width, 44 / cell.height)
+            icon = Image.new("RGBA", (48, 48)); r = cell.resize((max(1, round(cell.width * k)), max(1, round(cell.height * k))), Image.LANCZOS)
+            icon.paste(r, ((48 - r.width) // 2, (48 - r.height) // 2), r); icon.save(pub / "stats" / f"{sid}.png"); sgot.append(sid)
+    extra["stats"] = sgot
+    # extra level-3 items: art/raw/items/lvl3_extra.png (2 cells of 256px side by side)
+    xids = ["garras_vampiricas", "botas_hipersonicas"]; xsrc = RAW / "items" / "lvl3_extra.png"
+    if xsrc.exists():
+        sh = Image.open(xsrc).convert("RGB"); cw = sh.width // 2
+        for i, xid in enumerate(xids):
+            cell = key(sh.crop((i * cw, 0, (i + 1) * cw, sh.height))); bb = cell.getbbox()
+            if not bb: continue
+            cell = cell.crop(bb); k = min(56 / cell.width, 56 / cell.height)
+            icon = Image.new("RGBA", (64, 64)); r = cell.resize((max(1, round(cell.width * k)), max(1, round(cell.height * k))), Image.LANCZOS)
+            icon.paste(r, ((64 - r.width) // 2, (64 - r.height) // 2), r); icon.save(pub / "items" / f"{xid}.png"); got.append(xid)
     extra["items"] = got
     # class icons: art/raw/classes/sheet.png (3x2 cells) -> public/assets/classes/<id>.png
     cls_ids = ["todos", "ai", "hacker", "cyber", "soporte", "programador"]; cgot = []
