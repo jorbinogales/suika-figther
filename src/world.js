@@ -1680,7 +1680,7 @@ export class Arena extends Phaser.Scene {
       p.px = p.x; p.py = p.y;
       p.x += p.ax * p.speed * dt; p.y += p.ay * p.speed * dt; p.left -= p.speed * dt;
       p.s.setPosition(p.x, p.y - p.lift).setDepth(p.y + 1);
-      if (p.spin) p.s.rotation += dt * 12 * (p.ax >= 0 ? 1 : -1);
+      if (p.spin) p.s.rotation += dt * (p.spinSpeed ?? 12) * (p.ax >= 0 ? 1 : -1);
       let dead = p.left <= 0 || p.x < 0 || p.x > WORLD_W || p.y < 0 || p.y > WORLD_H;
       if (!dead) {
         const wall = this.obstacles.find(o => o.team !== p.team && segDist(p.px, p.py, p.x, p.y, o.x, o.y) < o.r + (p.r || 14) * 0.5);
