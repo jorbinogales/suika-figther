@@ -183,7 +183,7 @@ export class Fighter {
     this.running = false;
     this.deadT = 0;
     this.in = { mx: 0, my: 0, run: false };
-    this.setupStacks = 0; this.setupHits = 0;
+    this.setupStacks = 0; this.setupHits = 0; this.hitT = 0; this.flashing = false;
     this.cds = { p1: 0, p2: 0, p3: 0, ult: 0, basic: 0 };
     this.ink = null; this.inkDash = null; this.silenceT = 0; this.blindT = 0; this.shieldHp = 0; this.shieldT = 0; this.speedBoost = 0; this.speedT = 0; this.charmT = 0; this.team = this.baseTeam; this.malware = null;
     this.rage = 0; this.hen = false;
@@ -842,7 +842,7 @@ export class Fighter {
     reverse ? this.spr.playReverse(cfg) : this.spr.play(cfg);
   }
 
-  flash() { this.spr.setTint(0xff5555); this.w.after(0.08, () => { this.spr.clearTint(); this.tintBot(); }); }
+  flash() { this.flashing = true; this.hitT = 1; this.spr.setTint(0xff5555); this.w.after(0.09, () => { this.flashing = false; this.spr.clearTint(); this.tintBot(); }); }
 
   // team marker: green = champion in use, blue = ally, red = enemy. A ground ring (cheap); the per-sprite WebGL glow filter it replaced
   // cost 2-4x the frame time once a few dozen units were on screen (the main cause of lag in big matches).
@@ -889,7 +889,34 @@ export class Fighter {
         const hasDeath = this.w.anims.exists(`${this.key}_death`), t = this.stateT - (hasDeath ? 2.0 : 0);
         spr.setAlpha(Math.max(0, 1 - Math.max(0, t) / (hasDeath ? 0.6 : 1.0)));
       }
-      spr.setPosition(this.x, this.y);
+      // juice: procedural motion layered over the sprite frames (purely visual; never touches position/logic).
+      // Animated units used to render at the raw x/y with no weight at all, which is why they felt like gliding cutouts.
+      const tt = time / 1000, ph = this.nid * 1.37;   // per-unit phase so a crowd doesn't bob in sync
+      let oy = 0, rot = 0, sx = this.baseScale, sy = this.baseScale, ox = 0;
+      if (this.alive) {
+        if (this.state === 'idle') { const b = Math.sin(tt * 2.6 + ph); sy *= 1 + b * 0.015; sx *= 1 - b * 0.007; }   // breathing
+        else if (this.state === 'walk') { oy = -Math.abs(Math.sin(tt * 10 + ph)) * 3.2; rot = Math.sin(tt * 10 + ph) * 0.018; }
+        else if (this.state === 'run') { oy = -Math.abs(Math.sin(tt * 13.5 + ph)) * 4.5; rot = 0.055 * this.facing + Math.sin(tt * 13.5 + ph) * 0.015; }
+        else if (this.state === 'stun') { rot = Math.sin(tt * 26) * 0.05; }
+        else if (this.state === 'cast' && this.stateDur > 0) {
+          const p = Math.min(1, Math.max(0, this.stateT / this.stateDur)), s = Math.sin(p * Math.PI);
+          if (this.anim === 'attack' || this.anim === 'attack2' || this.anim === 'attack3') ox = s * 13 * this.facing;   // lunge into the hit
+          else if (this.anim === 'dash') rot = 0.12 * this.facing;
+          else if (this.anim === 'run') { oy = -Math.abs(Math.sin(tt * 13.5 + ph)) * 4.5; rot = 0.055 * this.facing; }   // bike form keeps its run motion
+          else { sy *= 1 - s * 0.05; sx *= 1 + s * 0.04; oy = -s * 7; }   // power wind-up squash
+        }
+        if (this.hitT > 0) {   // impact squash when hit (flash() arms hitT)
+          const dtR = this._rt == null ? 0 : Math.min(0.05, (time - this._rt) / 1000);
+          this.hitT = Math.max(0, this.hitT - dtR * 7);
+          const e = this.hitT * this.hitT; sx *= 1 + e * 0.09; sy *= 1 - e * 0.09;
+        }
+        // keep the walk/run cycle in step with the real speed (slows, boosts, items)
+        if (spr.anims) { const nom = this.state === 'run' ? this.def.stats.run : this.def.stats.speed; spr.anims.timeScale = (this.state === 'walk' || this.state === 'run') && nom > 0 ? clamp(this.speed / nom, 0.55, 1.7) : 1; }
+      } else if (this.isChamp) {   // death: settle into the ground as the death frames play
+        const k = Math.min(1, this.stateT / 0.8); oy = k * 5; rot = k * 0.1 * -this.facing;
+      }
+      this._rt = time;
+      spr.setScale(sx, sy).setRotation(rot).setPosition(this.x + ox, this.y + oy);
       return;
     }
     // fallback: procedural motion on the static reference image
