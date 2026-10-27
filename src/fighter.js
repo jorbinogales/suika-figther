@@ -587,7 +587,7 @@ export class Fighter {
       }
       case 'xeviche:p1': {
         const dmg = rk(a.dmg, rank) + this.atk * a.atkScale, stun = rk(a.stun, rank);
-        w.projectile(this, { speed: a.speed, dmg, type: 'physical', vfx: 'rock_throw', scale: 4.5, tint: 0xff3b30, spin: true, r: 26,
+        w.projectile(this, { speed: a.speed, dmg, type: 'physical', obj: 'icon_xeviche_p1', scale: 0.72, spin: true, spinSpeed: 3.8, r: 26,
           onHit: t => t.stun(stun) });
         break;
       }
