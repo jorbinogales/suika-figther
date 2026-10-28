@@ -144,6 +144,9 @@ const MAPS = [
   { id: 'ciudad', name: 'Ciudad Neo-Suika', img: 'assets/maps/fb448626-7fd0-4d95-aa1a-483833d69070.webp', thumb: 'assets/maps/36219378-8c8c-4871-9e6b-aee620875d28.webp' },
 ];
 const mapOf = id => MAPS.find(m => m.id === id) || MAPS[0];
+/* Sombra de contacto del menú (sombra-campeon.png): [ancho, centro] como fracción del cuadro del sprite,
+   medidos del ancho real de los pies de cada campeón en su idle (span × 1.45 de margen suave). */
+const SHADOW = { leandro: [.48, .512], xeviche: [.49, .510], jorbi: [.62, .496], axel: [.40, .502], julio: [.47, .514], luis: [.43, .508], eliud: [.42, .518], hector: [.60, .496] };
 const sceneOf = m => m.scene || m.img;   // escena a nivel de suelo si el escenario la tiene; si no, su pintura cenital
 const ambHtml = () => `<div class="amb"><img class="bg" src="${sceneOf(mapOf(prac.map))}" alt=""><div class="amb-shade"></div></div>`;
 const stageHtml = (d, id, nav = false) => {
@@ -156,7 +159,7 @@ const stageHtml = (d, id, nav = false) => {
   const champ = `<div class="cspr" id="cspr" data-id="${id}" style="background-image:url(assets/sprites/${id}/idle.png)"></div>`;
   return `<div class="stage art m-${m.id}${open ? ' open' : ''}">
     ${open ? '' : `<div class="st-scene" style="background-image:url(${sceneOf(m)})"></div><div class="st-shade"></div>`}
-    <div class="cwrap">${open ? '<span class="cshadow"></span>' : ''}<img class="cspr-sh" src="assets/map/shadow.png" alt="">${champ}</div>${!open && m.id === 'ruinas' ? '<img class="st-fg fg-tree" src="assets/map/forest/tree3.png" alt=""><img class="st-fg fg-bush" src="assets/map/forest/bush2.png" alt="">' : ''}<div class="st-fx"><i class="fx1"></i><i class="fx2"></i></div>${m.id === 'ruinas' ? '<div class="st-dust"><i></i><i></i><i></i><i></i><i></i><i></i></div>' : ''}${nav ? '<button class="st-nav prev" data-a="pnav" data-d="-1" title="Campeón anterior">◀</button><button class="st-nav next" data-a="pnav" data-d="1" title="Campeón siguiente">▶</button>' : ''}
+    <div class="cwrap"><img class="cshadow-img" src="assets/sombra-campeon.png" alt="" style="width:${Math.round((SHADOW[id]?.[0] ?? .48) * 100)}%;left:${((SHADOW[id]?.[1] ?? .51) * 100).toFixed(1)}%">${champ}${nav ? '<button class="st-nav prev" data-a="pnav" data-d="-1" title="Campeón anterior">◀</button><button class="st-nav next" data-a="pnav" data-d="1" title="Campeón siguiente">▶</button>' : ''}</div>${!open && m.id === 'ruinas' ? '<img class="st-fg fg-tree" src="assets/map/forest/tree3.png" alt=""><img class="st-fg fg-bush" src="assets/map/forest/bush2.png" alt="">' : ''}<div class="st-fx"><i class="fx1"></i><i class="fx2"></i></div>${m.id === 'ruinas' ? '<div class="st-dust"><i></i><i></i><i></i><i></i><i></i><i></i></div>' : ''}
     <div class="st-pill">${esc(d.name.toUpperCase())}<span>Nv. 12</span></div>
     <div class="st-stats"><div class="st-head">${esc(CLASSES[d.cls]?.label || '')}</div>${rows}</div>
   </div>`;

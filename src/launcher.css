@@ -251,3 +251,22 @@ label.l{display:block;font-size:12px;letter-spacing:.2em;color:var(--mut);margin
 .scr[data-scene="1"] .map{background:rgba(8,16,30,.48);border-color:rgba(140,210,255,.28)}
 .scr[data-scene="1"] .pl{background:rgba(8,18,34,.42)}
 .scr[data-scene="1"] .st-stats{background:rgba(4,12,24,.50);backdrop-filter:blur(8px) saturate(1.25);-webkit-backdrop-filter:blur(8px) saturate(1.25);border:1px solid rgba(140,210,255,.26)}
+
+/* ===== Sombra de contacto oficial (sombra-campeon.png) + flechas pegadas al campeón ===== */
+.cshadow-img{position:absolute;bottom:10%;transform:translate(-50%,50%);height:auto;image-rendering:pixelated;pointer-events:none;z-index:0}
+.cwrap .st-nav{top:55%}
+.cwrap .st-nav.prev{left:-48px}
+.cwrap .st-nav.next{right:-48px}
+.stage.m-ruinas.open .cwrap{bottom:58px}
+
+/* Ajuste fino de apoyo: la plaza baja en pantallas más anchas que 16:9 (la pintura se recorta arriba/abajo) */
+.stage.m-ruinas.open .cwrap{left:21.5%;bottom:30px}
+@media (min-aspect-ratio: 19/10){.stage.m-ruinas.open .cwrap{bottom:84px}}
+
+/* Flechas dentro del marco del campeón: nunca quedan tapadas por la caja de stats */
+.cwrap .st-nav.prev{left:2px}
+.cwrap .st-nav.next{right:2px}
+
+/* La caja del campeón flota sobre las stats (sin bloquear clics) para que las flechas se vean */
+.stage.art .cwrap{z-index:6;pointer-events:none}
+.stage.art .cwrap .st-nav{pointer-events:auto}
