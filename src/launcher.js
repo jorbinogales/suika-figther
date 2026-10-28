@@ -139,12 +139,13 @@ const STAT_ROWS = [['hp', 'VIDA', 'assets/stats/hp.png'], ['mana', 'MANÁ', 'ass
 /* Los archivos en public/assets/maps/ quedaron con nombres UUID (la descarga del chat los renombró);
    el contenido es el correcto, verificado por md5. Si se renombran a esc-*.webp, actualizar aquí. */
 const MAPS = [
-  { id: 'ruinas', name: 'Ruinas del Bosque Esmeralda', img: 'assets/maps/0fb27c0f-253c-423f-b36c-1416a0aad065.webp', thumb: 'assets/maps/aa0be35d-85b5-4c8e-974f-6568b33e9d42.webp' },
+  { id: 'ruinas', name: 'Ruinas del Bosque Esmeralda', img: 'assets/maps/0fb27c0f-253c-423f-b36c-1416a0aad065.webp', thumb: 'assets/maps/aa0be35d-85b5-4c8e-974f-6568b33e9d42.webp', scene: 'assets/maps/escena-ruinas.webp' },
   { id: 'templo', name: 'Templo Ancestral', img: 'assets/maps/189846c2-616d-4511-b278-1fd8b5d37bb7.webp', thumb: 'assets/maps/f787857b-05d0-429d-bd62-d59da73876c0.webp' },
   { id: 'ciudad', name: 'Ciudad Neo-Suika', img: 'assets/maps/fb448626-7fd0-4d95-aa1a-483833d69070.webp', thumb: 'assets/maps/36219378-8c8c-4871-9e6b-aee620875d28.webp' },
 ];
 const mapOf = id => MAPS.find(m => m.id === id) || MAPS[0];
-const ambHtml = () => `<div class="amb"><img class="bg" src="${mapOf(prac.map).img}" alt=""><div class="amb-shade"></div></div>`;
+const sceneOf = m => m.scene || m.img;   // escena a nivel de suelo si el escenario la tiene; si no, su pintura cenital
+const ambHtml = () => `<div class="amb"><img class="bg" src="${sceneOf(mapOf(prac.map))}" alt=""><div class="amb-shade"></div></div>`;
 const stageHtml = (d, id) => {
   const m = mapOf(prac.map);   // dirección artística nueva aplicada a los tres escenarios (aprobada la dirección en Ruinas)
   const rows = STAT_ROWS.map(([k, lb, src]) => {
@@ -153,8 +154,8 @@ const stageHtml = (d, id) => {
   }).join('');
   const champ = `<div class="cspr" id="cspr" data-id="${id}" style="background-image:url(assets/sprites/${id}/idle.png)"></div>`;
   return `<div class="stage art m-${m.id}">
-    <div class="st-scene" style="background-image:url(${m.img})"></div><div class="st-shade"></div>
-    <div class="cwrap"><img class="cspr-sh" src="assets/map/shadow.png" alt="">${champ}</div>${m.id === 'ruinas' ? '<img class="st-fg fg-tree" src="assets/map/forest/tree3.png" alt=""><img class="st-fg fg-bush" src="assets/map/forest/bush2.png" alt="">' : ''}<div class="st-fx"><i class="fx1"></i><i class="fx2"></i></div>
+    <div class="st-scene" style="background-image:url(${sceneOf(m)})"></div><div class="st-shade"></div>
+    <div class="cwrap"><img class="cspr-sh" src="assets/map/shadow.png" alt="">${champ}</div>${m.id === 'ruinas' ? '<img class="st-fg fg-tree" src="assets/map/forest/tree3.png" alt=""><img class="st-fg fg-bush" src="assets/map/forest/bush2.png" alt="">' : ''}<div class="st-fx"><i class="fx1"></i><i class="fx2"></i></div>${m.id === 'ruinas' ? '<div class="st-dust"><i></i><i></i><i></i><i></i><i></i><i></i></div>' : ''}
     <div class="st-pill">${esc(d.name.toUpperCase())}<span>Nv. 12</span></div>
     <div class="st-stats"><div class="st-head">${esc(CLASSES[d.cls]?.label || '')}</div>${rows}</div>
   </div>`;
