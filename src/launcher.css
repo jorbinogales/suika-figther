@@ -125,3 +125,35 @@ label.l{display:block;font-size:12px;letter-spacing:.2em;color:var(--mut);margin
   .chip{font-size:13px}.btn{font-size:12px;letter-spacing:.08em}.ctab{padding:4px 7px 4px 4px}.ctab span{display:none}.ctab i{font-size:12px}
   .row{flex-wrap:wrap}.mbtn{min-width:0}#tip{max-width:86vw}
 }
+
+/* ===== Fase 1/2: escenario ambiental (PNG conceptual), tarima del campeón y selector de escenarios ===== */
+.scr.prac .hdr,.scr.prac .lobby{position:relative;z-index:1}
+.amb{position:absolute;inset:0;overflow:hidden;z-index:0;background:#060d18}
+.amb img.bg{width:100%;height:100%;object-fit:cover;object-position:center 60%;display:block}
+.amb-shade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(3,8,18,.62),rgba(3,8,18,.74) 52%,rgba(3,8,18,.9));box-shadow:inset 0 0 180px rgba(0,0,0,.55)}
+.panel.stagep{padding:0;overflow:hidden;flex:none}
+.stage{position:relative;height:clamp(250px,33vh,330px);overflow:hidden;background:#0a1020}
+.st-scene{position:absolute;inset:0;background-size:cover;background-position:center 70%}
+.st-shade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(4,8,16,.02),rgba(4,8,16,.30) 74%,rgba(4,8,16,.62))}
+.st-glow{position:absolute;left:33%;bottom:52px;width:300px;height:90px;transform:translateX(-16%);background:radial-gradient(ellipse at center,rgba(120,220,255,.28),transparent 70%);z-index:1}
+.st-plat{position:absolute;left:31.5%;bottom:26px;width:280px;max-width:56%;height:46px;border-radius:50%;background:radial-gradient(ellipse at 50% 38%,#5d6d80,#2c3949 62%,#141e2a);box-shadow:0 10px 24px rgba(0,0,0,.6),inset 0 2px 6px rgba(255,255,255,.25);z-index:1}
+.cspr{position:absolute;left:35%;bottom:40px;height:min(238px,78%);aspect-ratio:1;background-repeat:no-repeat;image-rendering:pixelated;filter:drop-shadow(0 12px 10px rgba(0,0,0,.55));z-index:2}
+.st-pill{position:absolute;left:14px;top:12px;z-index:3;background:rgba(4,12,24,.85);border:1px solid rgba(63,208,255,.55);color:#eaf6ff;font:700 15px 'Orbitron',sans-serif;padding:7px 12px;letter-spacing:.08em}
+.st-pill span{color:var(--am);margin-left:9px}
+.st-stats{position:absolute;right:12px;top:12px;bottom:12px;width:198px;z-index:3;background:rgba(4,12,24,.8);border:1px solid rgba(63,208,255,.35);padding:10px 12px;display:flex;flex-direction:column;justify-content:center;gap:5px}
+.st-head{font:700 12px 'Orbitron',sans-serif;color:var(--am);letter-spacing:.14em;margin-bottom:2px}
+.srow{display:flex;align-items:center;gap:8px}
+.srow img{width:18px;height:18px;image-rendering:pixelated;flex:none}
+.srow span{flex:1;font-size:11.5px;letter-spacing:.07em;color:#bfe3ff;white-space:nowrap}
+.srow b{font:700 14px 'Orbitron',sans-serif;color:#fff}
+.abiw{display:flex;flex-direction:column;align-items:center;gap:6px}
+.abiw em{font-style:normal;font-size:11.5px;line-height:1.25;text-align:center;color:#cfeaff;max-width:92px}
+.mapsrow{display:flex;flex-direction:column;gap:9px}
+.map{position:relative;display:flex;align-items:center;gap:10px;padding:0;border:2px solid rgba(63,208,255,.3);background:#0a1020;cursor:pointer;overflow:hidden;text-align:left;transition:.15s;width:100%}
+.map:hover{border-color:rgba(63,208,255,.75)}
+.map img{width:104px;height:58px;object-fit:cover;display:block;flex:none}
+.map span{font:700 12px 'Orbitron',sans-serif;color:#d9ecff;letter-spacing:.03em;line-height:1.35;padding-right:8px}
+.map.sel{border-color:var(--am);box-shadow:0 0 14px rgba(255,210,63,.35)}
+.map i{position:absolute;top:5px;right:5px;font:700 9px 'Orbitron',sans-serif;font-style:normal;background:rgba(4,12,24,.88);color:var(--am);padding:2px 6px;border:1px solid rgba(255,210,63,.55);letter-spacing:.08em}
+.mapnote{margin-top:10px;font-size:12.5px;line-height:1.45;color:var(--mut)}
+@media(max-width:1180px){.st-stats{width:176px}.cspr{left:29%}.st-plat{left:25.5%}.st-glow{left:27%}}

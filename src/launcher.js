@@ -94,7 +94,7 @@ function send(t, o) { if (!net.online) { toast('Sin conexión con el servidor. R
 
 const champTabs = () => `<div class="ctabs">${CLASS_TABS.map(c => `<button class="ctab ${clsFilter === c ? 'on' : ''}" data-cls="${c}" title="${esc(classLabel(c))}"><img src="assets/classes/${c}.png" alt="" onerror="this.style.display='none'"><span>${esc(classLabel(c))}</span><i>${c === 'todos' ? KEYS.length : KEYS.filter(k => CHAMPIONS[k].cls === c).length}</i></button>`).join('')}</div>`;
 const champGrid = (sel, taken = () => false) => `<div class="champs" id="champs">${KEYS.filter(k => clsFilter === 'todos' || CHAMPIONS[k].cls === clsFilter).map(k => `<div class="cc ${k === sel ? 'sel' : ''} ${taken(k) ? 'taken' : ''}" data-k="${k}"><div class="im" style="${faceCss(k)}"></div><div class="lb">${esc(CHAMPIONS[k].name)}</div></div>`).join('')}</div>`;
-const abilityStrip = d => `<div class="abis">${ABILITY_KEYS.map((a, i) => { const ab = d.abilities[a]; return `<div class="abi" data-tip="${esc(`<b>[${'QFER'[i]}] ${ab.name}${ab.passive ? ' · pasiva' : ''}</b><br>${ab.desc}`)}"><img src="assets/icons/${esc(ab.icon)}.png?v=${BUILD}" alt=""><span>${'QFER'[i]}</span></div>`; }).join('')}</div>`;
+const abilityStrip = d => `<div class="abis">${ABILITY_KEYS.map((a, i) => { const ab = d.abilities[a]; return `<div class="abiw"><div class="abi" data-tip="${esc(`<b>[${'QFER'[i]}] ${ab.name}${ab.passive ? ' · pasiva' : ''}</b><br>${ab.desc}`)}"><img src="assets/icons/${esc(ab.icon)}.png?v=${BUILD}" alt=""><span>${'QFER'[i]}</span></div><em>${esc(ab.name)}${ab.passive ? ' · pasiva' : ''}</em></div>`; }).join('')}</div>`;
 const refresh = () => (screen === 'practice' ? practiceScreen() : lobbyScreen());
 
 function lobbyScreen() {
@@ -114,6 +114,7 @@ function lobbyScreen() {
       ${champTabs()}
       ${champGrid(sel, k => pl.some(p => p.champ === k && p.id !== net.user.id))}
 </div>
+      <div class="panel stagep">${stageHtml(d, sel)}</div>
       <div class="panel info">${abilityStrip(d)}</div></div>
     <div class="col"><div class="panel chat"><h2>CHAT</h2><div class="log" id="log"></div><input class="fld" id="chatin" maxlength="200" placeholder="Escribe y pulsa Enter" autocomplete="off"></div>
       <div class="panel"><div class="row" style="margin-bottom:10px"><button class="btn ${me?.ready ? 'warn' : 'go'}" data-a="ready">${me?.ready ? 'Cancelar listo' : 'Estoy listo'}</button><button class="btn ghost" data-a="leave">Salir</button></div>
@@ -124,11 +125,53 @@ function lobbyScreen() {
   ci.addEventListener('keydown', e => { if (e.key === 'Enter' && ci.value.trim()) { net.send('chat', { text: ci.value.trim() }); ci.value = ''; } });
   if (!first) $('#champs', view).parentElement.scrollTop = keep.sc;
   if (me && !me.champ && !picked) { picked = KEYS.filter(k => !pl.some(p => p.champ === k))[0] || KEYS[0]; net.send('pick_champ', { key: picked }); }   // everyone always has a champion
+  wireStage();
 }
 
 
+/* ---- champion stage (Fase 1): big animated champion + stats at max level, real game art only ---- */
+let SPRITES = null, stageIv = null, stageF = 0;
+fetch('assets/sprites/manifest.json').then(r => r.json()).then(j => { SPRITES = j.sprites || null; wireStage(); }).catch(() => {});
+const stat12 = (d, k) => Math.round(d.stats[k] * (1 + (d.grow?.[k] || 0) * 11));   // the game's own growth formula at level 12
+const STAT_ROWS = [['hp', 'VIDA', 'assets/stats/hp.png'], ['mana', 'MANÁ', 'assets/stats/mana.png'], ['atk', 'ATAQUE FÍSICO', 'assets/stats/atk.png'], ['ap', 'PODER IA', 'assets/stats/ap.png'], ['armor', 'ARMADURA', 'assets/stats/armor.png'], ['mr', 'RES. IA', 'assets/stats/mr.png'], ['speed', 'VELOCIDAD', 'assets/stats/speed.png'], ['range', 'RANGO', 'assets/aim/aim_ring.png']];
+/* Escenarios: los PNG conceptuales mandan en el MENÚ (fondo ambiental + miniaturas).
+   En partida manda el sistema de mapas del juego: nada de pegar la imagen como fondo jugable (eso es la Fase 3). */
+const MAPS = [
+  { id: 'ruinas', name: 'Ruinas del Bosque Esmeralda', img: 'assets/maps/esc-ruinas.webp', thumb: 'assets/maps/esc-ruinas-thumb.webp' },
+  { id: 'templo', name: 'Templo Ancestral', img: 'assets/maps/esc-templo.webp', thumb: 'assets/maps/esc-templo-thumb.webp' },
+  { id: 'ciudad', name: 'Ciudad Neo-Suika', img: 'assets/maps/esc-ciudad.webp', thumb: 'assets/maps/esc-ciudad-thumb.webp' },
+];
+const mapOf = id => MAPS.find(m => m.id === id) || MAPS[0];
+const ambHtml = () => `<div class="amb"><img class="bg" src="${mapOf(prac.map).img}" alt=""><div class="amb-shade"></div></div>`;
+const stageHtml = (d, id) => {
+  const rows = STAT_ROWS.map(([k, lb, src]) => {
+    const val = k === 'mana' ? (d.rage ? 100 : d.stats.mana) : (k === 'hp' || k === 'atk' || k === 'ap') ? stat12(d, k) : d.stats[k];
+    return `<div class="srow"><img src="${src}" alt="" onerror="this.style.visibility='hidden'"><span>${k === 'mana' && d.rage ? 'IRA' : lb}</span><b>${val}</b></div>`;
+  }).join('');
+  return `<div class="stage">
+    <div class="st-scene" style="background-image:url(${mapOf(prac.map).img})"></div><div class="st-shade"></div>
+    <div class="st-glow"></div><div class="st-plat"></div>
+    <div class="cspr" id="cspr" data-id="${id}" style="background-image:url(assets/sprites/${id}/idle.png)"></div>
+    <div class="st-pill">${esc(d.name.toUpperCase())}<span>Nv. 12</span></div>
+    <div class="st-stats"><div class="st-head">${esc(CLASSES[d.cls]?.label || '')}</div>${rows}</div>
+  </div>`;
+};
+function wireStage() {
+  const el = view?.querySelector('#cspr'); if (!el) return;
+  const n = SPRITES?.[el.dataset.id]?.idle || 4, h = el.clientHeight || 248;
+  el.dataset.n = n; el.style.backgroundSize = `${h * n}px ${h}px`; el.style.backgroundPositionX = '0px'; stageF = 0;
+  clearInterval(stageIv);
+  stageIv = setInterval(() => {
+    const e = view?.querySelector('#cspr');
+    if (!e || e.dataset.id !== el.dataset.id) { clearInterval(stageIv); stageIv = null; return; }
+    stageF = (stageF + 1) % (+e.dataset.n || n);
+    e.style.backgroundPositionX = `${-stageF * (e.clientHeight || h)}px`;
+  }, 230);
+}
+window.addEventListener('resize', () => wireStage());
+
 // ---- practice & training: same champion select as the lobby ----
-const prac = { mode: 1, me: 'leandro', team: 0, allies: [], enemies: [] };
+const prac = { mode: 1, me: 'leandro', team: 0, allies: [], enemies: [], map: 'ruinas' };
 function pracFill(reroll = false) {   // keeps both teams the right size for the mode, filling new slots with random champions
   const pool = () => KEYS[Math.random() * KEYS.length | 0], make = (arr, n, avoid) => { const out = reroll ? [] : arr.slice(0, n); while (out.length < n) { const free = KEYS.filter(c => !avoid.includes(c) && !out.includes(c)); out.push(free.length ? free[Math.random() * free.length | 0] : pool()); } return out; };
   prac.allies = make(prac.allies, prac.mode - 1, [prac.me]); prac.enemies = make(prac.enemies, prac.mode, [prac.me, ...prac.allies]);
@@ -138,7 +181,7 @@ function practiceScreen() {
   const d = CHAMPIONS[prac.me], keep = $('#champs', view)?.parentElement?.scrollTop || 0;
   const slots = (arr, g) => (arr.length ? arr.map((k, i) => `<div class="pl slot" data-a="pslot" data-g="${g}" data-i="${i}" title="Clic para cambiar de campeón">${face(k)}<div class="nm">${esc(CHAMPIONS[k].name)}<div class="ch">${esc(CLASSES[CHAMPIONS[k].cls]?.label || '')}</div></div></div>`).join('') : '<div class="pl empty"><div class="nm ch">Sin aliados en 1 vs 1</div></div>');
   const hdr = `<div class="hdr"><div class="logo">SUIKA <b>FIGTHER</b></div><div class="sp"></div><div class="vol">${['music', 'sfx'].map(k => `<span>${k === 'music' ? 'MÚSICA' : 'EFECTOS'}</span><input type="range" min="0" max="100" value="${Math.round(vol[k] * 100)}" data-vol="${k}" style="--v:${Math.round(vol[k] * 100)}%"><b class="pc" id="pc-${k}">${Math.round(vol[k] * 100)}%</b>`).join('')}</div><button class="btn sm ghost" data-a="pback">Volver</button></div>`;
-  view.innerHTML = `<div class="scr ${first ? '' : 'noanim'}">${hdr}<div class="lobby">
+  view.innerHTML = `<div class="scr ${first ? '' : 'noanim'} prac">${ambHtml()}${hdr}<div class="lobby prac">
     <div class="col"><div class="panel"><h2>MODO DE JUEGO</h2><div class="row">${[1, 3, 5].map(m => `<button class="btn mbtn ${prac.mode === m ? 'on' : ''}" data-a="pmode" data-m="${m}">${m} vs ${m}</button>`).join('')}</div>
         <h2 style="margin-top:14px">TU BANDO</h2><div class="row"><button class="btn mbtn ${prac.team === 0 ? 'on' : ''}" data-a="pteam" data-t="0">AZUL</button><button class="btn mbtn red ${prac.team === 1 ? 'on' : ''}" data-a="pteam" data-t="1">ROJO</button></div>
         <button class="btn ghost" style="width:100%;margin-top:14px" data-a="prand">Equipos al azar</button></div>
@@ -147,12 +190,15 @@ function practiceScreen() {
       ${champTabs()}
       ${champGrid(prac.me)}
 </div>
+      <div class="panel stagep">${stageHtml(d, prac.me)}</div>
       <div class="panel info">${abilityStrip(d)}</div></div>
     <div class="col"><div class="panel"><h2>JUGAR</h2><div class="acts">
         <button class="btn big go" data-a="pplay">Jugar partida<small>${prac.mode} vs ${prac.mode} contra la IA, con oleadas, torres y nexos.</small></button>
         <button class="btn big" data-a="ptrain">Zona de entrenamiento<small>Nivel 12, sin costo de maná y un muñeco para practicar.</small></button></div></div>
-      <div class="panel"><h2>CONTROLES</h2><div style="font-size:15px;line-height:1.5;color:var(--tx)">WASD mover · Shift correr · clic o J atacar<br>Q F E R poderes (clic para lanzar) · Ctrl + tecla sube el poder<br>B tienda en la base · 1-6 usar objetos · Esc menú</div></div></div></div></div>`;
+      <div class="panel"><h2>CONTROLES</h2><div style="font-size:15px;line-height:1.5;color:var(--tx)">WASD mover · Shift correr · clic o J atacar<br>Q F E R poderes (clic para lanzar) · Ctrl + tecla sube el poder<br>B tienda en la base · 1-6 usar objetos · Esc menú</div></div>
+      <div class="panel"><h2>ESCENARIO</h2><div class="mapsrow">${MAPS.map(m => `<button class="map ${prac.map === m.id ? 'sel' : ''}" data-a="pmap" data-map="${m.id}"><img src="${m.thumb}" alt=""><span>${esc(m.name)}</span>${prac.map === m.id ? '<i>ELEGIDO</i>' : ''}</button>`).join('')}</div><div class="mapnote">El fondo del menú cambia con tu elección y tu campeón se presenta en ese escenario. En partida todavía se juega en las Ruinas: Templo y Ciudad se integran como mapas jugables en la Fase 3, con el sistema de mapas del juego (colisiones, rutas, torres y nexos), no pegando la imagen como fondo.</div></div></div></div></div>`;
   if (!first) $('#champs', view).parentElement.scrollTop = keep;
+  wireStage();
 }
 function practiceStart(training) {
   snd('ui_confirm'); stopMusic();
@@ -224,6 +270,7 @@ const actions = {
   pmode(el) { prac.mode = +el.dataset.m; practiceScreen(); },
   pteam(el) { prac.team = +el.dataset.t; practiceScreen(); },
   prand() { pracFill(true); practiceScreen(); },
+  pmap(el) { prac.map = el.dataset.map; snd('ui_tab'); practiceScreen(); },
   pslot(el) { const arr = prac[el.dataset.g], i = +el.dataset.i; arr[i] = KEYS[(KEYS.indexOf(arr[i]) + 1) % KEYS.length]; practiceScreen(); },
   pplay() { practiceStart(false); },
   ptrain() { practiceStart(true); },
