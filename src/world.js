@@ -2168,7 +2168,7 @@ export class Arena extends Phaser.Scene {
       p.px = p.x; p.py = p.y;
       p.x += p.ax * p.speed * dt; p.y += p.ay * p.speed * dt; p.left -= p.speed * dt;
       p.s.setPosition(p.x, p.y - p.lift).setDepth(p.y + 1);
-      if (p.spin) p.s.rotation += dt * 12 * (p.ax >= 0 ? 1 : -1);
+      if (p.spin) p.s.rotation += dt * (p.spinSpeed ?? 12) * (p.ax >= 0 ? 1 : -1);
       let dead = p.left <= 0 || p.x < 0 || p.x > WORLD_W || p.y < 0 || p.y > WORLD_H;
       if (!dead) {
         const wall = this.obstacles.find(o => o.team !== p.team && segDist(p.px, p.py, p.x, p.y, o.x, o.y) < o.r + (p.r || 14) * 0.5);
@@ -2199,7 +2199,7 @@ export class Arena extends Phaser.Scene {
       const champ = f.isChamp;
       if (f.hiddenFor(me) || this.blindVis(f) <= 0) { f.bt && Object.values(f.bt).forEach(t => t.setVisible(false)); f.invIc?.setVisible(false); f.poisIc?.setVisible(false); continue; }
       if (champ && !f.bt) {
-        const mk = () => this.add.text(0, 0, '', { fontFamily: 'monospace', fontSize: '10px', fontStyle: 'bold', color: '#fff', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5).setDepth(100000);
+        const mk = () => { const t = this.add.text(0, 0, '', { fontFamily: 'monospace', fontSize: '10px', fontStyle: 'bold', color: '#fff', stroke: '#000', strokeThickness: 3, resolution: 3 }).setOrigin(0.5).setDepth(100000); t.texture.setFilter(Phaser.Textures.FilterMode.LINEAR); return t; };
         f.bt = { hp: mk(), mp: mk(), name: mk(), lvl: mk() };
       }
       if (!f.alive) { f.bt && Object.values(f.bt).forEach(t => t.setVisible(false)); f.invIc?.setVisible(false); f.poisIc?.setVisible(false); continue; }
