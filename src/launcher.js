@@ -136,10 +136,12 @@ const stat12 = (d, k) => Math.round(d.stats[k] * (1 + (d.grow?.[k] || 0) * 11));
 const STAT_ROWS = [['hp', 'VIDA', 'assets/stats/hp.png'], ['mana', 'MANÁ', 'assets/stats/mana.png'], ['atk', 'ATAQUE FÍSICO', 'assets/stats/atk.png'], ['ap', 'PODER IA', 'assets/stats/ap.png'], ['armor', 'ARMADURA', 'assets/stats/armor.png'], ['mr', 'RES. IA', 'assets/stats/mr.png'], ['speed', 'VELOCIDAD', 'assets/stats/speed.png'], ['range', 'RANGO', 'assets/aim/aim_ring.png']];
 /* Escenarios: los PNG conceptuales mandan en el MENÚ (fondo ambiental + miniaturas).
    En partida manda el sistema de mapas del juego: nada de pegar la imagen como fondo jugable (eso es la Fase 3). */
+/* Los archivos en public/assets/maps/ quedaron con nombres UUID (la descarga del chat los renombró);
+   el contenido es el correcto, verificado por md5. Si se renombran a esc-*.webp, actualizar aquí. */
 const MAPS = [
-  { id: 'ruinas', name: 'Ruinas del Bosque Esmeralda', img: 'assets/maps/esc-ruinas.webp', thumb: 'assets/maps/esc-ruinas-thumb.webp' },
-  { id: 'templo', name: 'Templo Ancestral', img: 'assets/maps/esc-templo.webp', thumb: 'assets/maps/esc-templo-thumb.webp' },
-  { id: 'ciudad', name: 'Ciudad Neo-Suika', img: 'assets/maps/esc-ciudad.webp', thumb: 'assets/maps/esc-ciudad-thumb.webp' },
+  { id: 'ruinas', name: 'Ruinas del Bosque Esmeralda', img: 'assets/maps/0fb27c0f-253c-423f-b36c-1416a0aad065.webp', thumb: 'assets/maps/aa0be35d-85b5-4c8e-974f-6568b33e9d42.webp' },
+  { id: 'templo', name: 'Templo Ancestral', img: 'assets/maps/189846c2-616d-4511-b278-1fd8b5d37bb7.webp', thumb: 'assets/maps/f787857b-05d0-429d-bd62-d59da73876c0.webp' },
+  { id: 'ciudad', name: 'Ciudad Neo-Suika', img: 'assets/maps/fb448626-7fd0-4d95-aa1a-483833d69070.webp', thumb: 'assets/maps/36219378-8c8c-4871-9e6b-aee620875d28.webp' },
 ];
 const mapOf = id => MAPS.find(m => m.id === id) || MAPS[0];
 const ambHtml = () => `<div class="amb"><img class="bg" src="${mapOf(prac.map).img}" alt=""><div class="amb-shade"></div></div>`;
