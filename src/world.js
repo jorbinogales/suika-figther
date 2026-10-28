@@ -958,7 +958,7 @@ export class Arena extends Phaser.Scene {
   // countdown labels (seconds until the next minions): above every owned camp flag and above each nexus
   timerLabel(id, x, y, text, color, show) {
     const m = (this.tmLabels ||= {}); let t = m[id];
-    if (!t) t = m[id] = this.add.text(0, 0, '', { fontFamily: 'monospace', fontSize: '15px', fontStyle: 'bold', stroke: '#000', strokeThickness: 4 }).setOrigin(0.5).setDepth(100001);
+    if (!t?.scene) t = m[id] =this.add.text(0, 0, '', { fontFamily: 'monospace', fontSize: '15px', fontStyle: 'bold', stroke: '#000', strokeThickness: 4 }).setOrigin(0.5).setDepth(100001);
     if (!show || !this.inView(x, y, 120)) return t.setVisible(false);
     return t.setVisible(true).setText(text).setColor(color).setPosition(x, y);
   }

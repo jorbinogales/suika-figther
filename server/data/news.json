@@ -6,6 +6,7 @@
     "title": "Rediseño de Xeviche y Yonaiker, ajustes de Junior y Héctor, nuevo menú de campeones",
     "tag": "CAMBIOS",
     "items": [
+      "Corregido un error que a veces rompía el juego al iniciar otra partida (temporizadores de refuerzos y súbditos).",
       "Xeviche pasa a Poder de IA (mago). Nuevo diseño más delgado, camisa gris con franjas naranjas y pantalón caqui. Q: Lluvia de lego (ráfaga de piezas, más piezas y daño por nivel). F: Arepa reina pepiada pasa a ser una pasiva con escudo que anula el primer ataque o habilidad y se recarga. E: Una bonita sonrisita (corazón que hace caminar al enemigo hacia Xeviche sin control). R: Karis Harem (tres ayudantes lanzan un rayo que atraviesa todo, Xeviche no se mueve).",
       "Yonaiker ya no usa maná: tiene una barra de carga que al llenarse hace que una nave lo recoja; a bordo ve todo el mapa con una mira de bombardero y lanza misiles (quemadura, llamas y tierra rasgada, escala con ataque físico). F: granada de humo que envenena. E: cajas de ayuda con ventajas al azar para los aliados. R: cortina de humo que ciega y silencia solo a los campeones enemigos.",
       "Junior: la Q lo lanza hacia delante arrastrando a los campeones enemigos que alcance; la F tiene menos alcance; con la E activa no puede girar, usar otras habilidades ni atacar y se muestra su barra de duración; las llamas y cráteres de la R duran hasta que termina la ulti; el 4º golpe ya no se cierra el juego.",
