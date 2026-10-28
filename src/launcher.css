@@ -157,3 +157,41 @@ label.l{display:block;font-size:12px;letter-spacing:.2em;color:var(--mut);margin
 .map i{position:absolute;top:5px;right:5px;font:700 9px 'Orbitron',sans-serif;font-style:normal;background:rgba(4,12,24,.88);color:var(--am);padding:2px 6px;border:1px solid rgba(255,210,63,.55);letter-spacing:.08em}
 .mapnote{margin-top:10px;font-size:12.5px;line-height:1.45;color:var(--mut)}
 @media(max-width:1180px){.st-stats{width:176px}.cspr{left:29%}.st-plat{left:25.5%}.st-glow{left:27%}}
+
+/* ===== Dirección artística del menú — SOLO Ruinas del Bosque Esmeralda (en validación; Templo/Ciudad intactos) ===== */
+/* Fondo general: oscurecimiento localizado tras los paneles, centro libre y luminoso */
+.scr.prac[data-map="ruinas"] .amb-shade{background:linear-gradient(90deg,rgba(3,8,18,.52),rgba(3,8,18,.13) 30%,rgba(3,8,18,.13) 70%,rgba(3,8,18,.52)),linear-gradient(180deg,rgba(3,8,18,.28),rgba(3,8,18,.42) 58%,rgba(3,8,18,.58));box-shadow:inset 0 0 140px rgba(0,0,0,.32)}
+/* Tarima: el escenario ocupa todo el espacio de presentación, sin recuadro de foto */
+.stage.art{height:clamp(315px,44vh,415px)}
+.stage.art .st-scene{background-position:center 66%}
+.stage.art .st-shade{background:linear-gradient(180deg,rgba(4,8,16,0),rgba(4,8,16,.12) 68%,rgba(4,8,16,.34))}
+.stage.art .st-pill,.stage.art .st-stats{z-index:5}
+/* Capas 3+4: sombra real del juego bajo los pies + sprite animado, apoyado en el suelo de la arena */
+.stage.art .cwrap{position:absolute;left:30%;bottom:36px;height:min(308px,85%);aspect-ratio:1;z-index:2}
+.stage.art .cspr{position:absolute;inset:0;left:0;bottom:0;width:100%;height:auto}
+.cspr-sh{position:absolute;left:50%;transform:translateX(-50%);bottom:6.5%;width:64%;height:11%;opacity:.55;image-rendering:pixelated}
+/* Capa 5: vegetación real del repo en primer plano (sprites transparentes, sin recortes de la pintura) */
+.st-fg{position:absolute;z-index:3;image-rendering:pixelated;pointer-events:none}
+.fg-tree{left:-48px;bottom:-6px;height:66%}
+.fg-bush{right:220px;bottom:0;height:60px;filter:drop-shadow(0 4px 5px rgba(0,0,0,.4))}
+/* Capa 6: resplandor cálido de antorchas, discreto */
+.st-fx{position:absolute;inset:0;z-index:4;pointer-events:none}
+.st-fx i{position:absolute;width:112px;height:112px;border-radius:50%;background:radial-gradient(circle,rgba(255,172,64,.32),rgba(255,140,40,.10) 55%,transparent 70%);animation:fxpulse 3.8s ease-in-out infinite alternate}
+.st-fx .fx1{left:23%;top:25%}
+.st-fx .fx2{left:59%;top:18%;animation-delay:1.4s}
+@keyframes fxpulse{from{opacity:.45;transform:scale(.92)}to{opacity:.9;transform:scale(1.08)}}
+@media(max-width:1180px){.stage.art .cwrap{left:24%}}
+
+/* ===== Dirección artística extendida: Templo Ancestral y Ciudad Neo-Suika ===== */
+/* Fondos generales aclarados por zonas, con la temperatura de cada escenario */
+.scr.prac[data-map="templo"] .amb-shade{background:linear-gradient(90deg,rgba(4,10,24,.52),rgba(4,10,24,.12) 30%,rgba(4,10,24,.12) 70%,rgba(4,10,24,.52)),linear-gradient(180deg,rgba(4,10,24,.26),rgba(4,10,24,.40) 58%,rgba(4,10,24,.56));box-shadow:inset 0 0 140px rgba(0,0,0,.30)}
+.scr.prac[data-map="ciudad"] .amb-shade{background:linear-gradient(90deg,rgba(8,4,20,.56),rgba(8,4,20,.17) 30%,rgba(8,4,20,.17) 70%,rgba(8,4,20,.56)),linear-gradient(180deg,rgba(8,4,20,.32),rgba(8,4,20,.46) 58%,rgba(8,4,20,.62));box-shadow:inset 0 0 140px rgba(0,0,0,.36)}
+/* Encuadre de cada arena: la plaza principal queda bajo los pies del campeón */
+.stage.m-templo .st-scene{background-position:center 60%}
+.stage.m-ciudad .st-scene{background-position:center 62%}
+/* Resplandores por tema: Templo = luz mística fría · Ciudad = neón cian y rosa */
+.stage.m-templo .st-fx i{background:radial-gradient(circle,rgba(110,210,255,.30),rgba(80,160,255,.10) 55%,transparent 70%)}
+.stage.m-templo .st-fx .fx1{left:16%;top:30%}
+.stage.m-templo .st-fx .fx2{left:68%;top:20%}
+.stage.m-ciudad .st-fx .fx1{left:19%;top:24%;background:radial-gradient(circle,rgba(64,220,255,.32),rgba(64,180,255,.10) 55%,transparent 70%)}
+.stage.m-ciudad .st-fx .fx2{left:64%;top:15%;background:radial-gradient(circle,rgba(255,84,200,.28),rgba(255,84,200,.09) 55%,transparent 70%)}

@@ -144,14 +144,15 @@ const MAPS = [
 const mapOf = id => MAPS.find(m => m.id === id) || MAPS[0];
 const ambHtml = () => `<div class="amb"><img class="bg" src="${mapOf(prac.map).img}" alt=""><div class="amb-shade"></div></div>`;
 const stageHtml = (d, id) => {
+  const m = mapOf(prac.map);   // dirección artística nueva aplicada a los tres escenarios (aprobada la dirección en Ruinas)
   const rows = STAT_ROWS.map(([k, lb, src]) => {
     const val = k === 'mana' ? (d.rage ? 100 : d.stats.mana) : (k === 'hp' || k === 'atk' || k === 'ap') ? stat12(d, k) : d.stats[k];
     return `<div class="srow"><img src="${src}" alt="" onerror="this.style.visibility='hidden'"><span>${k === 'mana' && d.rage ? 'IRA' : lb}</span><b>${val}</b></div>`;
   }).join('');
-  return `<div class="stage">
-    <div class="st-scene" style="background-image:url(${mapOf(prac.map).img})"></div><div class="st-shade"></div>
-    <div class="st-glow"></div><div class="st-plat"></div>
-    <div class="cspr" id="cspr" data-id="${id}" style="background-image:url(assets/sprites/${id}/idle.png)"></div>
+  const champ = `<div class="cspr" id="cspr" data-id="${id}" style="background-image:url(assets/sprites/${id}/idle.png)"></div>`;
+  return `<div class="stage art m-${m.id}">
+    <div class="st-scene" style="background-image:url(${m.img})"></div><div class="st-shade"></div>
+    <div class="cwrap"><img class="cspr-sh" src="assets/map/shadow.png" alt="">${champ}</div>${m.id === 'ruinas' ? '<img class="st-fg fg-tree" src="assets/map/forest/tree3.png" alt=""><img class="st-fg fg-bush" src="assets/map/forest/bush2.png" alt="">' : ''}<div class="st-fx"><i class="fx1"></i><i class="fx2"></i></div>
     <div class="st-pill">${esc(d.name.toUpperCase())}<span>Nv. 12</span></div>
     <div class="st-stats"><div class="st-head">${esc(CLASSES[d.cls]?.label || '')}</div>${rows}</div>
   </div>`;
@@ -181,7 +182,7 @@ function practiceScreen() {
   const d = CHAMPIONS[prac.me], keep = $('#champs', view)?.parentElement?.scrollTop || 0;
   const slots = (arr, g) => (arr.length ? arr.map((k, i) => `<div class="pl slot" data-a="pslot" data-g="${g}" data-i="${i}" title="Clic para cambiar de campeón">${face(k)}<div class="nm">${esc(CHAMPIONS[k].name)}<div class="ch">${esc(CLASSES[CHAMPIONS[k].cls]?.label || '')}</div></div></div>`).join('') : '<div class="pl empty"><div class="nm ch">Sin aliados en 1 vs 1</div></div>');
   const hdr = `<div class="hdr"><div class="logo">SUIKA <b>FIGTHER</b></div><div class="sp"></div><div class="vol">${['music', 'sfx'].map(k => `<span>${k === 'music' ? 'MÚSICA' : 'EFECTOS'}</span><input type="range" min="0" max="100" value="${Math.round(vol[k] * 100)}" data-vol="${k}" style="--v:${Math.round(vol[k] * 100)}%"><b class="pc" id="pc-${k}">${Math.round(vol[k] * 100)}%</b>`).join('')}</div><button class="btn sm ghost" data-a="pback">Volver</button></div>`;
-  view.innerHTML = `<div class="scr ${first ? '' : 'noanim'} prac">${ambHtml()}${hdr}<div class="lobby prac">
+  view.innerHTML = `<div class="scr ${first ? '' : 'noanim'} prac" data-map="${prac.map}">${ambHtml()}${hdr}<div class="lobby prac">
     <div class="col"><div class="panel"><h2>MODO DE JUEGO</h2><div class="row">${[1, 3, 5].map(m => `<button class="btn mbtn ${prac.mode === m ? 'on' : ''}" data-a="pmode" data-m="${m}">${m} vs ${m}</button>`).join('')}</div>
         <h2 style="margin-top:14px">TU BANDO</h2><div class="row"><button class="btn mbtn ${prac.team === 0 ? 'on' : ''}" data-a="pteam" data-t="0">AZUL</button><button class="btn mbtn red ${prac.team === 1 ? 'on' : ''}" data-a="pteam" data-t="1">ROJO</button></div>
         <button class="btn ghost" style="width:100%;margin-top:14px" data-a="prand">Equipos al azar</button></div>
