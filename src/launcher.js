@@ -140,11 +140,11 @@ const STAT_ROWS = [['hp', 'VIDA', 'assets/stats/hp.png'], ['mana', 'MANÁ', 'ass
    el contenido es el correcto, verificado por md5. Si se renombran a esc-*.webp, actualizar aquí. */
 const MAPS = [
   { id: 'ruinas', name: 'Ruinas del Bosque Esmeralda', img: 'assets/maps/0fb27c0f-253c-423f-b36c-1416a0aad065.webp', thumb: 'assets/maps/aa0be35d-85b5-4c8e-974f-6568b33e9d42.webp', scene: 'assets/maps/escena-ruinas.webp' },
-  { id: 'templo', name: 'Templo Ancestral', img: 'assets/maps/189846c2-616d-4511-b278-1fd8b5d37bb7.webp', thumb: 'assets/maps/f787857b-05d0-429d-bd62-d59da73876c0.webp' },
-  { id: 'ciudad', name: 'Ciudad Neo-Suika', img: 'assets/maps/fb448626-7fd0-4d95-aa1a-483833d69070.webp', thumb: 'assets/maps/36219378-8c8c-4871-9e6b-aee620875d28.webp' },
+  { id: 'templo', name: 'Templo Ancestral', img: 'assets/maps/189846c2-616d-4511-b278-1fd8b5d37bb7.webp', thumb: 'assets/maps/f787857b-05d0-429d-bd62-d59da73876c0.webp', soon: true },
+  { id: 'ciudad', name: 'Ciudad Neo-Suika', img: 'assets/maps/fb448626-7fd0-4d95-aa1a-483833d69070.webp', thumb: 'assets/maps/36219378-8c8c-4871-9e6b-aee620875d28.webp', soon: true },
 ];
 const mapOf = id => MAPS.find(m => m.id === id) || MAPS[0];
-/* Sombra de contacto del menú (sombra-campeon.png): [ancho, centro] como fracción del cuadro del sprite,
+/* Sombra de contacto del menú (PNG de Elis incrustado como data URI, 412 B): [ancho, centro] como fracción del cuadro del sprite,
    medidos del ancho real de los pies de cada campeón en su idle (span × 1.45 de margen suave). */
 const SHADOW = { leandro: [.48, .512], xeviche: [.49, .510], jorbi: [.62, .496], axel: [.40, .502], julio: [.47, .514], luis: [.43, .508], eliud: [.42, .518], hector: [.60, .496] };
 const sceneOf = m => m.scene || m.img;   // escena a nivel de suelo si el escenario la tiene; si no, su pintura cenital
@@ -162,7 +162,7 @@ const stageHtml = (d, id, nav = false) => {
   const champ = `<div class="cspr" id="cspr" data-id="${id}" style="background-image:url(assets/sprites/${id}/idle.png)"></div>`;
   return `<div class="stage art m-${m.id}${open ? ' open' : ''}">
     ${open ? '' : `<div class="st-scene" style="background-image:url(${sceneOf(m)})"></div><div class="st-shade"></div>`}
-    <div class="cwrap"><img class="cshadow-img" src="assets/sombra-campeon.png" alt="" style="width:${Math.round((SHADOW[id]?.[0] ?? .48) * 100)}%;left:${((SHADOW[id]?.[1] ?? .51) * 100).toFixed(1)}%">${champ}${nav ? navHtml() : ''}</div>${!open && m.id === 'ruinas' ? '<img class="st-fg fg-tree" src="assets/map/forest/tree3.png" alt=""><img class="st-fg fg-bush" src="assets/map/forest/bush2.png" alt="">' : ''}<div class="st-fx"><i class="fx1"></i><i class="fx2"></i></div>${m.id === 'ruinas' ? '<div class="st-dust"><i></i><i></i><i></i><i></i><i></i><i></i></div>' : ''}
+    <div class="cwrap"><img class="cshadow-img" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAAAwCAYAAADZ9HK+AAABY0lEQVR4nO3a2U7CUBCA4UFxB6nQ93/CUqsg7suFM/Fk0lJjVzn/d/MT0ouG9AxwWhEAAAAAAAAAAHDIJkOfQJVlkp7qy0vXc9czrR1/op26HmsnrubT9V375vqqfdE+a59cd2HzIrPjR+Vo6BPAsHqfAMsktYtuob3WzrUz7ZXWT4ALra38sbBJ8KjduT5ot9qN9l57JyKSF9lHVydYhgkQuc4mQLDSb1wXrn4C2Eo/VDYRSidA0NuwXU0GJkDkWpsAwYpf2VvaugmAb3sngIjk2rVIexOBCRC5xhMg+L+ealeutvITrR2PcrZfUGhtAqxdM5Hm+wtMgMhN6w+pNa/ozJWV/zv2Odnn5nce/Q6kTYQ/YQJEjgsgclwAkWvjN4DtaPm7clV35/gtsJ99x29dNxVthAkQOXYCx4OdQPSPu4H9424gxoMngtrDE0H4f3gq+AdPBQMAAAAAAAAAAOCwfAEAHnooEzuXFgAAAABJRU5ErkJggg==" alt="" style="width:${Math.round((SHADOW[id]?.[0] ?? .48) * 100)}%;left:${((SHADOW[id]?.[1] ?? .51) * 100).toFixed(1)}%">${champ}${nav ? navHtml() : ''}</div>${!open && m.id === 'ruinas' ? '<img class="st-fg fg-tree" src="assets/map/forest/tree3.png" alt=""><img class="st-fg fg-bush" src="assets/map/forest/bush2.png" alt="">' : ''}<div class="st-fx"><i class="fx1"></i><i class="fx2"></i></div>${m.id === 'ruinas' ? '<div class="st-dust"><i></i><i></i><i></i><i></i><i></i><i></i></div>' : ''}
     <div class="st-pill">${esc(d.name.toUpperCase())}<span>Nv. 12</span></div>
     <div class="st-stats"><div class="st-head">${esc(CLASSES[d.cls]?.label || '')}</div>${rows}</div>
   </div>`;
@@ -207,7 +207,7 @@ function practiceScreen() {
         <button class="btn big go" data-a="pplay">Jugar partida<small>${prac.mode} vs ${prac.mode} contra la IA, con oleadas, torres y nexos.</small></button>
         <button class="btn big" data-a="ptrain">Zona de entrenamiento<small>Nivel 12, sin costo de maná y un muñeco para practicar.</small></button></div></div>
       <div class="panel"><h2>CONTROLES</h2><div style="font-size:15px;line-height:1.5;color:var(--tx)">WASD mover · Shift correr · clic o J atacar<br>Q F E R poderes (clic para lanzar) · Ctrl + tecla sube el poder<br>B tienda en la base · 1-6 usar objetos · Esc menú</div></div>
-      <div class="panel"><h2>ESCENARIO</h2><div class="mapsrow">${MAPS.map(m => `<button class="map ${prac.map === m.id ? 'sel' : ''}" data-a="pmap" data-map="${m.id}"><img src="${m.thumb}" alt=""><span>${esc(m.name)}</span>${prac.map === m.id ? '<i>ELEGIDO</i>' : ''}</button>`).join('')}</div><div class="mapnote">El fondo del menú cambia con tu elección y tu campeón se presenta en ese escenario. En partida todavía se juega en las Ruinas: Templo y Ciudad se integran como mapas jugables en la Fase 3, con el sistema de mapas del juego (colisiones, rutas, torres y nexos), no pegando la imagen como fondo.</div></div></div></div></div>`;
+      <div class="panel"><h2>ESCENARIO</h2><div class="mapsrow">${MAPS.map(m => m.soon ? `<button class="map soon" disabled><img src="${m.thumb}" alt=""><span>${esc(m.name)}</span><i>PRÓXIMAMENTE</i></button>` : `<button class="map ${prac.map === m.id ? 'sel' : ''}" data-a="pmap" data-map="${m.id}"><img src="${m.thumb}" alt=""><span>${esc(m.name)}</span>${prac.map === m.id ? '<i>ELEGIDO</i>' : ''}</button>`).join('')}</div><div class="mapnote">El fondo del menú cambia con tu elección y tu campeón se presenta en ese escenario. En partida todavía se juega en las Ruinas: Templo y Ciudad se integran como mapas jugables en la Fase 3, con el sistema de mapas del juego (colisiones, rutas, torres y nexos), no pegando la imagen como fondo.</div></div></div></div></div>`;
   if (!first) $('#champs', view).parentElement.scrollTop = keep;
   wireStage();
 }
@@ -281,7 +281,7 @@ const actions = {
   pmode(el) { prac.mode = +el.dataset.m; practiceScreen(); },
   pteam(el) { prac.team = +el.dataset.t; practiceScreen(); },
   prand() { pracFill(true); practiceScreen(); },
-  pmap(el) { prac.map = el.dataset.map; snd('ui_tab'); practiceScreen(); },
+  pmap(el) { if (MAPS.find(m => m.id === el.dataset.map)?.soon) return; prac.map = el.dataset.map; snd('ui_tab'); practiceScreen(); },
   pnav(el) { const list = navList(); if (list.length <= 1) return; const i = list.indexOf(prac.me), d = +el.dataset.d || 1; prac.me = i < 0 ? (d > 0 ? list[0] : list[list.length - 1]) : list[(i + d + list.length) % list.length]; snd('ui_tab'); practiceScreen(); },
   pslot(el) { const arr = prac[el.dataset.g], i = +el.dataset.i; arr[i] = KEYS[(KEYS.indexOf(arr[i]) + 1) % KEYS.length]; practiceScreen(); },
   pplay() { practiceStart(false); },

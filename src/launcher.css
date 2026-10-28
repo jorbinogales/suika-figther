@@ -291,3 +291,10 @@ label.l{display:block;font-size:12px;letter-spacing:.2em;color:var(--mut);margin
 .cwrap .st-nav.prev:disabled{background-image:url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAABXklEQVR4nO2bwQoCIRCGp+id6hZE56CH6Kl6iKBzBHurp6rTHBJsdZzRcf2/Y7ij8H9s6ioRGJtV6wGE7M6XT0q71+2qMva1RpGecWNAavIhpSbAgNYDmEt+u98TEdF7mv7WkZoAA1p1nJp8iLYJMKB2h7nJH08HIiJ63J8/v2uZAANqdaSVfEipCTDAugOr5EOkJgxvwMaqcK3kw3pzJoTAAO2CtZOP1U81AQZoFWqdPIN3QCbFBvSaPDO8AeKZYC/JYy0wQ7YBS0megQGpDZeWPDO8AcXzgNjurffkGRggfTCWvDZWyTPDG1D8L9C7CTAgtaH0W542mAcoY74WsAJrASWq7QdYgf2AQoq/DfZuAgzQKuTdBBgQQf18gFcTYEAEsxMirUzAOyATd2eEpGAeIMTtOcFUsBYoxP1Z4RjYD1AC9wVyGi8R3BmSPLQkmhvA4N5gI9wYwODucGW+h9zi4K4V6x4AAAAASUVORK5CYII=)}
 .cwrap .st-nav.next:disabled{background-image:url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAABVUlEQVR4nO2bQQrCMBBFR/FOuiuIa8FDeCoPIbgWoTs9la6yMDBmpk38Q/rf0sy0gf/UNm1EyLJZ1TrQ7nR+W+qe10u1c9ZgjZ4AmtlpWJPPiWICDZjaWEp+OwwiIvIax5/HQZtAA7wN1uRzoppAA6yF3uQPx72IiNxvj6/Po5lAA0oFU7/ziegm0ABtYG7yOVFNoAHagGaAN/mcaCbQAG0gN2Bu8jlRTKAB2kCr34ActAk0QBuofR1QAmUCDSgV9G4CDbAW9moCDfA29GYCDZja+G8TNDQTaICR5s8GUSbQACObqY1Rk/dCA7wNvSSfWLwBYe8FNHgvUJlw6wEaXA9oRJg1QQ2uCTbGfR3QS/IJGmAt7C35BA2wFqZkWpnA9wNAuP8FapvAd4TAwO4F0MknaIC1sJYJUZJP0ABvA/cLdAb3DCFPHgHuG0RPAA33DqMngOYDdnjkLKY12toAAAAASUVORK5CYII=)}
 .cwrap .st-nav:disabled:hover{transform:translateY(-50%) scale(1)}
+
+/* ===== Escenarios PRÓXIMAMENTE: visibles pero bloqueados hasta su fase ===== */
+.map.soon{cursor:default;opacity:.62;border-color:rgba(120,140,170,.28)}
+.map.soon:hover{transform:none;box-shadow:none;border-color:rgba(120,140,170,.28)}
+.map.soon img{filter:grayscale(.75) brightness(.7)}
+.map.soon span{color:#9fb2c8}
+.map.soon i{color:#ffd76a;border-color:rgba(255,210,63,.4)}
