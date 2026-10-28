@@ -146,16 +146,17 @@ const MAPS = [
 const mapOf = id => MAPS.find(m => m.id === id) || MAPS[0];
 const sceneOf = m => m.scene || m.img;   // escena a nivel de suelo si el escenario la tiene; si no, su pintura cenital
 const ambHtml = () => `<div class="amb"><img class="bg" src="${sceneOf(mapOf(prac.map))}" alt=""><div class="amb-shade"></div></div>`;
-const stageHtml = (d, id) => {
+const stageHtml = (d, id, nav = false) => {
   const m = mapOf(prac.map);   // dirección artística nueva aplicada a los tres escenarios (aprobada la dirección en Ruinas)
+  const open = !!m.scene;   // con escena a nivel de suelo, la tarima se abre: una sola imagen, la de pantalla completa, y el campeón se para en ella
   const rows = STAT_ROWS.map(([k, lb, src]) => {
     const val = k === 'mana' ? (d.rage ? 100 : d.stats.mana) : (k === 'hp' || k === 'atk' || k === 'ap') ? stat12(d, k) : d.stats[k];
     return `<div class="srow"><img src="${src}" alt="" onerror="this.style.visibility='hidden'"><span>${k === 'mana' && d.rage ? 'IRA' : lb}</span><b>${val}</b></div>`;
   }).join('');
   const champ = `<div class="cspr" id="cspr" data-id="${id}" style="background-image:url(assets/sprites/${id}/idle.png)"></div>`;
-  return `<div class="stage art m-${m.id}">
-    <div class="st-scene" style="background-image:url(${sceneOf(m)})"></div><div class="st-shade"></div>
-    <div class="cwrap"><img class="cspr-sh" src="assets/map/shadow.png" alt="">${champ}</div>${m.id === 'ruinas' ? '<img class="st-fg fg-tree" src="assets/map/forest/tree3.png" alt=""><img class="st-fg fg-bush" src="assets/map/forest/bush2.png" alt="">' : ''}<div class="st-fx"><i class="fx1"></i><i class="fx2"></i></div>${m.id === 'ruinas' ? '<div class="st-dust"><i></i><i></i><i></i><i></i><i></i><i></i></div>' : ''}
+  return `<div class="stage art m-${m.id}${open ? ' open' : ''}">
+    ${open ? '' : `<div class="st-scene" style="background-image:url(${sceneOf(m)})"></div><div class="st-shade"></div>`}
+    <div class="cwrap">${open ? '<span class="cshadow"></span>' : ''}<img class="cspr-sh" src="assets/map/shadow.png" alt="">${champ}</div>${!open && m.id === 'ruinas' ? '<img class="st-fg fg-tree" src="assets/map/forest/tree3.png" alt=""><img class="st-fg fg-bush" src="assets/map/forest/bush2.png" alt="">' : ''}<div class="st-fx"><i class="fx1"></i><i class="fx2"></i></div>${m.id === 'ruinas' ? '<div class="st-dust"><i></i><i></i><i></i><i></i><i></i><i></i></div>' : ''}${nav ? '<button class="st-nav prev" data-a="pnav" data-d="-1" title="Campeón anterior">◀</button><button class="st-nav next" data-a="pnav" data-d="1" title="Campeón siguiente">▶</button>' : ''}
     <div class="st-pill">${esc(d.name.toUpperCase())}<span>Nv. 12</span></div>
     <div class="st-stats"><div class="st-head">${esc(CLASSES[d.cls]?.label || '')}</div>${rows}</div>
   </div>`;
@@ -194,7 +195,7 @@ function practiceScreen() {
       ${champTabs()}
       ${champGrid(prac.me)}
 </div>
-      <div class="panel stagep">${stageHtml(d, prac.me)}</div>
+      <div class="panel stagep">${stageHtml(d, prac.me, true)}</div>
       <div class="panel info">${abilityStrip(d)}</div></div>
     <div class="col"><div class="panel"><h2>JUGAR</h2><div class="acts">
         <button class="btn big go" data-a="pplay">Jugar partida<small>${prac.mode} vs ${prac.mode} contra la IA, con oleadas, torres y nexos.</small></button>
@@ -275,6 +276,7 @@ const actions = {
   pteam(el) { prac.team = +el.dataset.t; practiceScreen(); },
   prand() { pracFill(true); practiceScreen(); },
   pmap(el) { prac.map = el.dataset.map; snd('ui_tab'); practiceScreen(); },
+  pnav(el) { const i = KEYS.indexOf(prac.me); prac.me = KEYS[(i + (+el.dataset.d || 1) + KEYS.length) % KEYS.length]; snd('ui_tab'); practiceScreen(); },
   pslot(el) { const arr = prac[el.dataset.g], i = +el.dataset.i; arr[i] = KEYS[(KEYS.indexOf(arr[i]) + 1) % KEYS.length]; practiceScreen(); },
   pplay() { practiceStart(false); },
   ptrain() { practiceStart(true); },

@@ -223,3 +223,18 @@ label.l{display:block;font-size:12px;letter-spacing:.2em;color:var(--mut);margin
 .st-dust i:nth-child(6){left:84%;animation-duration:17s;animation-delay:5s;width:3px;height:3px}
 @keyframes dustUp{0%{transform:translate3d(0,0,0);opacity:0}12%{opacity:.65}55%{opacity:.4}100%{transform:translate3d(24px,-148px,0);opacity:0}}
 @media (prefers-reduced-motion: reduce){.st-dust{display:none}.st-fx i{animation:none}}
+
+/* ===== Escena abierta v2: UNA sola imagen (la pintura de pantalla completa) + flechas y sombra ===== */
+.panel.stagep:has(.stage.open){background:transparent;border-color:transparent;box-shadow:none}
+.stage.open{background:transparent;border-color:transparent;box-shadow:none}
+.stage.m-ruinas.open .cwrap{left:23%;bottom:36px}
+.stage.open .cspr-sh{opacity:.78;width:72%}
+.cshadow{position:absolute;left:50%;transform:translateX(-50%);bottom:3.8%;width:66%;height:26px;border-radius:50%;background:radial-gradient(ellipse at center,rgba(10,6,2,.55),rgba(10,6,2,.26) 55%,transparent 72%);filter:blur(1.5px)}
+.stage.open .st-pill{left:50%;right:auto;top:auto;bottom:42px;transform:translateX(-50%)}
+.stage.m-ruinas.open .st-fx .fx1{left:15%;top:9%}
+.stage.m-ruinas.open .st-fx .fx2{left:79%;top:9%}
+.st-nav{position:absolute;top:54%;transform:translateY(-50%);z-index:8;width:36px;height:48px;display:flex;align-items:center;justify-content:center;font-size:16px;color:#7fdcff;background:rgba(6,16,30,.5);border:1px solid rgba(94,200,255,.4);border-radius:9px;cursor:pointer;text-shadow:0 0 8px rgba(80,200,255,.85);font-family:inherit;padding:0}
+.st-nav:hover{background:rgba(22,54,84,.68)}
+.st-nav.prev{left:8px}
+.st-nav.next{right:198px}
+@media(max-width:1180px){.st-nav.next{right:8px}}
