@@ -270,3 +270,7 @@ label.l{display:block;font-size:12px;letter-spacing:.2em;color:var(--mut);margin
 /* La caja del campeón flota sobre las stats (sin bloquear clics) para que las flechas se vean */
 .stage.art .cwrap{z-index:6;pointer-events:none}
 .stage.art .cwrap .st-nav{pointer-events:auto}
+
+/* ===== Flechas como en el concepto: triángulos de luz, sin caja — no tapan ni las tapan ===== */
+.cwrap .st-nav{background:none;border:none;border-radius:0;box-shadow:none;width:34px;height:44px;font-size:27px;line-height:1;color:rgba(160,228,255,.92);text-shadow:0 0 10px rgba(80,200,255,.75),0 1px 4px rgba(0,10,20,.6);opacity:.88;transition:opacity .15s,transform .15s}
+.cwrap .st-nav:hover{background:none;opacity:1;transform:translateY(-50%) scale(1.14)}
