@@ -94,7 +94,7 @@ function send(t, o) { if (!net.online) { toast('Sin conexión con el servidor. R
 
 const champTabs = () => `<div class="ctabs">${CLASS_TABS.map(c => `<button class="ctab ${clsFilter === c ? 'on' : ''}" data-cls="${c}" title="${esc(classLabel(c))}"><img src="assets/classes/${c}.png" alt="" onerror="this.style.display='none'"><span>${esc(classLabel(c))}</span><i>${c === 'todos' ? KEYS.length : KEYS.filter(k => CHAMPIONS[k].cls === c).length}</i></button>`).join('')}</div>`;
 const champGrid = (sel, taken = () => false) => `<div class="champs" id="champs">${KEYS.filter(k => clsFilter === 'todos' || CHAMPIONS[k].cls === clsFilter).map(k => `<div class="cc ${k === sel ? 'sel' : ''} ${taken(k) ? 'taken' : ''}" data-k="${k}"><div class="im" style="${faceCss(k)}"></div><div class="lb">${esc(CHAMPIONS[k].name)}</div></div>`).join('')}</div>`;
-const abilityStrip = d => `<div class="abis">${ABILITY_KEYS.map((a, i) => { const ab = d.abilities[a]; return `<div class="abi" data-tip="${esc(`<b>[${'QFER'[i]}] ${ab.name}${ab.passive ? ' · pasiva' : ''}</b><br>${ab.desc}`)}"><img src="assets/icons/${esc(ab.icon)}.png?v=${BUILD}" alt=""><span>${'QFER'[i]}</span></div>`; }).join('')}</div>`;
+const abilityStrip = d => `<div class="abis">${ABILITY_KEYS.map((a, i) => { const ab = d.abilities[a]; return `<div class="abiw"><div class="abi" data-tip="${esc(`<b>[${'QFER'[i]}] ${ab.name}${ab.passive ? ' · pasiva' : ''}</b><br>${ab.desc}`)}"><img src="assets/icons/${esc(ab.icon)}.png?v=${BUILD}" alt=""><span>${'QFER'[i]}</span></div><em>${esc(ab.name)}${ab.passive ? ' · pasiva' : ''}</em></div>`; }).join('')}</div>`;
 const refresh = () => (screen === 'practice' ? practiceScreen() : lobbyScreen());
 
 function lobbyScreen() {
@@ -107,13 +107,14 @@ function lobbyScreen() {
     for (let i = 0; i < PER_TEAM; i++) { const p = ps[i]; h += p ? `<div class="pl ${p.id === net.user.id ? 'me' : ''}">${face(p.champ)}<div class="nm">${p.host ? '<span class="crown">♛</span> ' : ''}${esc(p.name)}<div class="ch">${p.champ ? esc(CHAMPIONS[p.champ]?.name || p.champ) : 'Sin campeón'}${p.connected === false ? ' · desconectado' : ''}</div></div><span class="rd ${p.ready ? 'on' : ''}">${p.ready ? 'LISTO' : 'ESPERA'}</span></div>` : '<div class="pl empty"><div class="face"></div><div class="nm ch">Libre</div></div>'; }
     return `<div class="team t${t}"><h4>${t === 0 ? 'EQUIPO AZUL · MILITARES' : 'EQUIPO ROJO · ROBOTS'} (${ps.length}/${PER_TEAM}) ${me && me.team !== t && ps.length < PER_TEAM ? `<button class="btn sm ghost" style="padding:3px 10px" data-a="team" data-t="${t}">Unirme</button>` : ''}</h4>${h}</div>`; };
   const allPicked = pl.length && pl.every(p => p.champ), allReady = pl.filter(p => !p.host).every(p => p.ready);
-  view.innerHTML = `<div class="scr ${first ? '' : 'noanim'}">${header()}<div class="lobby">
+  view.innerHTML = `<div class="scr ${first ? '' : 'noanim'}" data-map="${prac.map}" data-scene="${mapOf(prac.map).scene ? 1 : ''}">${header()}<div class="lobby">
     <div class="col"><div class="panel"><h2>CÓDIGO DE SALA</h2><div class="code" data-a="copy" title="Clic para copiar">${esc(r.code)}</div><div style="text-align:center;color:var(--mut);font-size:14px;margin-top:4px">${pl.length}/${MAXP} jugadores · clic para copiar</div></div>
       <div class="panel scroll">${team(0)}${team(1)}</div></div>
     <div class="col"><div class="panel scroll"><h2>ELIGE TU CAMPEÓN</h2>
       ${champTabs()}
       ${champGrid(sel, k => pl.some(p => p.champ === k && p.id !== net.user.id))}
 </div>
+      <div class="panel stagep">${stageHtml(d, sel)}</div>
       <div class="panel info">${abilityStrip(d)}</div></div>
     <div class="col"><div class="panel chat"><h2>CHAT</h2><div class="log" id="log"></div><input class="fld" id="chatin" maxlength="200" placeholder="Escribe y pulsa Enter" autocomplete="off"></div>
       <div class="panel"><div class="row" style="margin-bottom:10px"><button class="btn ${me?.ready ? 'warn' : 'go'}" data-a="ready">${me?.ready ? 'Cancelar listo' : 'Estoy listo'}</button><button class="btn ghost" data-a="leave">Salir</button></div>
@@ -124,11 +125,64 @@ function lobbyScreen() {
   ci.addEventListener('keydown', e => { if (e.key === 'Enter' && ci.value.trim()) { net.send('chat', { text: ci.value.trim() }); ci.value = ''; } });
   if (!first) $('#champs', view).parentElement.scrollTop = keep.sc;
   if (me && !me.champ && !picked) { picked = KEYS.filter(k => !pl.some(p => p.champ === k))[0] || KEYS[0]; net.send('pick_champ', { key: picked }); }   // everyone always has a champion
+  wireStage();
 }
 
 
+/* ---- champion stage (Fase 1): big animated champion + stats at max level, real game art only ---- */
+let SPRITES = null, stageIv = null, stageF = 0;
+fetch('assets/sprites/manifest.json').then(r => r.json()).then(j => { SPRITES = j.sprites || null; wireStage(); }).catch(() => {});
+const stat12 = (d, k) => Math.round(d.stats[k] * (1 + (d.grow?.[k] || 0) * 11));   // the game's own growth formula at level 12
+const STAT_ROWS = [['hp', 'VIDA', 'assets/stats/hp.png'], ['mana', 'MANÁ', 'assets/stats/mana.png'], ['atk', 'ATAQUE FÍSICO', 'assets/stats/atk.png'], ['ap', 'PODER IA', 'assets/stats/ap.png'], ['armor', 'ARMADURA', 'assets/stats/armor.png'], ['mr', 'RES. IA', 'assets/stats/mr.png'], ['speed', 'VELOCIDAD', 'assets/stats/speed.png'], ['range', 'RANGO', 'assets/aim/aim_ring.png']];
+/* Escenarios: los PNG conceptuales mandan en el MENÚ (fondo ambiental + miniaturas).
+   En partida manda el sistema de mapas del juego: nada de pegar la imagen como fondo jugable (eso es la Fase 3). */
+/* Los archivos en public/assets/maps/ quedaron con nombres UUID (la descarga del chat los renombró);
+   el contenido es el correcto, verificado por md5. Si se renombran a esc-*.webp, actualizar aquí. */
+const MAPS = [
+  { id: 'ruinas', name: 'Ruinas del Bosque Esmeralda', img: 'assets/maps/0fb27c0f-253c-423f-b36c-1416a0aad065.webp', thumb: 'assets/maps/aa0be35d-85b5-4c8e-974f-6568b33e9d42.webp', scene: 'assets/maps/escena-ruinas.webp' },
+  { id: 'templo', name: 'Templo Ancestral', img: 'assets/maps/189846c2-616d-4511-b278-1fd8b5d37bb7.webp', thumb: 'assets/maps/f787857b-05d0-429d-bd62-d59da73876c0.webp', soon: true },
+  { id: 'ciudad', name: 'Ciudad Neo-Suika', img: 'assets/maps/fb448626-7fd0-4d95-aa1a-483833d69070.webp', thumb: 'assets/maps/36219378-8c8c-4871-9e6b-aee620875d28.webp', soon: true },
+];
+const mapOf = id => MAPS.find(m => m.id === id) || MAPS[0];
+/* Sombra de contacto del menú (PNG de Elis incrustado como data URI, 412 B): [ancho, centro] como fracción del cuadro del sprite,
+   medidos del ancho real de los pies de cada campeón en su idle (span × 1.45 de margen suave). */
+const SHADOW = { leandro: [.48, .512], xeviche: [.49, .510], jorbi: [.62, .496], axel: [.40, .502], julio: [.47, .514], luis: [.43, .508], eliud: [.42, .518], hector: [.60, .496] };
+const sceneOf = m => m.scene || m.img;   // escena a nivel de suelo si el escenario la tiene; si no, su pintura cenital
+const ambHtml = () => `<div class="amb"><img class="bg" src="${sceneOf(mapOf(prac.map))}" alt=""><div class="amb-shade"></div></div>`;
+/* Flechas del selector: navegan solo entre los campeones del filtro activo; con 1 o 0 disponibles se desactivan. */
+const navList = () => KEYS.filter(k => clsFilter === 'todos' || CHAMPIONS[k].cls === clsFilter);
+const navHtml = () => { const dis = navList().length <= 1; return `<button class="st-nav prev" data-a="pnav" data-d="-1" title="Campeón anterior" aria-label="Campeón anterior" ${dis ? 'disabled' : ''}></button><button class="st-nav next" data-a="pnav" data-d="1" title="Campeón siguiente" aria-label="Campeón siguiente" ${dis ? 'disabled' : ''}></button>`; };
+const stageHtml = (d, id, nav = false) => {
+  const m = mapOf(prac.map);   // dirección artística nueva aplicada a los tres escenarios (aprobada la dirección en Ruinas)
+  const open = !!m.scene;   // con escena a nivel de suelo, la tarima se abre: una sola imagen, la de pantalla completa, y el campeón se para en ella
+  const rows = STAT_ROWS.map(([k, lb, src]) => {
+    const val = k === 'mana' ? (d.rage ? 100 : d.stats.mana) : (k === 'hp' || k === 'atk' || k === 'ap') ? stat12(d, k) : d.stats[k];
+    return `<div class="srow"><img src="${src}" alt="" onerror="this.style.visibility='hidden'"><span>${k === 'mana' && d.rage ? 'IRA' : lb}</span><b>${val}</b></div>`;
+  }).join('');
+  const champ = `<div class="cspr" id="cspr" data-id="${id}" style="background-image:url(assets/sprites/${id}/idle.png)"></div>`;
+  return `<div class="stage art m-${m.id}${open ? ' open' : ''}">
+    ${open ? '' : `<div class="st-scene" style="background-image:url(${sceneOf(m)})"></div><div class="st-shade"></div>`}
+    <div class="cwrap"><img class="cshadow-img" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAAAwCAYAAADZ9HK+AAABY0lEQVR4nO3a2U7CUBCA4UFxB6nQ93/CUqsg7suFM/Fk0lJjVzn/d/MT0ouG9AxwWhEAAAAAAAAAAHDIJkOfQJVlkp7qy0vXc9czrR1/op26HmsnrubT9V375vqqfdE+a59cd2HzIrPjR+Vo6BPAsHqfAMsktYtuob3WzrUz7ZXWT4ALra38sbBJ8KjduT5ot9qN9l57JyKSF9lHVydYhgkQuc4mQLDSb1wXrn4C2Eo/VDYRSidA0NuwXU0GJkDkWpsAwYpf2VvaugmAb3sngIjk2rVIexOBCRC5xhMg+L+ealeutvITrR2PcrZfUGhtAqxdM5Hm+wtMgMhN6w+pNa/ozJWV/zv2Odnn5nce/Q6kTYQ/YQJEjgsgclwAkWvjN4DtaPm7clV35/gtsJ99x29dNxVthAkQOXYCx4OdQPSPu4H9424gxoMngtrDE0H4f3gq+AdPBQMAAAAAAAAAAOCwfAEAHnooEzuXFgAAAABJRU5ErkJggg==" alt="" style="width:${Math.round((SHADOW[id]?.[0] ?? .48) * 100)}%;left:${((SHADOW[id]?.[1] ?? .51) * 100).toFixed(1)}%">${champ}${nav ? navHtml() : ''}</div>${!open && m.id === 'ruinas' ? '<img class="st-fg fg-tree" src="assets/map/forest/tree3.png" alt=""><img class="st-fg fg-bush" src="assets/map/forest/bush2.png" alt="">' : ''}<div class="st-fx"><i class="fx1"></i><i class="fx2"></i></div>${m.id === 'ruinas' ? '<div class="st-dust"><i></i><i></i><i></i><i></i><i></i><i></i></div>' : ''}
+    <div class="st-pill">${esc(d.name.toUpperCase())}<span>Nv. 12</span></div>
+    <div class="st-stats"><div class="st-head">${esc(CLASSES[d.cls]?.label || '')}</div>${rows}</div>
+  </div>`;
+};
+function wireStage() {
+  const el = view?.querySelector('#cspr'); if (!el) return;
+  const n = SPRITES?.[el.dataset.id]?.idle || 4, h = el.clientHeight || 248;
+  el.dataset.n = n; el.style.backgroundSize = `${h * n}px ${h}px`; el.style.backgroundPositionX = '0px'; stageF = 0;
+  clearInterval(stageIv);
+  stageIv = setInterval(() => {
+    const e = view?.querySelector('#cspr');
+    if (!e || e.dataset.id !== el.dataset.id) { clearInterval(stageIv); stageIv = null; return; }
+    stageF = (stageF + 1) % (+e.dataset.n || n);
+    e.style.backgroundPositionX = `${-stageF * (e.clientHeight || h)}px`;
+  }, 230);
+}
+window.addEventListener('resize', () => wireStage());
+
 // ---- practice & training: same champion select as the lobby ----
-const prac = { mode: 1, me: 'leandro', team: 0, allies: [], enemies: [] };
+const prac = { mode: 1, me: 'leandro', team: 0, allies: [], enemies: [], map: 'ruinas' };
 function pracFill(reroll = false) {   // keeps both teams the right size for the mode, filling new slots with random champions
   const pool = () => KEYS[Math.random() * KEYS.length | 0], make = (arr, n, avoid) => { const out = reroll ? [] : arr.slice(0, n); while (out.length < n) { const free = KEYS.filter(c => !avoid.includes(c) && !out.includes(c)); out.push(free.length ? free[Math.random() * free.length | 0] : pool()); } return out; };
   prac.allies = make(prac.allies, prac.mode - 1, [prac.me]); prac.enemies = make(prac.enemies, prac.mode, [prac.me, ...prac.allies]);
@@ -138,7 +192,7 @@ function practiceScreen() {
   const d = CHAMPIONS[prac.me], keep = $('#champs', view)?.parentElement?.scrollTop || 0;
   const slots = (arr, g) => (arr.length ? arr.map((k, i) => `<div class="pl slot" data-a="pslot" data-g="${g}" data-i="${i}" title="Clic para cambiar de campeón">${face(k)}<div class="nm">${esc(CHAMPIONS[k].name)}<div class="ch">${esc(CLASSES[CHAMPIONS[k].cls]?.label || '')}</div></div></div>`).join('') : '<div class="pl empty"><div class="nm ch">Sin aliados en 1 vs 1</div></div>');
   const hdr = `<div class="hdr"><div class="logo">SUIKA <b>FIGTHER</b></div><div class="sp"></div><div class="vol">${['music', 'sfx'].map(k => `<span>${k === 'music' ? 'MÚSICA' : 'EFECTOS'}</span><input type="range" min="0" max="100" value="${Math.round(vol[k] * 100)}" data-vol="${k}" style="--v:${Math.round(vol[k] * 100)}%"><b class="pc" id="pc-${k}">${Math.round(vol[k] * 100)}%</b>`).join('')}</div><button class="btn sm ghost" data-a="pback">Volver</button></div>`;
-  view.innerHTML = `<div class="scr ${first ? '' : 'noanim'}">${hdr}<div class="lobby">
+  view.innerHTML = `<div class="scr ${first ? '' : 'noanim'} prac" data-map="${prac.map}" data-scene="${mapOf(prac.map).scene ? 1 : ''}">${ambHtml()}${hdr}<div class="lobby prac">
     <div class="col"><div class="panel"><h2>MODO DE JUEGO</h2><div class="row">${[1, 3, 5].map(m => `<button class="btn mbtn ${prac.mode === m ? 'on' : ''}" data-a="pmode" data-m="${m}">${m} vs ${m}</button>`).join('')}</div>
         <h2 style="margin-top:14px">TU BANDO</h2><div class="row"><button class="btn mbtn ${prac.team === 0 ? 'on' : ''}" data-a="pteam" data-t="0">AZUL</button><button class="btn mbtn red ${prac.team === 1 ? 'on' : ''}" data-a="pteam" data-t="1">ROJO</button></div>
         <button class="btn ghost" style="width:100%;margin-top:14px" data-a="prand">Equipos al azar</button></div>
@@ -147,12 +201,15 @@ function practiceScreen() {
       ${champTabs()}
       ${champGrid(prac.me)}
 </div>
+      <div class="panel stagep">${stageHtml(d, prac.me, true)}</div>
       <div class="panel info">${abilityStrip(d)}</div></div>
     <div class="col"><div class="panel"><h2>JUGAR</h2><div class="acts">
         <button class="btn big go" data-a="pplay">Jugar partida<small>${prac.mode} vs ${prac.mode} contra la IA, con oleadas, torres y nexos.</small></button>
         <button class="btn big" data-a="ptrain">Zona de entrenamiento<small>Nivel 12, sin costo de maná y un muñeco para practicar.</small></button></div></div>
-      <div class="panel"><h2>CONTROLES</h2><div style="font-size:15px;line-height:1.5;color:var(--tx)">WASD mover · Shift correr · clic o J atacar<br>Q F E R poderes (clic para lanzar) · Ctrl + tecla sube el poder<br>B tienda en la base · 1-6 usar objetos · Esc menú</div></div></div></div></div>`;
+      <div class="panel"><h2>CONTROLES</h2><div style="font-size:15px;line-height:1.5;color:var(--tx)">WASD mover · Shift correr · clic o J atacar<br>Q F E R poderes (clic para lanzar) · Ctrl + tecla sube el poder<br>B tienda en la base · 1-6 usar objetos · Esc menú</div></div>
+      <div class="panel"><h2>ESCENARIO</h2><div class="mapsrow">${MAPS.map(m => m.soon ? `<button class="map soon" disabled><img src="${m.thumb}" alt=""><span>${esc(m.name)}</span><i>PRÓXIMAMENTE</i></button>` : `<button class="map ${prac.map === m.id ? 'sel' : ''}" data-a="pmap" data-map="${m.id}"><img src="${m.thumb}" alt=""><span>${esc(m.name)}</span>${prac.map === m.id ? '<i>ELEGIDO</i>' : ''}</button>`).join('')}</div><div class="mapnote">El fondo del menú cambia con tu elección y tu campeón se presenta en ese escenario. En partida todavía se juega en las Ruinas: Templo y Ciudad se integran como mapas jugables en la Fase 3, con el sistema de mapas del juego (colisiones, rutas, torres y nexos), no pegando la imagen como fondo.</div></div></div></div></div>`;
   if (!first) $('#champs', view).parentElement.scrollTop = keep;
+  wireStage();
 }
 function practiceStart(training) {
   snd('ui_confirm'); stopMusic();
@@ -224,6 +281,8 @@ const actions = {
   pmode(el) { prac.mode = +el.dataset.m; practiceScreen(); },
   pteam(el) { prac.team = +el.dataset.t; practiceScreen(); },
   prand() { pracFill(true); practiceScreen(); },
+  pmap(el) { if (MAPS.find(m => m.id === el.dataset.map)?.soon) return; prac.map = el.dataset.map; snd('ui_tab'); practiceScreen(); },
+  pnav(el) { const list = navList(); if (list.length <= 1) return; const i = list.indexOf(prac.me), d = +el.dataset.d || 1; prac.me = i < 0 ? (d > 0 ? list[0] : list[list.length - 1]) : list[(i + d + list.length) % list.length]; snd('ui_tab'); practiceScreen(); },
   pslot(el) { const arr = prac[el.dataset.g], i = +el.dataset.i; arr[i] = KEYS[(KEYS.indexOf(arr[i]) + 1) % KEYS.length]; practiceScreen(); },
   pplay() { practiceStart(false); },
   ptrain() { practiceStart(true); },

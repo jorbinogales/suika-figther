@@ -125,3 +125,176 @@ label.l{display:block;font-size:12px;letter-spacing:.2em;color:var(--mut);margin
   .chip{font-size:13px}.btn{font-size:12px;letter-spacing:.08em}.ctab{padding:4px 7px 4px 4px}.ctab span{display:none}.ctab i{font-size:12px}
   .row{flex-wrap:wrap}.mbtn{min-width:0}#tip{max-width:86vw}
 }
+
+/* ===== Fase 1/2: escenario ambiental (PNG conceptual), tarima del campeón y selector de escenarios ===== */
+.scr.prac .hdr,.scr.prac .lobby{position:relative;z-index:1}
+.amb{position:absolute;inset:0;overflow:hidden;z-index:0;background:#060d18}
+.amb img.bg{width:100%;height:100%;object-fit:cover;object-position:center 60%;display:block}
+.amb-shade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(3,8,18,.62),rgba(3,8,18,.74) 52%,rgba(3,8,18,.9));box-shadow:inset 0 0 180px rgba(0,0,0,.55)}
+.panel.stagep{padding:0;overflow:hidden;flex:none}
+.stage{position:relative;height:clamp(250px,33vh,330px);overflow:hidden;background:#0a1020}
+.st-scene{position:absolute;inset:0;background-size:cover;background-position:center 70%}
+.st-shade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(4,8,16,.02),rgba(4,8,16,.30) 74%,rgba(4,8,16,.62))}
+.st-glow{position:absolute;left:33%;bottom:52px;width:300px;height:90px;transform:translateX(-16%);background:radial-gradient(ellipse at center,rgba(120,220,255,.28),transparent 70%);z-index:1}
+.st-plat{position:absolute;left:31.5%;bottom:26px;width:280px;max-width:56%;height:46px;border-radius:50%;background:radial-gradient(ellipse at 50% 38%,#5d6d80,#2c3949 62%,#141e2a);box-shadow:0 10px 24px rgba(0,0,0,.6),inset 0 2px 6px rgba(255,255,255,.25);z-index:1}
+.cspr{position:absolute;left:35%;bottom:40px;height:min(238px,78%);aspect-ratio:1;background-repeat:no-repeat;image-rendering:pixelated;filter:drop-shadow(0 12px 10px rgba(0,0,0,.55));z-index:2}
+.st-pill{position:absolute;left:14px;top:12px;z-index:3;background:rgba(4,12,24,.85);border:1px solid rgba(63,208,255,.55);color:#eaf6ff;font:700 15px 'Orbitron',sans-serif;padding:7px 12px;letter-spacing:.08em}
+.st-pill span{color:var(--am);margin-left:9px}
+.st-stats{position:absolute;right:12px;top:12px;bottom:12px;width:198px;z-index:3;background:rgba(4,12,24,.8);border:1px solid rgba(63,208,255,.35);padding:10px 12px;display:flex;flex-direction:column;justify-content:center;gap:5px}
+.st-head{font:700 12px 'Orbitron',sans-serif;color:var(--am);letter-spacing:.14em;margin-bottom:2px}
+.srow{display:flex;align-items:center;gap:8px}
+.srow img{width:18px;height:18px;image-rendering:pixelated;flex:none}
+.srow span{flex:1;font-size:11.5px;letter-spacing:.07em;color:#bfe3ff;white-space:nowrap}
+.srow b{font:700 14px 'Orbitron',sans-serif;color:#fff}
+.abiw{display:flex;flex-direction:column;align-items:center;gap:6px}
+.abiw em{font-style:normal;font-size:11.5px;line-height:1.25;text-align:center;color:#cfeaff;max-width:92px}
+.mapsrow{display:flex;flex-direction:column;gap:9px}
+.map{position:relative;display:flex;align-items:center;gap:10px;padding:0;border:2px solid rgba(63,208,255,.3);background:#0a1020;cursor:pointer;overflow:hidden;text-align:left;transition:.15s;width:100%}
+.map:hover{border-color:rgba(63,208,255,.75)}
+.map img{width:104px;height:58px;object-fit:cover;display:block;flex:none}
+.map span{font:700 12px 'Orbitron',sans-serif;color:#d9ecff;letter-spacing:.03em;line-height:1.35;padding-right:8px}
+.map.sel{border-color:var(--am);box-shadow:0 0 14px rgba(255,210,63,.35)}
+.map i{position:absolute;top:5px;right:5px;font:700 9px 'Orbitron',sans-serif;font-style:normal;background:rgba(4,12,24,.88);color:var(--am);padding:2px 6px;border:1px solid rgba(255,210,63,.55);letter-spacing:.08em}
+.mapnote{margin-top:10px;font-size:12.5px;line-height:1.45;color:var(--mut)}
+@media(max-width:1180px){.st-stats{width:176px}.cspr{left:29%}.st-plat{left:25.5%}.st-glow{left:27%}}
+
+/* ===== Dirección artística del menú — SOLO Ruinas del Bosque Esmeralda (en validación; Templo/Ciudad intactos) ===== */
+/* Fondo general: oscurecimiento localizado tras los paneles, centro libre y luminoso */
+.scr.prac[data-map="ruinas"] .amb-shade{background:linear-gradient(90deg,rgba(3,8,18,.52),rgba(3,8,18,.13) 30%,rgba(3,8,18,.13) 70%,rgba(3,8,18,.52)),linear-gradient(180deg,rgba(3,8,18,.28),rgba(3,8,18,.42) 58%,rgba(3,8,18,.58));box-shadow:inset 0 0 140px rgba(0,0,0,.32)}
+/* Tarima: el escenario ocupa todo el espacio de presentación, sin recuadro de foto */
+.stage.art{height:clamp(315px,44vh,415px)}
+.stage.art .st-scene{background-position:center 66%}
+.stage.art .st-shade{background:linear-gradient(180deg,rgba(4,8,16,0),rgba(4,8,16,.12) 68%,rgba(4,8,16,.34))}
+.stage.art .st-pill,.stage.art .st-stats{z-index:5}
+/* Capas 3+4: sombra real del juego bajo los pies + sprite animado, apoyado en el suelo de la arena */
+.stage.art .cwrap{position:absolute;left:30%;bottom:36px;height:min(308px,85%);aspect-ratio:1;z-index:2}
+.stage.art .cspr{position:absolute;inset:0;left:0;bottom:0;width:100%;height:auto}
+.cspr-sh{position:absolute;left:50%;transform:translateX(-50%);bottom:6.5%;width:64%;height:11%;opacity:.55;image-rendering:pixelated}
+/* Capa 5: vegetación real del repo en primer plano (sprites transparentes, sin recortes de la pintura) */
+.st-fg{position:absolute;z-index:3;image-rendering:pixelated;pointer-events:none}
+.fg-tree{left:-48px;bottom:-6px;height:66%}
+.fg-bush{right:220px;bottom:0;height:60px;filter:drop-shadow(0 4px 5px rgba(0,0,0,.4))}
+/* Capa 6: resplandor cálido de antorchas, discreto */
+.st-fx{position:absolute;inset:0;z-index:4;pointer-events:none}
+.st-fx i{position:absolute;width:112px;height:112px;border-radius:50%;background:radial-gradient(circle,rgba(255,172,64,.32),rgba(255,140,40,.10) 55%,transparent 70%);animation:fxpulse 3.8s ease-in-out infinite alternate}
+.st-fx .fx1{left:23%;top:25%}
+.st-fx .fx2{left:59%;top:18%;animation-delay:1.4s}
+@keyframes fxpulse{from{opacity:.45;transform:scale(.92)}to{opacity:.9;transform:scale(1.08)}}
+@media(max-width:1180px){.stage.art .cwrap{left:24%}}
+
+/* ===== Dirección artística extendida: Templo Ancestral y Ciudad Neo-Suika ===== */
+/* Fondos generales aclarados por zonas, con la temperatura de cada escenario */
+.scr.prac[data-map="templo"] .amb-shade{background:linear-gradient(90deg,rgba(4,10,24,.52),rgba(4,10,24,.12) 30%,rgba(4,10,24,.12) 70%,rgba(4,10,24,.52)),linear-gradient(180deg,rgba(4,10,24,.26),rgba(4,10,24,.40) 58%,rgba(4,10,24,.56));box-shadow:inset 0 0 140px rgba(0,0,0,.30)}
+.scr.prac[data-map="ciudad"] .amb-shade{background:linear-gradient(90deg,rgba(8,4,20,.56),rgba(8,4,20,.17) 30%,rgba(8,4,20,.17) 70%,rgba(8,4,20,.56)),linear-gradient(180deg,rgba(8,4,20,.32),rgba(8,4,20,.46) 58%,rgba(8,4,20,.62));box-shadow:inset 0 0 140px rgba(0,0,0,.36)}
+/* Encuadre de cada arena: la plaza principal queda bajo los pies del campeón */
+.stage.m-templo .st-scene{background-position:center 60%}
+.stage.m-ciudad .st-scene{background-position:center 62%}
+/* Resplandores por tema: Templo = luz mística fría · Ciudad = neón cian y rosa */
+.stage.m-templo .st-fx i{background:radial-gradient(circle,rgba(110,210,255,.30),rgba(80,160,255,.10) 55%,transparent 70%)}
+.stage.m-templo .st-fx .fx1{left:16%;top:30%}
+.stage.m-templo .st-fx .fx2{left:68%;top:20%}
+.stage.m-ciudad .st-fx .fx1{left:19%;top:24%;background:radial-gradient(circle,rgba(64,220,255,.32),rgba(64,180,255,.10) 55%,transparent 70%)}
+.stage.m-ciudad .st-fx .fx2{left:64%;top:15%;background:radial-gradient(circle,rgba(255,84,200,.28),rgba(255,84,200,.09) 55%,transparent 70%)}
+
+/* ===== Dirección artística v3: la escena manda (zoom a la plaza, campeón protagonista, habilidades sobre la escena) ===== */
+.stage.art{height:clamp(335px,46vh,445px)}
+.stage.m-ruinas .st-scene{background-size:174% auto;background-position:50% 71%}
+.stage.m-templo .st-scene{background-size:170% auto;background-position:50% 67%}
+.stage.m-ciudad .st-scene{background-size:172% auto;background-position:50% 69%}
+.stage.art .cwrap{left:31%;bottom:28px;height:min(372px,94%)}
+.stage.art .st-stats{width:184px;background:rgba(4,12,24,.74)}
+.lobby.prac .panel.info{margin-top:-36px;position:relative;z-index:6;background:rgba(5,12,24,.85)}
+@media(max-width:1180px){.stage.art .cwrap{left:25%}}
+/* v3.1: retratos más compactos en práctica, para que la fila completa se vea sin corte */
+.lobby.prac .champs{grid-template-columns:repeat(auto-fill,minmax(67px,1fr));gap:8px}
+
+/* ===== Escena 2.5D v1 — Bosque Esmeralda: pintura a nivel de suelo + capas vivas ===== */
+.stage.m-ruinas .st-scene{background-size:cover;background-position:50% 58%}
+.stage.m-ruinas .cwrap{left:26%;bottom:44px}
+.stage.m-ruinas .st-fx .fx1{left:3%;top:26%}
+.stage.m-ruinas .st-fx .fx2{left:85%;top:48%}
+.st-dust{position:absolute;inset:0;z-index:4;pointer-events:none;overflow:hidden}
+.st-dust i{position:absolute;bottom:14%;width:4px;height:4px;border-radius:50%;background:rgba(255,216,150,.55);box-shadow:0 0 6px 2px rgba(255,196,110,.32);opacity:0;animation:dustUp linear infinite}
+.st-dust i:nth-child(1){left:20%;animation-duration:13s;animation-delay:0s}
+.st-dust i:nth-child(2){left:36%;animation-duration:16s;animation-delay:3s;width:3px;height:3px}
+.st-dust i:nth-child(3){left:48%;animation-duration:11s;animation-delay:6s}
+.st-dust i:nth-child(4){left:61%;animation-duration:15s;animation-delay:1.5s;width:3px;height:3px}
+.st-dust i:nth-child(5){left:72%;animation-duration:12s;animation-delay:8s}
+.st-dust i:nth-child(6){left:84%;animation-duration:17s;animation-delay:5s;width:3px;height:3px}
+@keyframes dustUp{0%{transform:translate3d(0,0,0);opacity:0}12%{opacity:.65}55%{opacity:.4}100%{transform:translate3d(24px,-148px,0);opacity:0}}
+@media (prefers-reduced-motion: reduce){.st-dust{display:none}.st-fx i{animation:none}}
+
+/* ===== Escena abierta v2: UNA sola imagen (la pintura de pantalla completa) + flechas y sombra ===== */
+.panel.stagep:has(.stage.open){background:transparent;border-color:transparent;box-shadow:none}
+.stage.open{background:transparent;border-color:transparent;box-shadow:none}
+.stage.m-ruinas.open .cwrap{left:23%;bottom:36px}
+.stage.open .cspr-sh{opacity:.78;width:72%}
+.cshadow{position:absolute;left:50%;transform:translateX(-50%);bottom:3.8%;width:66%;height:26px;border-radius:50%;background:radial-gradient(ellipse at center,rgba(10,6,2,.55),rgba(10,6,2,.26) 55%,transparent 72%);filter:blur(1.5px)}
+.stage.open .st-pill{left:50%;right:auto;top:auto;bottom:42px;transform:translateX(-50%)}
+.stage.m-ruinas.open .st-fx .fx1{left:15%;top:9%}
+.stage.m-ruinas.open .st-fx .fx2{left:79%;top:9%}
+.st-nav{position:absolute;top:54%;transform:translateY(-50%);z-index:8;width:36px;height:48px;display:flex;align-items:center;justify-content:center;font-size:16px;color:#7fdcff;background:rgba(6,16,30,.5);border:1px solid rgba(94,200,255,.4);border-radius:9px;cursor:pointer;text-shadow:0 0 8px rgba(80,200,255,.85);font-family:inherit;padding:0}
+.st-nav:hover{background:rgba(22,54,84,.68)}
+.st-nav.prev{left:8px}
+.st-nav.next{right:198px}
+@media(max-width:1180px){.st-nav.next{right:8px}}
+
+/* ===== Escena viva: la pintura NO se opaca (brillo completo como en el concepto) ===== */
+.scr.prac[data-scene="1"] .amb-shade,.scr[data-scene="1"] .amb-shade{background:linear-gradient(180deg,rgba(4,8,16,.15),transparent 24%,transparent 74%,rgba(4,8,16,.20));box-shadow:inset 0 0 70px rgba(0,0,0,.10)}
+#ui:has(.scr[data-scene="1"]) .vig{opacity:.22}
+#ui:has(.scr[data-scene="1"]) .scan{opacity:.3}
+
+/* ===== Cards GLASS en escena viva: cristal esmerilado, el escenario manda ===== */
+.scr[data-scene="1"] .panel{background:linear-gradient(160deg,rgba(10,22,40,.44),rgba(6,12,24,.56));backdrop-filter:blur(9px) saturate(1.3);-webkit-backdrop-filter:blur(9px) saturate(1.3);border:1px solid rgba(140,210,255,.30);box-shadow:inset 0 1px 0 rgba(255,255,255,.10),0 12px 30px rgba(0,0,0,.30)}
+.scr[data-scene="1"] .panel.stagep{background:transparent;border-color:transparent;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none}
+.scr[data-scene="1"] .cc{background:rgba(8,16,30,.48);border-color:rgba(140,210,255,.28)}
+.scr[data-scene="1"] .map{background:rgba(8,16,30,.48);border-color:rgba(140,210,255,.28)}
+.scr[data-scene="1"] .pl{background:rgba(8,18,34,.42)}
+.scr[data-scene="1"] .st-stats{background:rgba(4,12,24,.50);backdrop-filter:blur(8px) saturate(1.25);-webkit-backdrop-filter:blur(8px) saturate(1.25);border:1px solid rgba(140,210,255,.26)}
+
+/* ===== Sombra de contacto oficial (sombra-campeon.png) + flechas pegadas al campeón ===== */
+.cshadow-img{position:absolute;bottom:10%;transform:translate(-50%,50%);height:auto;image-rendering:pixelated;pointer-events:none;z-index:0}
+.cwrap .st-nav{top:55%}
+.cwrap .st-nav.prev{left:-48px}
+.cwrap .st-nav.next{right:-48px}
+.stage.m-ruinas.open .cwrap{bottom:58px}
+
+/* Ajuste fino de apoyo: la plaza baja en pantallas más anchas que 16:9 (la pintura se recorta arriba/abajo) */
+.stage.m-ruinas.open .cwrap{left:21.5%;bottom:30px}
+@media (min-aspect-ratio: 19/10){.stage.m-ruinas.open .cwrap{bottom:84px}}
+
+/* Flechas dentro del marco del campeón: nunca quedan tapadas por la caja de stats */
+.cwrap .st-nav.prev{left:2px}
+.cwrap .st-nav.next{right:2px}
+
+/* La caja del campeón flota sobre las stats (sin bloquear clics) para que las flechas se vean */
+.stage.art .cwrap{z-index:6;pointer-events:none}
+.stage.art .cwrap .st-nav{pointer-events:auto}
+
+/* ===== Flechas como en el concepto: triángulos de luz, sin caja — no tapan ni las tapan ===== */
+.cwrap .st-nav{background:none;border:none;border-radius:0;box-shadow:none;width:34px;height:44px;font-size:27px;line-height:1;color:rgba(160,228,255,.92);text-shadow:0 0 10px rgba(80,200,255,.75),0 1px 4px rgba(0,10,20,.6);opacity:.88;transition:opacity .15s,transform .15s}
+.cwrap .st-nav:hover{background:none;opacity:1;transform:translateY(-50%) scale(1.14)}
+
+/* ===== Tamaño estable: la etiqueta de habilidad reserva siempre 2 líneas (ningún campeón estira la tarjeta) ===== */
+.panel.info .abiw em{height:2.5em;overflow:hidden;max-width:108px;font-size:11px}
+.panel.scroll{scrollbar-gutter:stable}
+
+/* ===== Flechas PNG del selector (sprites 64x64 de ChatGPT, incrustados: pesan 6.7 KB en total) ===== */
+.cwrap .st-nav{width:58px;height:58px;background-color:transparent;background-repeat:no-repeat;background-position:center;background-size:46px 46px;image-rendering:pixelated;opacity:1}
+.cwrap .st-nav.prev{left:-6px;background-image:url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAEWklEQVR4nN1bwY7TMBB9aUPuqCwIWIE48BOcuSOkXvsJfA2fkGskxJ3z/gaXBQRof6B0Gw6N3cl47Niu09r7pChRt5t08p4n4zdOhTNhddNXw2E1bAuyXwBYkuMF+TtFD2DPtnty3JN9DwB376re9bvq08IKRsU2HrB0A9RN0EEx0M/2GN80Z/DqB82OgX0eeIUj63rftN1fn3NuN+srHNmne66C3qWCRVxI/hCC5+zTm7AMOLX6Ph8+xrXI8DMwqwIswdPA9da03Z+Ya2w366c4ME83mhOcSphNASR4YCJ4hDHPIZ1LyiGiEmZRQErm33/6AAD49vmr85oeStgPXx0pIbkCApivkfYpVMOtBB0rVUJSBQQwXzdt99t1LsU8h4cSngHYQVaCUSMkYyCQ+VPG/BSWcD//9VBY3fRVEgXMyfzH6wNHX253o889c4JNCfrJcLICMmKegyqhZ8d6f5ICLsE8h4cSnuDAvlIDrRjjFZAx8xxKCQsclaDnF1EKyIF5Dg8lPMY4J+wB9MF1QEHMc0hzhbAckCPzHDYlDLlgh7EK/BVQMPMKnGx/BZTAPAdXwuAf7Mi2B7CfVMADYN4J52OQBS95eNkzz2DYalYFsLmzM3iUwTyfH/SARQGCg1s68wBzh9RnrhzAA0/t5Jwbkk1mKsDDxFTurZeTo3Ap5ok/YASPExVQCmyGiKkAxj4wTn5LAIsp3z4j5p/D7BuMvEFEKqAUqMCtlhhgrwOM8d+03Z3rahkx/xLmrM/oEQybWAfYkl8pkJqm4vgfmaKs6gPMGyHC5t5egPnXIDU+HIEDx66xL7NJ7fOZwFvnkuSNUnjKErOyb2M+NTyYf4sD81Kpy41QAOM1AyWN7Vmg2WU1AC16agCPbM//jJTwCsA/mK6P9CQIzgGTKy0yAK9ZbCV9xf9JY1ABL3xqHGZ9QXXAXPCsAG0qoKtHrL1BnjGVfEoBJY9nfrqGyOwNOvIAVUJUVzc1AmaBzqrQ9RikCqhwrK5KgU0F7t4gUYG0kkvZX3XTdr9cV89ICdG9QTpugMPNuCfHpSC8NyjkApslVjdt99N19YyUIPYGQxQgoSQlKBJVTqvg6g4zZ3jSFs9dCcG9QbaokBYR1GmhySV3xPUGQ7pDyFgJ0b3BQQl8rU3JShjBO4mVogRHDrjCcbaoq0JvP+ABKEHsDQY/xnJVgkcdsML4KRCmAIWClSAapNGFTC5KiJwV6jdLoj3BgpTg7A2eXMpeSgkBzpBtJhi3TpAjYyVMLpcHEk5mzqUED+ZfwBzv1puQrC+QkRJ44M4XJpJPZz2VQJ2lH67zBbwzpLrCrp7AyBFWPzApJpTA1ZBSCVOsa1+DznRnMzQcq0ulJXZ103a3MdfZbtbXMLM97wXojb87OFtvkCjB1mfgPfxY2NYDGNeWXpyc3dIS/EXlNPPX51QP8rvPebeb9RuMe4FipQdH8MD53h6XPHmbOnwxtQaA9wNE/AemTmJpVYPWdwAAAABJRU5ErkJggg==)}
+.cwrap .st-nav.prev:hover{background-image:url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAE+0lEQVR4nN2by67bNhCGf9k+W28OvE6cXlIgaIEE7eZsu+lbFX2rPsHZZJFegDbNIu7eyEbLJJaysMce/hyOKFk+Fs8AhOgrRf6fyJmhVGFEu71vq0O1ojKjMj8UXdfvzej3ANCq0hzKjkpDdV1aKgCAxYU6D1VPDYbUueMzxIMAhJ2Heg/0+UzVrUHU9XEGwOi8dC5FgNXxOYD5elv/l9PmZrV8rl62h9/r1zwgcl5B/ewBSHSeFedBYOwX6v1ck+9q4izMd4f/bozvVvqN3qY6LyeSuu6t632hj+tt/XbIOWxWy++w7+RnOvLcYM4Hgwno0XlL9YVxHGr821YdW3ot53acRwYR0LPzFu5yXKy39b9eW7/+sgQA/PZ77Z4TkSDFI2EYASN0Xpc+13yXLeAL2tLrBh0/iGzMzq+39T9eW6I8Ww8SPiEk4TNOfsKRgmwCRlZ+NP/DMPlvwVyspSMANFkEXFP529n++KEJv5dBwnPsVWcS9HzQTUBByrPNcfIc2T8QCnwCpqg8WwYJX8OhYJb6YcHKs2lHjN1z2xMsQXm2DBKeYE9C4BtEBDwi5dk4QKtgETAgpr+q8mwpEjar5TOEc0EDJmCszmNaymvj/MCp4nReD4CO6gKfHldWno1J2KyWXyFeDfarQEc2pyuqK0H5pFkn7MX03HEd1U1SeWUcDAFAO+tAP3cgSlE+SIgCpxP30E9lb0tRXsxyh1u9CnjqXyKT89BmxgScRPASmVKycnhTUf4QFX5CIjASAvpc91JKMem0PpopMWsyZBLm6239zmttQsp/j73yqYxwAyJAjl2XQSnGHWcSojmgMurHgVhv643X2oSU/xFp5aNBYAKkbs0DpVgK9+QqIJYiIAge2FLZ2ysof4dTlGfiTgWArazV2azk6QSsKwvMO0WdSdGk+inlx7YM5X/GaZ23tsMi1dVnRV3bF7Hq9r7lmxM40LkBcLPe1u+tP5gQCXfYkyDlI+J9gWMeQIpFgBk2Dj3xBzZezaz3goleE2AFPkLAYr2t//danhAJrxATIBREO8VCgDVT6vVz5EXtoqYvZ/ZnouW9ur1v9Yc6/tch740c+8YCl7IMEl4gVF/2BIJdYiaA1WcKSiWBRY4I8EJgTnrKnDBof39syyDhG9i7xA2AnThCKQIqnHDhKLEUY+VnUPcRVoekqBUGW3OB1PWc8LfX+oRIeAJjh1i7wuw7852ZqYixFEuuAjnbYd5miMwJf3mtX5sE2hs87Q5/uKtSgUPKH9DOhHYxS7CI2grovNe3z7bYZElw9waJAqi65QekCCiJhKMFOIy5PX4tEjrmgOgu0iAadOYDj4KSSIiSI9EyNvYtMg9FQoYf8BSGHxDlAxQFwOMiwUySJh2ZUkjIUP5bOLFAMif4iEiIbpCGoqHTlR2RBPEY//TayyVhQD6Ar/9kTjCwgkkIUEdIwZGG7GDmDBI4gpQo8g+vvTOeF/gBYRYoqT5yCBA7kwSLhkuZbs97cKofAWIDnxQzcwnYzwlvvPZ6PDP0EnEOMPWcwHEAeu8M9SBhh5gIpmPMHCO3Zyke7RwPTmg4D0xaewypVUFnll4POY/NavkTQtWZAPepscF7g0YEmcojeNfgGNnmFHGc1bY8wfNTWk4uwVsVAvURknCf067aC7SUT6m/Q5jmG06AWEYuwbpDg1XR9VxL/d5rR59nCwBfAF/tws3JPOZFAAAAAElFTkSuQmCC);transform:translateY(-50%) scale(1.07)}
+.cwrap .st-nav.prev:active{background-image:url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAABYElEQVR4nO2by60CMQxFzRNLaOK1QRPskegBUQeiByT2NEEbNAF7WGWBpTCJ7SRO5p4lyjgj3SMmXyIwbxatX4Cz2p7fKe1et4PJu/9ZFOkZNwakJs/RmgADWr/AVPL/uz0RET2ul591pCbAgFYdpybPsTYBBtTuMDf542ZNRESn+/PrdysTYECtjqyS52hNgAGlOyiVPEdqAgwoVbhW8pyYCTAggrkBrZLncBNgQISlVSGvyU8BA7QFek0+MHsDxF+BXpLHXGCCbANGST4AA1IbjpZ8YPYGqMcBsdVb78kHYID0wVjy1pRKPjB7A9Rfgd5NgAGpDaV7edZgHGBM8blAKTAXMKLaekApsB6gRL0v0LsJMMCqkHcTYECE5nuDpcDeYCJuzgdYgf+ATNydEZKCcYAQt+cEU8FcQIn7s8IxsB5gBO4L5DQeEdwZkjw0Es0NCODeYCPcGBDA3eHKfADtC+WvcjwOLgAAAABJRU5ErkJggg==)}
+.cwrap .st-nav.next{right:-6px;background-image:url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAEbUlEQVR4nNVbzY7TMBD+kobcUWERsBdegzN3hNTrPgJPwyPkGglx59yX4ICQFhA/K+6lbDg0k4wnHtttYzf+JCvZNLF38n0e2zNOAQ/W267oT4u+lOxYAlix85L9ztEBuBflHzvv2LEDgLuXRef73+ZAFXhfIYo02PYC6CUMRgnwa/cwX1oS44EpUwZ69qXhBUbWh2PdtL9CGtzdbB5jZJ8fpQq6FCootR8sxkv2+UtYHdEm3S+7z6Qt1v2iwdqAYjw3fCh10/48peHdzeYKB+Z54T4hiRImCmDGAx7jcRzzEra6bD4kqhKMioXxNm8fzPyrt68BAB/ffXD+A5dWwqAA8ZadxiN89AhB1ZeLKKEA1LHeZnxVN+0PV4XEvESAEp4A2COxEsojjD+3z/tAykqqhEIZ623MB/V5wpvrQy95f7s3ri9NCXwU8CkgFZIqoVhvO14xn6BUOHj7364KtD5PWLoSSAHaPD8l8xJJlFCst90Ko+G8z/9xPehjXmKpSnApYCmIqoRive0qjP2fGqu0vn8s8xJLUwJXAEf0VdgJiKIEUgBVRNPSSq7vz2VeYilKWFJfD8WsSpAKoMofaBGejJRw39/qVAIpQN6QLCZ3BnxK0Fa6BmgeIBVQ1U1752o9EyV4I820rufOgx7MBSu4FTt0BduPtBbg0V45Hzhp/X8qzlDCFQJGB6kCrgA6UoyewtW5gCuhE+f8aIDHA2wx/yFcVTftd1frC1LCIxyIIzXwvMNEBTy2RxepzxT9g3xszQGkhBKj0QU8CgDcAREabqq6ab+6Wl+QEh7C9AmDP+AKKNkftpHAlsjMBVrGycBwISA2WMFcK3xxtT63EjRoSuh9wR5TFRh+QMb3O3GuqSKHmWKQ39IyQ1qMcFLqpv3kauBSSuiz0HuYKpgoIMfV4KwYuoBlwSBHB+O3umk/uyq+tA/ooW3OGCAVoO0JkMNjDvOCID9VARP2NaNLAGXqeYAG3zwAUyc+XDfmAZaJkM1wvmTOBdYwmbyJfIBL8rQfIOmqUMMR8QGv8UB4bjAn5tWAiA2UE7DtClnh0OePygrHQgDzTzEyz8d8HhCZxAOWnBs8Ft6QmA2kAEC8hNQxQQ0BzD+DOdPTnJ81OpxDbtAHucFqFgWoE52FMc8jP64skbr3OKfcoITP+CF24UqMyOWwyn5mzAdlhYC8+johRPZAYHLUFhCxPkTMxFJCauYJOeUGZ2WeUMEMGzvnzcD8SrgU8wSugKXmBqMwT7hYbvDSzBOWnBuMyjwhJDdIGaFZcoNLYZ4Qkhuk81RIwjwhNDfId5B+c1V4xvcCSZkn2HKDMicoSywkZZ4gc4N0zfXJDI0OQdHhAOafYzTcms1FBOYJw1pAVMwb1tQwF0LX8lE+mpo4N8c3g1IF5BNuT2l4d7O5hp15I4dHJda3g5PVYN+Qrcy9X8BWV3Aoay6ow5tQgjpTxLiz1JkrJOxuNi8A/MU0c0uFXnZ04wH/93+d5aipIxRWlpUSHf8B9QGfe2dJ3sMAAAAASUVORK5CYII=)}
+.cwrap .st-nav.next:hover{background-image:url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAFUklEQVR4nNVbva7sNBD+vD+X/4BkbYsUhLiABFwKmvMEvBXirWhoKFwAEgKEBAiIqKPTpL2cNcXuJJPJ2M5ukl3nk6w42Y3/5vPYM+MY67xBByPSRqTtOfE8f7YR7wOAZ+l4Tk8iHUWeJy8SHh+Mx0zYKJ3neW0wKC87LgcpNEDaYMryZeJthBDaJOx4wSzPOy2ZIDu0BbAt6+aPMRVWh+I5u/Xn9/m9F/c410NsMAC8dd7MwQTqIKBL3CAuvR3Lj4X2rsYS3gbJhtmYYKzzspIUpXf8WtbN79dUXB2KD3Ga8/+Jq9QLUX0ATNMJWufHDAQfhGvRG0gMGSHrD7FhEhOMdX4HvdOa5CklJf/VlwUA4OtvmmgDqkPxEU7SDzFh1MoAXMeESyQu01zYAdifUzvAiLNhNiYY6/wz9AeAKuTUpEaOlrzECCZ8jI4JnBGLMkFb5kJafuqcT0Fj2eJMMNb51zDc3EjJ71LrvJS8PW+xHo/9/+XGhBQDeLoVbsoEY51/AxHpl3XzV6yA0JxvG5E5E7Qdl1SG98JNmGCs828pBe/Luvk31rqU5CVyZYI2atw+yAGLMsFY599mhfC5/4/WmkslL3FvJkgWaP6AnKTPMQsTJAuMdf4ddEqPM+Bv/sepkpdYgAl0lVakZEGPCffU8tcixYQQCwg9JnAd0DN6ltIBEjMw4SU6Bmg+hZBOwOOD8XJvL11SOYPa7tlVSyHd5q3zxljnCwx3gfuybqpY7RkxgfwJLzHUCVwfPKHzTLeDtoM+aqIZWUP2gUD5IxR/Iv1urPNvQtkJomPCRVbgVExgwnOEmRDSB73Ro5HiLug1MWGLPsUpbRDWB95Y51+Hbg3u2XVf1s2vsdozYsL76FjAVwhVF/DR4aMn6bImJmj7ALkrBF2Ndf5V9mfNCUoOy2c4MeHHWO0ZMeFdhFnQ6gHJABnElPdrZUIwzmis86+wP0X1ADom7Mq6cbHa52ZCCCEmVIeixHBVoL1BmzgDgPBaqj3LHZpVq/oDKC4g4/5SB6iprJtvY624FxOqQ/EeOgYQCwY2whqtwVmhnQ+ge23ZaFNZN9/FCr63DjgjadxJe1nVlIFnuUPr+OAZN4el1NVTImXdfB+rNRPJAwFPkMgHz+TI9ZOvqWtB0BFyRmsMaZIehMvKuvk5Vlsukq8OxQc4aX3NMILMSwaEYoVrlTy3bbSBaBkQPChx7XmAuXGBj1B6hIOdB/SOSyasBTJIkjpgNdABvWkQ8goTMpL8J+hbfJopL5lAGOgAPghrgXR9yS1vyFsMQGdANDyWkeQ/RTpOqEWICGpkKOfYoESo86l5PwiMjDIbM5f8JQPRw5rmOkEGRseGwwi94OgOyqhoz0gySzHhCsnLzl9EfSqXMyBIk0yQkvxVByR4YAQsH3R+zs2EGSR/0TkhCc0rfIy9cAfM1nntkBSPDQ5OieDk/f0z1rprmXBryYfOChIDtBgAFX4vLN554MQAig1GI0Nl3fwWa+1YJoyQ/GfQ/fmLnBcmJUiSpp3gEzqbgPK3wk0kT+CRoRQL6LzAL7ECJ3wv8AJ9qcuY3iLfDEgGAEMW3MpKTEl9kQ8mjHV+j6EnKPjdADqd8FOs4Au+Gfoc/TmvnfqSlt0snQf6W2GNBQb9VWHD8nOBypNmLO/wYp/PGev8Fro/MBUpJp3ww6WVAkB1KL5AX+pjtL7m2VG3uGOhnbU7opM8PzMkGUD5a6G5rnhKeXXadk/5cJKmgFEK5hsjPhV66SzJfeq8AKE6FA84SVujd6rTfJs+ufNAp9W9uHK6abtELT8Wofdj9URt+in4HyJ+ariWkXcZAAAAAElFTkSuQmCC);transform:translateY(-50%) scale(1.07)}
+.cwrap .st-nav.next:active{background-image:url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAABVklEQVR4nO2bsQ3CMBBFD0QJS7AGS9AjsQNiDsQOSPQswRosAT1ULrB05M6x+SfnvxLfJZH+C3KcWIRMm1mtAy2357el7nU7VDtnDeboC0AzOg1r8jlRTKABpY1Dya93exEReVwvP4+DNoEGeBusyedENYEGWAu9yR83KxEROd2fX79HM4EGDBWU3vOJ6CbQAG1gbPI5UU2gAdqAZoA3+ZxoJtAAbSA3YGzyOVFMoAHaQKv/gBy0CTRAG6g9DxgCZQINGCro3QQaYC3s1QQa4G3ozQQaUNr4bxM0NBNogJHm7wZRJtAAI4vSxqjJe6EB3oZekk9M3oCwzwIafBaoTLj1AA2uBzQizJqgBtcEG+OeB/SSfIIGWAt7Sz4xeQPg7wYT/D4ABHwewG+EwMCeBdDJJ2iAtbCWCVGST9AAbwP3C3QG9wwhTx4B7htEXwAa7h1GXwCaD0YK42pGRqmlAAAAAElFTkSuQmCC)}
+.cwrap .st-nav:disabled{cursor:default;opacity:.9}
+.cwrap .st-nav.prev:disabled{background-image:url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAABXklEQVR4nO2bwQoCIRCGp+id6hZE56CH6Kl6iKBzBHurp6rTHBJsdZzRcf2/Y7ij8H9s6ioRGJtV6wGE7M6XT0q71+2qMva1RpGecWNAavIhpSbAgNYDmEt+u98TEdF7mv7WkZoAA1p1nJp8iLYJMKB2h7nJH08HIiJ63J8/v2uZAANqdaSVfEipCTDAugOr5EOkJgxvwMaqcK3kw3pzJoTAAO2CtZOP1U81AQZoFWqdPIN3QCbFBvSaPDO8AeKZYC/JYy0wQ7YBS0megQGpDZeWPDO8AcXzgNjurffkGRggfTCWvDZWyTPDG1D8L9C7CTAgtaH0W542mAcoY74WsAJrASWq7QdYgf2AQoq/DfZuAgzQKuTdBBgQQf18gFcTYEAEsxMirUzAOyATd2eEpGAeIMTtOcFUsBYoxP1Z4RjYD1AC9wVyGi8R3BmSPLQkmhvA4N5gI9wYwODucGW+h9zi4K4V6x4AAAAASUVORK5CYII=)}
+.cwrap .st-nav.next:disabled{background-image:url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAABVUlEQVR4nO2bQQrCMBBFR/FOuiuIa8FDeCoPIbgWoTs9la6yMDBmpk38Q/rf0sy0gf/UNm1EyLJZ1TrQ7nR+W+qe10u1c9ZgjZ4AmtlpWJPPiWICDZjaWEp+OwwiIvIax5/HQZtAA7wN1uRzoppAA6yF3uQPx72IiNxvj6/Po5lAA0oFU7/ziegm0ABtYG7yOVFNoAHagGaAN/mcaCbQAG0gN2Bu8jlRTKAB2kCr34ActAk0QBuofR1QAmUCDSgV9G4CDbAW9moCDfA29GYCDZja+G8TNDQTaICR5s8GUSbQACObqY1Rk/dCA7wNvSSfWLwBYe8FNHgvUJlw6wEaXA9oRJg1QQ2uCTbGfR3QS/IJGmAt7C35BA2wFqZkWpnA9wNAuP8FapvAd4TAwO4F0MknaIC1sJYJUZJP0ABvA/cLdAb3DCFPHgHuG0RPAA33DqMngOYDdnjkLKY12toAAAAASUVORK5CYII=)}
+.cwrap .st-nav:disabled:hover{transform:translateY(-50%) scale(1)}
+
+/* ===== Escenarios PRÓXIMAMENTE: visibles pero bloqueados hasta su fase ===== */
+.map.soon{cursor:default;opacity:.62;border-color:rgba(120,140,170,.28)}
+.map.soon:hover{transform:none;box-shadow:none;border-color:rgba(120,140,170,.28)}
+.map.soon img{filter:grayscale(.75) brightness(.7)}
+.map.soon span{color:#9fb2c8}
+.map.soon i{color:#ffd76a;border-color:rgba(255,210,63,.4)}
