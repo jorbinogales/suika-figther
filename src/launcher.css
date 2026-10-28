@@ -238,3 +238,16 @@ label.l{display:block;font-size:12px;letter-spacing:.2em;color:var(--mut);margin
 .st-nav.prev{left:8px}
 .st-nav.next{right:198px}
 @media(max-width:1180px){.st-nav.next{right:8px}}
+
+/* ===== Escena viva: la pintura NO se opaca (brillo completo como en el concepto) ===== */
+.scr.prac[data-scene="1"] .amb-shade,.scr[data-scene="1"] .amb-shade{background:linear-gradient(180deg,rgba(4,8,16,.15),transparent 24%,transparent 74%,rgba(4,8,16,.20));box-shadow:inset 0 0 70px rgba(0,0,0,.10)}
+#ui:has(.scr[data-scene="1"]) .vig{opacity:.22}
+#ui:has(.scr[data-scene="1"]) .scan{opacity:.3}
+
+/* ===== Cards GLASS en escena viva: cristal esmerilado, el escenario manda ===== */
+.scr[data-scene="1"] .panel{background:linear-gradient(160deg,rgba(10,22,40,.44),rgba(6,12,24,.56));backdrop-filter:blur(9px) saturate(1.3);-webkit-backdrop-filter:blur(9px) saturate(1.3);border:1px solid rgba(140,210,255,.30);box-shadow:inset 0 1px 0 rgba(255,255,255,.10),0 12px 30px rgba(0,0,0,.30)}
+.scr[data-scene="1"] .panel.stagep{background:transparent;border-color:transparent;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none}
+.scr[data-scene="1"] .cc{background:rgba(8,16,30,.48);border-color:rgba(140,210,255,.28)}
+.scr[data-scene="1"] .map{background:rgba(8,16,30,.48);border-color:rgba(140,210,255,.28)}
+.scr[data-scene="1"] .pl{background:rgba(8,18,34,.42)}
+.scr[data-scene="1"] .st-stats{background:rgba(4,12,24,.50);backdrop-filter:blur(8px) saturate(1.25);-webkit-backdrop-filter:blur(8px) saturate(1.25);border:1px solid rgba(140,210,255,.26)}
