@@ -9,15 +9,15 @@ import { PERM_KEYS } from './items.js';
 //  client : renders. It sends its own inputs / casts / shop requests to the host and receives
 //           snapshots (state of every unit, ~15 Hz) plus events (casts, hits, deaths) that it replays visually.
 // Messages travel through the server's `relay` channel: {k:'in'|'cast'|'op'} client->host, {k:'snap'|'ev'} host->clients.
-const SNAP = 1 / 15, INP = 1 / 30;
+const SNAP = 1 / 20, INP = 1 / 30;
 const r1 = v => Math.round(v), r2 = v => Math.round(v * 100) / 100;
 const TYPES = ['physical', 'magic', 'true'];
 
 export class NetGame {
   constructor(w, role, hostId) {
     this.w = w; this.role = role; this.hostId = hostId; this.live = !!w.cfg.rejoin; this.hostGone = 0;   // rejoining a running match: no waiting for 'go' this.replaying = false;
-    this.snapDt = (w.cfg.roster || []).filter(r => r.pid != null).length >= 7 ? 1 / 10 : SNAP;   // big rooms: fewer, compressed snapshots (the client keeps simulating between them)
-    this.ev = []; this.snapT = 0; this.inT = 0; this.atkT = 0; this.clock = 0; this.remote = new Map(); this.mortarImgs = [];
+    this.snapDt = (w.cfg.roster || []).filter(r => r.pid != null).length >= 7 ? 1 / 12 : SNAP;   // big rooms: fewer, compressed snapshots (the client keeps simulating between them)
+    this.ev = []; this.pred = []; this.snapT = 0; this.inT = 0; this.atkT = 0; this.clock = 0; this.remote = new Map(); this.mortarImgs = [];
     for (const f of w.champs) if (f.pid != null && f.pid !== conn.user.id && role === 'host') this.remote.set(f.pid, { f, in: { mx: 0, my: 0, run: false }, ax: f.ax, ay: f.ay, atk: 0, at: 0 });
     this.off = conn.on(m => this.onMsg(m));
   }
@@ -66,6 +66,10 @@ export class NetGame {
   pre(dt) {
     this.clock += dt;
     if (this.role === 'client' && this.hostGone && performance.now() - this.hostGone > 45000) this.hostLost();   // the host has been gone for 45 s: give up
+    if (this.role === 'client') {   // spread each snapshot's position correction over the next frames instead of jumping
+      const k = 1 - Math.exp(-dt * 10);
+      for (const f of this.w.fighters) if (f.corr) { const cx = f.corr.x * k, cy = f.corr.y * k; f.x += cx; f.y += cy; f.corr.x -= cx; f.corr.y -= cy; }
+    }
     if (this.role !== 'host') return;
     const ctl = this.w.control;
     for (const r of this.remote.values()) {
@@ -128,11 +132,24 @@ export class NetGame {
   }
 
   /* ======================= CLIENT ======================= */
-  clientBasic(f) { if (f !== this.w.pc) return false; this.atkT = 0.12; return true; }
+  // client-side prediction: play our own basic / cast at once; the host's echo of it (same key, shortly after) is dropped in applyEvent
+  predict(f, key, fn) {
+    this.replaying = true; let ok = false; try { ok = fn(); } finally { this.replaying = false; }
+    if (ok) this.pred.push({ key, t: this.clock });
+    return ok;
+  }
+  echoed(f, key) {
+    if (f !== this.w.pc) return false;
+    this.pred = this.pred.filter(p => this.clock - p.t < 1.5);   // the host may have refused it: forget stale predictions
+    const i = this.pred.findIndex(p => p.key === key); if (i < 0) return false;
+    this.pred.splice(i, 1); return true;
+  }
+  clientBasic(f) { if (f !== this.w.pc) return false; this.atkT = 0.12; this.predict(f, 'b', () => f._tryBasic()); return true; }
   clientCast(f, k) {
     if (f !== this.w.pc) return false;
-    const cp = f.castPoint; f.castPoint = null;
-    this.send(this.hostId, { k: 'cast', c: k, ax: r2(f.ax), ay: r2(f.ay), cp: cp ? [r1(cp.x), r1(cp.y)] : null }); return true;
+    const cp = f.castPoint;
+    this.send(this.hostId, { k: 'cast', c: k, ax: r2(f.ax), ay: r2(f.ay), cp: cp ? [r1(cp.x), r1(cp.y)] : null });
+    this.predict(f, k, () => f._tryCast(k)); f.castPoint = null; return true;
   }
   op(op, a) { this.send(this.hostId, { k: 'op', op, a }); return true; }
   sendInput(dt) {
@@ -173,7 +190,7 @@ export class NetGame {
     else if (!f.alive && f.isChamp) { f.x = o.x; f.y = o.y; f.reset(); f.playAnim('idle'); f.netSeen = true; }
     if (f.alive) {
       const dx = o.x - f.x, dy = o.y - f.y, d = Math.hypot(dx, dy);
-      if (first || d > (local ? 160 : 220)) { f.x = o.x; f.y = o.y; } else if (!local) { f.x += dx * 0.35; f.y += dy * 0.35; }
+      if (first || d > (local ? 160 : 220)) { f.x = o.x; f.y = o.y; f.corr = null; } else if (!local) f.corr = { x: dx * 0.6, y: dy * 0.6 };
     }
     if (!local) { if (f.state !== 'cast') { f.ax = o.ax; f.ay = o.ay; } f.in = o.v ? { mx: o.v[0], my: o.v[1], run: !!o.v[2], analog: true } : { mx: 0, my: 0, run: false }; }
     // statuses
@@ -214,11 +231,13 @@ export class NetGame {
     const w = this.w;
     if (e[0] === 'c') {
       const f = this.fighter(e[1]); if (!f || !f.alive) return; const k = e[2];
+      if (this.echoed(f, k)) return;   // already played locally
       f.ax = e[3]; f.ay = e[4]; f.castPoint = e[5] == null ? null : { x: e[5], y: e[6] };
       if (!f.ranks[k]) f.ranks[k] = 1; f.cds[k] = 0; if (f.key === 'jorbi') f.dashCharges = Math.max(1, f.dashCharges);
       this.replay(f, () => f._tryCast(k)); f.castPoint = null;
     } else if (e[0] === 'b') {
       const f = this.fighter(e[1]); if (!f || !f.alive) return;
+      if (this.echoed(f, 'b')) return;
       if (f !== w.pc && !w.inView(f.x, f.y, 450)) return;   // basic attacks far from the camera are not replayed (nobody sees them)
       f.ax = e[2]; f.ay = e[3]; f.cds.basic = 0; this.replay(f, () => f._tryBasic());
     } else if (e[0] === 'd') {
