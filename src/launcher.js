@@ -149,6 +149,9 @@ const mapOf = id => MAPS.find(m => m.id === id) || MAPS[0];
 const SHADOW = { leandro: [.48, .512], xeviche: [.49, .510], jorbi: [.62, .496], axel: [.40, .502], julio: [.47, .514], luis: [.43, .508], eliud: [.42, .518], hector: [.60, .496] };
 const sceneOf = m => m.scene || m.img;   // escena a nivel de suelo si el escenario la tiene; si no, su pintura cenital
 const ambHtml = () => `<div class="amb"><img class="bg" src="${sceneOf(mapOf(prac.map))}" alt=""><div class="amb-shade"></div></div>`;
+/* Flechas del selector: navegan solo entre los campeones del filtro activo; con 1 o 0 disponibles se desactivan. */
+const navList = () => KEYS.filter(k => clsFilter === 'todos' || CHAMPIONS[k].cls === clsFilter);
+const navHtml = () => { const dis = navList().length <= 1; return `<button class="st-nav prev" data-a="pnav" data-d="-1" title="Campeón anterior" aria-label="Campeón anterior" ${dis ? 'disabled' : ''}></button><button class="st-nav next" data-a="pnav" data-d="1" title="Campeón siguiente" aria-label="Campeón siguiente" ${dis ? 'disabled' : ''}></button>`; };
 const stageHtml = (d, id, nav = false) => {
   const m = mapOf(prac.map);   // dirección artística nueva aplicada a los tres escenarios (aprobada la dirección en Ruinas)
   const open = !!m.scene;   // con escena a nivel de suelo, la tarima se abre: una sola imagen, la de pantalla completa, y el campeón se para en ella
@@ -159,7 +162,7 @@ const stageHtml = (d, id, nav = false) => {
   const champ = `<div class="cspr" id="cspr" data-id="${id}" style="background-image:url(assets/sprites/${id}/idle.png)"></div>`;
   return `<div class="stage art m-${m.id}${open ? ' open' : ''}">
     ${open ? '' : `<div class="st-scene" style="background-image:url(${sceneOf(m)})"></div><div class="st-shade"></div>`}
-    <div class="cwrap"><img class="cshadow-img" src="assets/sombra-campeon.png" alt="" style="width:${Math.round((SHADOW[id]?.[0] ?? .48) * 100)}%;left:${((SHADOW[id]?.[1] ?? .51) * 100).toFixed(1)}%">${champ}${nav ? '<button class="st-nav prev" data-a="pnav" data-d="-1" title="Campeón anterior">◀</button><button class="st-nav next" data-a="pnav" data-d="1" title="Campeón siguiente">▶</button>' : ''}</div>${!open && m.id === 'ruinas' ? '<img class="st-fg fg-tree" src="assets/map/forest/tree3.png" alt=""><img class="st-fg fg-bush" src="assets/map/forest/bush2.png" alt="">' : ''}<div class="st-fx"><i class="fx1"></i><i class="fx2"></i></div>${m.id === 'ruinas' ? '<div class="st-dust"><i></i><i></i><i></i><i></i><i></i><i></i></div>' : ''}
+    <div class="cwrap"><img class="cshadow-img" src="assets/sombra-campeon.png" alt="" style="width:${Math.round((SHADOW[id]?.[0] ?? .48) * 100)}%;left:${((SHADOW[id]?.[1] ?? .51) * 100).toFixed(1)}%">${champ}${nav ? navHtml() : ''}</div>${!open && m.id === 'ruinas' ? '<img class="st-fg fg-tree" src="assets/map/forest/tree3.png" alt=""><img class="st-fg fg-bush" src="assets/map/forest/bush2.png" alt="">' : ''}<div class="st-fx"><i class="fx1"></i><i class="fx2"></i></div>${m.id === 'ruinas' ? '<div class="st-dust"><i></i><i></i><i></i><i></i><i></i><i></i></div>' : ''}
     <div class="st-pill">${esc(d.name.toUpperCase())}<span>Nv. 12</span></div>
     <div class="st-stats"><div class="st-head">${esc(CLASSES[d.cls]?.label || '')}</div>${rows}</div>
   </div>`;
@@ -279,7 +282,7 @@ const actions = {
   pteam(el) { prac.team = +el.dataset.t; practiceScreen(); },
   prand() { pracFill(true); practiceScreen(); },
   pmap(el) { prac.map = el.dataset.map; snd('ui_tab'); practiceScreen(); },
-  pnav(el) { const i = KEYS.indexOf(prac.me); prac.me = KEYS[(i + (+el.dataset.d || 1) + KEYS.length) % KEYS.length]; snd('ui_tab'); practiceScreen(); },
+  pnav(el) { const list = navList(); if (list.length <= 1) return; const i = list.indexOf(prac.me), d = +el.dataset.d || 1; prac.me = i < 0 ? (d > 0 ? list[0] : list[list.length - 1]) : list[(i + d + list.length) % list.length]; snd('ui_tab'); practiceScreen(); },
   pslot(el) { const arr = prac[el.dataset.g], i = +el.dataset.i; arr[i] = KEYS[(KEYS.indexOf(arr[i]) + 1) % KEYS.length]; practiceScreen(); },
   pplay() { practiceStart(false); },
   ptrain() { practiceStart(true); },
