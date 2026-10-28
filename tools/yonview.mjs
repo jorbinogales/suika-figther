@@ -1,0 +1,11 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--enable-unsafe-swiftshader', '--use-gl=angle', '--mute-audio'], defaultViewport: { width: 1280, height: 720 } });
+const p = await b.newPage(); p.on('pageerror', e => console.log('[pageerror]', e.message, (e.stack || '').split('\n')[1]));
+await p.goto('http://localhost:5173/#char=yonaiker&train=1&keep=1&noai=1&nofog=1', { waitUntil: 'load' }); await new Promise(r => setTimeout(r, 20000));
+const w = t => new Promise(r => setTimeout(r, t));
+await p.evaluate(`(() => { const a = window.__arena, x = a.player; ['p1','p2','p3','ult'].forEach(k => { x.ranks[k] = 3; x.cds[k] = 0; }); x.charge = 99.9; })()`);
+await w(5200);
+const z0 = await p.evaluate(`(() => { const a = window.__arena; return [+a.cameras.main.zoom.toFixed(2), +(a.scale.height / 720).toFixed(2), Math.round(a.player.bomber.pt.x)]; })()`);
+await p.keyboard.down('d'); await w(1200); await p.keyboard.up('d');
+const z1 = await p.evaluate(`(() => { const a = window.__arena; return [Math.round(a.player.bomber.pt.x), Math.round(a.cameras.main.midPoint.x)]; })()`);
+console.log(JSON.stringify({ zoom_vs_normal_before_after_x: z0, ptx_camx: z1 })); await p.screenshot({ path: 'shot_yv.png' }); await b.close();

@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import './launcher.css';
 import { net } from './net.js';
+import { STAT_STYLE, statCss, scaleRows, rowStat, pct } from './stats.js';
 import { CHAMPIONS, CLASSES, CLASS_TABS, classLabel, ABILITY_KEYS } from './data.js';
 import { vol, saveVol } from './audio.js';
 import { bootScreen } from './bootscreen.js';
@@ -27,9 +28,9 @@ const startMusic = () => {
 const stopMusic = () => { musicWanted = false; if (music) { let v = music.volume; const iv = setInterval(() => { v -= 0.06; if (v <= 0) { clearInterval(iv); music.pause(); } else music.volume = v; }, 60); } };
 
 /* ---------- helpers ---------- */
-const faceCss = k => `background-image:url(assets/ref_${k}.png);background-size:280.5% auto;background-position:49.9% 1%`;
+const faceCss = k => `background-image:url(assets/concept/${k}_face.webp);background-size:cover;background-position:center`;
 const face = k => `<div class="face" style="${k ? faceCss(k) : ''}"></div>`;
-let root, view, scene, unsub, screen = null, chat = [], hoverAt = 0, picked = null, clsFilter = 'todos';
+let root, view, scene, unsub, screen = null, chat = [], hoverAt = 0, picked = null, clsFilter = 'todos', locked = false, fxNext = false;
 
 const toast = (msg, good) => { const e = $('.err', view); if (e) { e.textContent = msg; e.classList.toggle('ok', !!good); } if (!good) snd('ui_error'); };
 
@@ -94,7 +95,15 @@ function send(t, o) { if (!net.online) { toast('Sin conexión con el servidor. R
 
 const champTabs = () => `<div class="ctabs">${CLASS_TABS.map(c => `<button class="ctab ${clsFilter === c ? 'on' : ''}" data-cls="${c}" title="${esc(classLabel(c))}"><img src="assets/classes/${c}.png" alt="" onerror="this.style.display='none'"><span>${esc(classLabel(c))}</span><i>${c === 'todos' ? KEYS.length : KEYS.filter(k => CHAMPIONS[k].cls === c).length}</i></button>`).join('')}</div>`;
 const champGrid = (sel, taken = () => false) => `<div class="champs" id="champs">${KEYS.filter(k => clsFilter === 'todos' || CHAMPIONS[k].cls === clsFilter).map(k => `<div class="cc ${k === sel ? 'sel' : ''} ${taken(k) ? 'taken' : ''}" data-k="${k}"><div class="im" style="${faceCss(k)}"></div><div class="lb">${esc(CHAMPIONS[k].name)}</div></div>`).join('')}</div>`;
-const abilityStrip = d => `<div class="abis">${ABILITY_KEYS.map((a, i) => { const ab = d.abilities[a]; return `<div class="abi" data-tip="${esc(`<b>[${'QFER'[i]}] ${ab.name}${ab.passive ? ' · pasiva' : ''}</b><br>${ab.desc}`)}"><img src="assets/icons/${esc(ab.icon)}.png?v=${BUILD}" alt=""><span>${'QFER'[i]}</span></div>`; }).join('')}</div>`;
+const lockedCard = (k, d) => { const fx = fxNext; fxNext = false; return `<div class="panel pick ${fx ? 'fx' : ''}"><div class="bg" style="background-image:url(assets/concept/${k}.webp)"></div><img class="sp" src="assets/concept/${k}.webp" alt=""><div class="ov"><div class="sn">${esc(d.name)}<small>${esc(CLASSES[d.cls]?.label || '')}</small></div>${abilityStrip(d)}<button class="btn ghost" data-a="unlock">Cambiar campeón</button></div>${fx ? '<div class="glt"></div>' : ''}</div>`; };
+const splash = (k, d) => `<div class="splash" style="background-image:url(assets/concept/${k}.webp)"><div class="sn">${esc(d.name)}<small>${esc(CLASSES[d.cls]?.label || '')}</small></div></div>`;
+const si = k => `<img class="si" src="assets/stats/${k}.png?v=${BUILD}" alt="">`;
+const scaleHtml = (ab, st) => {   // [stat icon] (value at rank 1 -> rank 3) in the stat color + formula; uses the champion's level-1 stats
+  const v = { ap: st.ap, atk: st.atk, maxHp: st.hp }, r1 = scaleRows(ab, 1, v), r3 = scaleRows(ab, 3, v);
+  return r1.map((r, i) => { const s2 = rowStat(r), col = s2 ? statCss(s2) : '#cfe3ff', f = r.parts.length ? `${Math.round(r.base)} + ${r.parts.map(p => `${pct(p.k)} <span style="color:${statCss(p.stat)}">${si(p.stat)}${STAT_STYLE[p.stat].label}</span>`).join(' + ')}` : '';
+    return `<div class="scl"><b>${r.label}</b> ${r.parts.map(p => si(p.stat)).join('')}<span style="color:${col};font-weight:700">(${Math.round(r.total)} → ${Math.round(r3[i].total)})</span>${f ? `<small>${f}</small>` : ''}</div>`; }).join('');
+};
+const abilityStrip = d => `<div class="abis">${ABILITY_KEYS.map((a, i) => { const ab = d.abilities[a], sc = scaleHtml(ab, d.stats); return `<div class="abi" data-tip="${esc(`<b>[${'QFER'[i]}] ${ab.name}${ab.passive ? ' · pasiva' : ''}</b><br>${ab.desc}${sc ? `<div class="scb"><em>Escala (nivel 1 → nivel 3 de la habilidad)</em>${sc}</div>` : ''}`)}"><img src="assets/icons/${esc(ab.icon)}.png?v=${BUILD}" alt=""><span>${'QFER'[i]}</span></div>`; }).join('')}</div>`;
 const refresh = () => (screen === 'practice' ? practiceScreen() : lobbyScreen());
 
 function lobbyScreen() {
@@ -110,11 +119,11 @@ function lobbyScreen() {
   view.innerHTML = `<div class="scr ${first ? '' : 'noanim'}">${header()}<div class="lobby">
     <div class="col"><div class="panel"><h2>CÓDIGO DE SALA</h2><div class="code" data-a="copy" title="Clic para copiar">${esc(r.code)}</div><div style="text-align:center;color:var(--mut);font-size:14px;margin-top:4px">${pl.length}/${MAXP} jugadores · clic para copiar</div></div>
       <div class="panel scroll">${team(0)}${team(1)}</div></div>
-    <div class="col"><div class="panel scroll"><h2>ELIGE TU CAMPEÓN</h2>
+    <div class="col">${locked ? lockedCard(sel, d) : `<div class="panel scroll"><h2>ELIGE TU CAMPEÓN</h2>
       ${champTabs()}
       ${champGrid(sel, k => pl.some(p => p.champ === k && p.id !== net.user.id))}
 </div>
-      <div class="panel info">${abilityStrip(d)}</div></div>
+      <div class="panel info">${abilityStrip(d)}<button class="btn go" data-a="lock">Seleccionar</button></div>`}</div>
     <div class="col"><div class="panel chat"><h2>CHAT</h2><div class="log" id="log"></div><input class="fld" id="chatin" maxlength="200" placeholder="Escribe y pulsa Enter" autocomplete="off"></div>
       <div class="panel"><div class="row" style="margin-bottom:10px"><button class="btn ${me?.ready ? 'warn' : 'go'}" data-a="ready">${me?.ready ? 'Cancelar listo' : 'Estoy listo'}</button><button class="btn ghost" data-a="leave">Salir</button></div>
       ${host ? `<button class="btn go" style="width:100%" data-a="start" ${allPicked ? '' : 'disabled'}>Iniciar partida${allReady ? '' : ' (hay jugadores sin marcar listo)'}</button>` : '<div style="text-align:center;color:var(--mut)">Esperando a que el anfitrión inicie la partida...</div>'}
@@ -122,7 +131,7 @@ function lobbyScreen() {
   renderChat();
   const ci = $('#chatin', view); ci.value = keep.txt; if (keep.focus) ci.focus();
   ci.addEventListener('keydown', e => { if (e.key === 'Enter' && ci.value.trim()) { net.send('chat', { text: ci.value.trim() }); ci.value = ''; } });
-  if (!first) $('#champs', view).parentElement.scrollTop = keep.sc;
+  if (!first && $('#champs', view)) $('#champs', view).parentElement.scrollTop = keep.sc;
   if (me && !me.champ && !picked) { picked = KEYS.filter(k => !pl.some(p => p.champ === k))[0] || KEYS[0]; net.send('pick_champ', { key: picked }); }   // everyone always has a champion
 }
 
@@ -143,16 +152,16 @@ function practiceScreen() {
         <h2 style="margin-top:14px">TU BANDO</h2><div class="row"><button class="btn mbtn ${prac.team === 0 ? 'on' : ''}" data-a="pteam" data-t="0">AZUL</button><button class="btn mbtn red ${prac.team === 1 ? 'on' : ''}" data-a="pteam" data-t="1">ROJO</button></div>
         <button class="btn ghost" style="width:100%;margin-top:14px" data-a="prand">Equipos al azar</button></div>
       <div class="panel scroll"><div class="team t0"><h4>TUS ALIADOS (${prac.allies.length})</h4>${slots(prac.allies, 'allies')}</div><div class="team t1"><h4>EQUIPO ENEMIGO (${prac.enemies.length})</h4>${slots(prac.enemies, 'enemies')}</div></div></div>
-    <div class="col"><div class="panel scroll"><h2>ELIGE TU CAMPEÓN</h2>
+    <div class="col">${locked ? lockedCard(prac.me, d) : `<div class="panel scroll"><h2>ELIGE TU CAMPEÓN</h2>
       ${champTabs()}
       ${champGrid(prac.me)}
 </div>
-      <div class="panel info">${abilityStrip(d)}</div></div>
+      <div class="panel info">${abilityStrip(d)}<button class="btn go" data-a="lock">Seleccionar</button></div>`}</div>
     <div class="col"><div class="panel"><h2>JUGAR</h2><div class="acts">
         <button class="btn big go" data-a="pplay">Jugar partida<small>${prac.mode} vs ${prac.mode} contra la IA, con oleadas, torres y nexos.</small></button>
         <button class="btn big" data-a="ptrain">Zona de entrenamiento<small>Nivel 12, sin costo de maná y un muñeco para practicar.</small></button></div></div>
       <div class="panel"><h2>CONTROLES</h2><div style="font-size:15px;line-height:1.5;color:var(--tx)">WASD mover · Shift correr · clic o J atacar<br>Q F E R poderes (clic para lanzar) · Ctrl + tecla sube el poder<br>B tienda en la base · 1-6 usar objetos · Esc menú</div></div></div></div></div>`;
-  if (!first) $('#champs', view).parentElement.scrollTop = keep;
+  if (!first && $('#champs', view)) $('#champs', view).parentElement.scrollTop = keep;
 }
 function practiceStart(training) {
   snd('ui_confirm'); stopMusic();
@@ -219,7 +228,9 @@ function onNet(m) {
 
 const actions = {
   logout() { net.logout(); chat = []; loginScreen(); },
-  practice() { snd('ui_confirm'); practiceScreen(); },
+  practice() { snd('ui_confirm'); locked = false; practiceScreen(); },
+  lock() { snd('ui_confirm'); locked = true; fxNext = true; refresh(); },
+  unlock() { locked = false; refresh(); },
   pback() { snd('ui_back'); route(); },
   pmode(el) { prac.mode = +el.dataset.m; practiceScreen(); },
   pteam(el) { prac.team = +el.dataset.t; practiceScreen(); },

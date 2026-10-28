@@ -1,0 +1,14 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--enable-unsafe-swiftshader', '--use-gl=angle', '--mute-audio'], defaultViewport: { width: 1280, height: 720 } });
+const p = await b.newPage(); p.on('pageerror', e => console.log('[pageerror]', e.message, (e.stack || '').split('\n')[1]));
+await p.goto('http://localhost:5173/#char=leandro&mode=3&noai=1&keep=1&nofog=1', { waitUntil: 'load' }); await new Promise(r => setTimeout(r, 22000));
+console.log(await p.evaluate(`(() => { const a = window.__arena, x = a.player; const foes = a.champs.filter(f => f.team !== x.team); const [k, s] = foes; x.maxHp = x.hp = 3000;
+  const hit = (f, key, n, type) => { a.castCtx = { f, k: key }; a.damage(f, x, n, type); a.castCtx = null; };
+  hit(s, 'p1', 150, 'magic'); hit(s, 'p2', 90, 'physical'); a.basicDmg = true; a.damage(s, x, 60, 'physical'); a.basicDmg = false;
+  hit(k, 'p1', 400, 'magic'); hit(k, 'p3', 300, 'physical'); a.basicDmg = true; a.damage(k, x, 100, 'physical'); a.basicDmg = false; a.damage(k, x, 30, 'true', true);
+  x.hp = 50; hit(k, 'ult', 900, 'magic');
+  return JSON.stringify({ alive: x.alive, recap: x.recap && x.recap.entries.map(e => [e.name, e.killer, e.total, e.abilities.length]) }); })()`));
+await new Promise(r => setTimeout(r, 1200)); await p.screenshot({ path: 'shot_recap1.png' });
+await p.mouse.click(503, 356);
+await new Promise(r => setTimeout(r, 400)); await p.screenshot({ path: 'shot_recap2.png' });
+await b.close();

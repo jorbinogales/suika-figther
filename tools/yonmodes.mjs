@@ -1,0 +1,14 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--enable-unsafe-swiftshader', '--use-gl=angle', '--mute-audio'], defaultViewport: { width: 1280, height: 720 } });
+const p = await b.newPage(); p.on('pageerror', e => console.log('[pageerror]', e.message, (e.stack || '').split('\n')[1]));
+await p.goto('http://localhost:5173/#char=yonaiker&train=1&keep=1&noai=1&nofog=1', { waitUntil: 'load' }); await new Promise(r => setTimeout(r, 20000));
+console.log(await p.evaluate(`(async () => { const a = window.__arena, x = a.player, e = a.enemy; const sleep = t => new Promise(r => setTimeout(r, t)); const out = {};
+  ['p1','p2','p3','ult'].forEach(k => { x.ranks[k] = 3; x.cds[k] = 0; });
+  out.foot = ['p1','p2','p3','ult'].map(k => x.abilityLocked(k)).join(',');
+  out.footCast = [x.tryCast('p3'), x.tryCast('ult'), x.tryCast('p1')].join(',');
+  x.charge = 99.9; await sleep(4500); out.phase = x.bomber?.phase;
+  out.air = ['p1','p2','p3','ult'].map(k => x.abilityLocked(k)).join(',');
+  out.airCast = [x.tryCast('p2'), x.tryCast('p3'), x.tryCast('ult')].join(',');
+  await sleep(900); out.crates = (a.crates || []).length; out.silenced = e.silenceT > 1;
+  return JSON.stringify(out); })()`));
+await b.close();

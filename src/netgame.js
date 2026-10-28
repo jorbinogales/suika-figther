@@ -87,6 +87,7 @@ export class NetGame {
   sendBasic(f) { this.ev.push(['b', f.nid, r2(f.ax), r2(f.ay)]); }
   onDmg(src, t, dmg, type, dot) { if (this.role === 'host' && !dot) this.ev.push(['d', t.nid, r1(dmg), Math.max(0, TYPES.indexOf(type)), t.isNexus ? 2 : t.isTower ? 1 : 0]); }
   onDie(v, killer) { if (this.role === 'host') this.ev.push(['k', v.nid, killer?.nid ?? -1]); }
+  onRecap(v, rc) { if (this.role === 'host') this.ev.push(['rc', v.nid, rc]); }
   onWave(n) { if (this.role === 'host') this.ev.push(['w', n]); }
   onRewind(lines, dur, owner, back) { if (this.role === 'host') this.ev.push(['r', r2(dur), owner.nid, back, lines.map(l => [l.team, l.pts.filter((p, i) => i % 3 === 0 || i === l.pts.length - 1).flat()])]); }
   onShip(i, team) { if (this.role === 'host') this.ev.push(['sh', i, team]); }
@@ -100,7 +101,7 @@ export class NetGame {
     if (f.nid >= 1000) { o.k = f.key; o.t = f.baseTeam; if (f.owner) o.o = f.owner.nid; if (f.antivirus) o.av = 1; }
     const v = f.in; if (v && (v.mx || v.my)) o.v = [r2(v.mx), r2(v.my), v.run ? 1 : 0];
     if (f.team !== f.baseTeam) o.tm = f.team;
-    if (f.stunT > 0) o.st = r2(f.stunT); if (f.silenceT > 0) o.sl = r2(f.silenceT); if (f.blindT > 0) o.bl = r2(f.blindT); if (f.charmT > 0) o.ch = r2(f.charmT);
+    if (f.rootT > 0) o.rt = r2(f.rootT); if (f.stunT > 0) o.st = r2(f.stunT); if (f.silenceT > 0) o.sl = r2(f.silenceT); if (f.blindT > 0) o.bl = r2(f.blindT); if (f.charmT > 0) o.ch = r2(f.charmT);
     if (f.shieldHp > 0) o.sd = [r1(f.shieldHp), r2(f.shieldT)]; if (f.speedT > 0) o.sp = [r2(f.speedBoost), r2(f.speedT)];
     if (f.slows.length) o.sw = f.slows.map(s => [r2(s.pct), r2(s.t)]);
     if (f.poisons.length) o.pn = r2(Math.max(...f.poisons.map(p => p.t)));
@@ -123,7 +124,7 @@ export class NetGame {
   sendSnap() {
     const w = this.w;
     const c = w.control;
-    this.send(null, { k: 'snap', f: w.fighters.map(f => this.packF(f)), m: w.mortars.map(m => [r1(m.x), r1(m.y)]), g: r1(w.gameT), ctl: c ? [c.luis.nid, c.target.nid, r2(c.t)] : 0, cp: (w.camps || []).map(k => [k.owner ?? -1, r2(k.prog[0]), r2(k.prog[1]), k.contested ? 1 : 0, r1(k.spawnT)]), wv: r1(w.waveT) });
+    this.send(null, { k: 'snap', f: w.fighters.map(f => this.packF(f)), m: w.mortars.map(m => [r1(m.x), r1(m.y)]), g: r1(w.gameT), ctl: c ? [c.luis.nid, c.target.nid, r2(c.t)] : 0, cp: (w.camps || []).map(k => [k.owner ?? -1, r2(k.prog[0]), r2(k.prog[1]), k.contested ? 1 : 0, r1(k.spawnT)]), wv: r1(w.waveT), tr: (w.traps || []).map(q => [r1(q.x), r1(q.y), q.team, q.r, r1(q.t)]), sn: (w.sentinels || []).map(q => [r1(q.x), r1(q.y), q.team, q.r, r1(q.t)]) });
   }
 
   /* ======================= CLIENT ======================= */
@@ -157,6 +158,8 @@ export class NetGame {
     for (const f of w.fighters) if (f.nid >= 1000 && !seen.has(f.nid) && f.alive && !f.dispose) f.dispose = true;   // vanished on the host (expired summon, ...)
     if (s.cp) s.cp.forEach((k, i) => { const c = w.camps?.[i]; if (c) { c.owner = k[0] < 0 ? null : k[0]; c.prog = [k[1], k[2]]; c.contested = !!k[3]; c.spawnT = k[4]; } });
     if (s.wv != null) w.waveT = s.wv;
+    if (s.tr) { w.traps = s.tr.map((q, i) => Object.assign(w.traps?.[i] || {}, { x: q[0], y: q[1], team: q[2], r: q[3], t: q[4] })); }
+    if (s.sn) { w.sentinels = s.sn.map((q, i) => Object.assign(w.sentinels?.[i] || { owner: { alive: true } }, { x: q[0], y: q[1], team: q[2], r: q[3], t: q[4] })); }
     // Luis' mind control: the controller's camera and HUD follow the controlled champion
     if (s.ctl) { const L = w.byNid.get(s.ctl[0]), T = w.byNid.get(s.ctl[1]); if (L && T) { const mine = L === w.player; w.control = { luis: L, target: T, t: s.ctl[2], mode: mine ? 'ctrl' : 'view' }; w.ctrl = mine ? T : null; } }
     else if (w.control) { w.control = null; w.ctrl = null; w.cancelAim(); }
@@ -175,7 +178,7 @@ export class NetGame {
     if (!local) { if (f.state !== 'cast') { f.ax = o.ax; f.ay = o.ay; } f.in = o.v ? { mx: o.v[0], my: o.v[1], run: !!o.v[2], analog: true } : { mx: 0, my: 0, run: false }; }
     // statuses
     const stun = o.st || 0; if (stun > 0 && f.stunT <= 0) { f.state = 'stun'; f.pending = null; } f.stunT = stun; if (stun <= 0 && f.state === 'stun') { f.state = 'idle'; f.playAnim('idle'); }
-    f.silenceT = o.sl || 0; f.blindT = o.bl || 0; f.charmT = o.ch || 0; f.team = o.tm ?? f.baseTeam;
+    f.rootT = o.rt || 0; f.silenceT = o.sl || 0; f.blindT = o.bl || 0; f.charmT = o.ch || 0; f.team = o.tm ?? f.baseTeam;
     f.shieldHp = o.sd ? o.sd[0] : 0; f.shieldT = o.sd ? o.sd[1] : 0; f.speedBoost = o.sp ? o.sp[0] : 0; f.speedT = o.sp ? o.sp[1] : 0;
     f.slows = (o.sw || []).map(a => ({ pct: a[0], t: a[1] }));
     f.poisons = o.pn ? [{ dps: 0, t: o.pn, tick: 0, src: f }] : [];
@@ -227,6 +230,8 @@ export class NetGame {
     } else if (e[0] === 'k') {
       const v = this.fighter(e[1]); if (!v || !v.alive) return;
       v.hp = 0; v.die(e[2] >= 0 ? this.fighter(e[2]) : null);
+    } else if (e[0] === 'rc') {   // death recap computed by the host
+      const v = this.fighter(e[1]); if (v) v.recap = e[2];
     } else if (e[0] === 'w') {
       if (e[1] === 0) w.audio.voice('v_minions', 1, 'ann_minions', { title: '¡MINIONS DESPLEGADOS!', sub: 'La primera oleada avanza por el carril', team: 2 });
       w.audio.play('minion_yell', { at: { x: 260, y: w.laneY }, vol: 0.5, gap: 200 });

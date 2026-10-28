@@ -7,7 +7,7 @@ export const saveVol = () => { try { localStorage.setItem(LS, JSON.stringify(vol
 // basic attacks of non-champion units (champions use their own unique sound 'atk_<champion>')
 export const ATTACK_SFX = {
   minion_blue_melee: 'slash', minion_blue_ranged: 'shot', minion_blue_tank: 'cannon', minion_red_melee: 'slash', minion_red_ranged: 'laser', minion_red_auto: 'punch_heavy',
-  tower_blue: 'cannon', tower_red: 'laser_big', bot_melee: 'punch', bot_ranged: 'laser', drone: 'laser',
+  tower_blue: 'cannon', tower_red: 'laser_big', bot_melee: 'punch', bot_ranged: 'laser', drone: 'laser', sentry: 'shot', turret_robot: 'laser',
 };
 
 export class Audio {

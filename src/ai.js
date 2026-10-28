@@ -11,15 +11,24 @@ const inTowerRange = (w, x, y, team, margin = 40) => w.fighters.some(t => t.isTo
 
 // abilities that are not "aim at the enemy": [champion:key] -> (f, ctx) => boolean
 // gap closers drag/dash the caster toward the target: never use them to dive under an enemy tower
-const MOVERS = new Set(['hector:p2', 'hector:ult', 'julio:p2']);
+const MOVERS = new Set(['hector:p2', 'hector:ult', 'julio:p2', 'junior:p2']);
 const RULES = {
-  'xeviche:p2': (f, c) => c.hpR < 0.62 || (c.hpR < 0.8 && c.enemiesNear(350) === 0),
-  'xeviche:ult': (f, c) => c.champNear(280) >= 1 || c.enemiesNear(280) >= 3,
+  'xeviche:p1': (f, c) => c.target && c.d < 560,
+  'xeviche:p3': (f, c) => c.target && c.d < 440 && c.target.isChamp,
+  'xeviche:ult': (f, c) => c.target && c.target.isChamp && c.d < 520,
   'hector:p1': (f, c) => c.hpR < 0.7 && c.enemiesNear(260) === 0,
   'hector:p3': (f, c) => c.enemiesNear(380) >= 1 && c.hpR < 0.95,
   'luis:p1': (f, c) => c.enemiesNear(800) >= 1 && !f.w.fighters.some(d => d.antivirus && d.owner === f && d.alive),
   'luis:p2': (f, c) => c.champNear(650) >= 1 && !f.invis && c.hpR > 0.4,
   'luis:p3': (f, c) => c.champNear(300) >= 1,
+  'yonaiker:p1': () => false,   // the ship comes by itself when the charge bar is full
+  'yonaiker:p2': (f, c) => c.target && c.d < 480 && c.d > 120,
+  'yonaiker:p3': (f, c) => c.champNear(900) >= 1,
+  'yonaiker:ult': (f, c) => c.champNear(900) >= 2 || (c.hpR < 0.4 && c.champNear(600) >= 1),
+  'junior:p1': (f, c) => c.target && c.d > 120 && c.d < 420,
+  'junior:p2': (f, c) => c.hpR < 0.5 && c.enemiesNear(250) >= 1,
+  'junior:p3': (f, c) => c.target && c.d < 260,
+  'junior:ult': (f, c) => c.champNear(600) >= 2 || (c.champNear(600) >= 1 && c.hpR > 0.5),
   'jorbi:ult': (f, c) => c.champNear(650) >= 2 || (c.hpR < 0.5 && c.champNear(550) >= 1),
   'axel:p2': (f, c) => c.hpR < 0.72 && c.enemiesNear(500) < 2 || c.hpR < 0.5,
   'axel:p3': (f, c) => c.champNear(520) >= 1 || c.enemiesNear(350) >= 3,
@@ -95,9 +104,13 @@ function itemAi(w, f, c, dt) {
   if (!w.inBase(f)) {
     const build = BUILDS[f.def.cls === 'cyber' ? 'tank' : f.def.stats.ap > f.def.stats.atk ? 'ap' : 'ad'], next = build.find(id => f.slotOf(id) < 0);
     const need = next ? ITEM_BY_ID[next].cost : 600;
-    if (f.gold >= need + 250 && c.champNear(650) === 0 && f.hp / f.maxHp > 0.5) f.wantShop = true;
+    if ((f.noShopT = (f.noShopT || 0) - dt) <= 0 && f.gold >= need + 250 && c.champNear(650) === 0 && f.hp / f.maxHp > 0.5) f.wantShop = true;
     if (f.wantShop) { f.retreat = true; if (c.enemiesNear(300) >= 1 && f.hp / f.maxHp < 0.5) f.wantShop = false; }
-  } else if (f.aiItemT > 0 && f.aiItemT < 1.0) f.wantShop = false;   // shopped for a moment: back to the lane
+  } else {
+    if (f.aiItemT > 0 && f.aiItemT < 1.0) f.wantShop = false;   // shopped for a moment: back to the lane
+    if (f.wantShop && (f.shopWait = (f.shopWait || 0) + dt) > 4) { f.wantShop = false; f.shopWait = 0; f.noShopT = 40; }   // could not buy anything: stop trying for a while
+    if (!f.wantShop) f.shopWait = 0;
+  }
   // potions when hurt, actives in fights
   const hpR = f.hp / f.maxHp;
   f.inv.forEach((sl, i) => {
@@ -112,11 +125,26 @@ function itemAi(w, f, c, dt) {
   });
 }
 
+// the camp (flag) a bot should go and capture: nearest one that is not already fully ours, one bot per camp per team, away from enemy towers
+function campGoal(w, f, hpR) {
+  if (!w.camps?.length || f.retreat || hpR < 0.6 || w.gameT < 20) return null;
+  let best = null, bd = 1e9;
+  for (const c of w.camps) {
+    if (c.owner === f.team && c.prog[f.team] > 0.95) continue;
+    const cl = c.botClaim?.[f.team]; if (cl && cl.f !== f && cl.f.alive && w.gameT - cl.t < 1.5) continue;
+    if (inTowerRange(w, c.x, c.y, f.team, 60)) continue;
+    const d = dist(f, c); if (d < bd && d < 2200) { bd = d; best = c; }
+  }
+  if (best) (best.botClaim ||= {})[f.team] = { f, t: w.gameT };
+  return best;
+}
+
 export function runChampAi(w, f, dt) {
   f.in = { mx: 0, my: 0, run: false };
   if (!f.alive || f.away) return;
   const range = f.atkRange, hpR = f.hp / f.maxHp, dir = SIDE(f), home = f.charmT > 0 ? { x: f.team === 0 ? 420 : 3200 - 420, y: w.laneY } : { x: f.spawn.x, y: f.spawn.y };
   if (f.charmT > 0) f.retreat = false;
+  const fo = w.fountains?.[f.baseTeam], rest = fo ? { x: fo.x + dir * 200, y: fo.y } : home;   // where a retreating bot goes: well inside the base (the spawn point lies on the edge of the shop zone: bots used to stop just outside it and stay there)
   // ---- retreat with hysteresis ----
   if (hpR < 0.33) f.retreat = true; else if (hpR > 0.8) f.retreat = false;
   const toHome = dist(f, home);
@@ -144,7 +172,7 @@ export function runChampAi(w, f, dt) {
   itemAi(w, f, ctx, dt);
   let wantX = 0, wantY = 0, move = false, runFast = false;
   if (f.retreat) {   // run home (heals at the fountain, see Fighter.update)
-    wantX = home.x - f.x; wantY = home.y - f.y; move = toHome > 25; runFast = true;
+    wantX = rest.x - f.x; wantY = rest.y - f.y; move = Math.hypot(wantX, wantY) > 40 || !w.inBase(f); runFast = true;
     if (enemiesNear(420) >= 1) tryAbilities(w, f, ctx);   // still use escapes / shields while fleeing
     if (target && d <= range && champNear(300) === 0) f.tryBasic();
   } else if (target) {
@@ -161,14 +189,30 @@ export function runChampAi(w, f, dt) {
     // ---- no target: push the lane behind the minions (never far ahead of them) ----
     const front = mates.filter(m => m.isMinion).reduce((mx, m) => (dir > 0 ? Math.max(mx, m.x) : Math.min(mx, m.x)), dir > 0 ? -1e9 : 1e9);
     const hasM = Math.abs(front) < 1e8;
-    const limit = hasM ? front - dir * 90 : home.x + dir * 900;
-    const ahead = dir > 0 ? f.x > limit : f.x < limit;
-    if (!ahead) { wantX = dir; move = true; }
-    else if (Math.abs(f.x - limit) > 60) { wantX = -dir; move = true; }
-    wantY = (w.laneY + ((f.aiLane || 0) * 40) - f.y) * 0.05;
+    let limit = hasM ? front - dir * 90 : home.x + dir * 900;
+    const minLimit = home.x + dir * (f.forceLeave > 0 ? 1300 : 650);   // never wait inside the base: the leash to the minions starts outside it
+    limit = dir > 0 ? Math.max(limit, minLimit) : Math.min(limit, minLimit);
+    const cg = f.forceLeave > 0 ? null : campGoal(w, f, hpR);
+    if (cg) {   // go and stand on the flag until it is captured
+      const dx = cg.x - f.x, dy = cg.y - f.y, dd = Math.hypot(dx, dy);
+      if (dd > w.campR * 0.45) { wantX = dx; wantY = dy; move = true; runFast = dd > 500; f.setAim(dx, dy); }
+      else f.setAim(wantX || dir, wantY);
+    } else {
+      const ahead = dir > 0 ? f.x > limit : f.x < limit;
+      if (!ahead) { wantX = dir; move = true; }
+      else if (Math.abs(f.x - limit) > 60) { wantX = -dir; move = true; }
+      wantY = (w.laneY + ((f.aiLane || 0) * 40) - f.y) * 0.05;
+      f.setAim(wantX || dir, wantY);
+    }
     if (f.mana < f.maxMana * 0.2 || hpR < 0.5) tryAbilities(w, f, ctx);
-    f.setAim(wantX || dir, wantY);
   }
+  // ---- base watchdog: sitting in the base with nothing to do for too long -> head out for a while ----
+  if (w.inBase(f) && !f.retreat && !f.wantShop && hpR > 0.8) { if ((f.baseT = (f.baseT || 0) + dt) > 6 && !(f.forceLeave > 0)) f.forceLeave = 8; } else f.baseT = 0;
+  if (f.forceLeave > 0) { f.forceLeave -= dt; if (!target && !f.retreat) { wantX = dir; wantY = (w.laneY - f.y) * 0.05; move = true; runFast = true; } }
+  // ---- stuck watchdog: wants to move but is not getting anywhere (blocked by the nexus, a tower, a wall...) -> sidestep for a moment ----
+  const W = (f.aiW ||= { x: f.x, y: f.y, t: 0, stuck: 0, det: 0, side: 1 });
+  if ((W.t += dt) >= 0.7) { const moved = Math.hypot(f.x - W.x, f.y - W.y); W.stuck = move && moved < 14 && f.free ? W.stuck + 1 : 0; if (W.stuck >= 2) { W.det = 1.2; W.side = -W.side; W.stuck = 0; } W.x = f.x; W.y = f.y; W.t = 0; }
+  if (W.det > 0 && move) { W.det -= dt; const a = Math.atan2(wantY, wantX) + W.side * 1.15; wantX = Math.cos(a); wantY = Math.sin(a); }
   if (move) { const l = Math.hypot(wantX, wantY) || 1; f.in.mx = wantX / l; f.in.my = wantY / l + 0; f.in.run = runFast; }
   else if (wantY) f.in.my = Math.sign(wantY) * Math.min(1, Math.abs(wantY));
 }

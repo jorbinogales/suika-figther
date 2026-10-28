@@ -125,3 +125,38 @@ label.l{display:block;font-size:12px;letter-spacing:.2em;color:var(--mut);margin
   .chip{font-size:13px}.btn{font-size:12px;letter-spacing:.08em}.ctab{padding:4px 7px 4px 4px}.ctab span{display:none}.ctab i{font-size:12px}
   .row{flex-wrap:wrap}.mbtn{min-width:0}#tip{max-width:86vw}
 }
+
+/* champion select: vertical concept art + small face tiles */
+.panel.info{gap:18px;flex-wrap:wrap}.panel.info .abis{flex-wrap:wrap;gap:14px;max-width:360px}
+.splash{position:relative;width:clamp(150px,16vw,210px);aspect-ratio:2/3;flex:none;border:2px solid var(--am);background:#0a1020 center/cover no-repeat;box-shadow:0 0 22px rgba(255,210,63,.35);clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px)}
+.splash .sn{position:absolute;left:0;right:0;bottom:0;padding:26px 6px 8px;text-align:center;font:900 17px 'Orbitron';letter-spacing:.08em;color:var(--am);background:linear-gradient(transparent,rgba(0,0,0,.92))}.splash .sn small{display:block;font:600 11px 'Orbitron';color:var(--cy2);letter-spacing:.05em}
+.cc .im{background-position:center 30%}
+.panel.info{flex-wrap:nowrap;gap:22px;justify-content:center}.panel.info .splash{width:clamp(120px,11vw,150px)}.panel.info .abis{display:grid;grid-template-columns:repeat(2,70px);gap:12px;max-width:none}.panel.info .abi{width:70px;height:70px}
+
+/* tiles: faded until hovered / selected */
+.cc .im{filter:grayscale(.6) saturate(.6) brightness(.8);transition:filter .2s}
+.cc:hover .im{filter:grayscale(.15) saturate(.9) brightness(.95)}.cc:hover{border-color:#3fa8ff;box-shadow:0 0 14px rgba(63,168,255,.55)}
+.cc.sel .im{filter:none}.cc.sel,.cc.sel:hover{border-color:var(--am);box-shadow:0 0 18px rgba(255,210,63,.6)}
+/* picked: one big card, splash art behind, abilities in front */
+.panel.pick{position:relative;flex:1;min-height:0;padding:0;overflow:hidden;border:2px solid var(--am);box-shadow:0 0 26px rgba(255,210,63,.35);display:flex;justify-content:center;background:#050912}
+.panel.pick .bg{position:absolute;inset:0;background:center/cover;filter:blur(18px) brightness(.5);transform:scale(1.1)}
+.panel.pick .sp{position:relative;height:100%;max-width:100%;object-fit:contain;z-index:1}
+.panel.pick .ov{position:absolute;left:0;right:0;bottom:0;z-index:2;display:flex;flex-direction:column;align-items:center;gap:10px;padding:46px 12px 14px;background:linear-gradient(transparent,rgba(0,0,0,.88))}
+.panel.pick .sn{font:900 26px 'Orbitron';letter-spacing:.1em;color:var(--am);text-align:center;text-shadow:0 0 10px #000}.panel.pick .sn small{display:block;font:600 13px 'Orbitron';color:var(--cy2)}
+.panel.pick .abis{display:flex;grid-template-columns:none;gap:14px}.panel.pick .abi{width:68px;height:68px;background:rgba(5,9,18,.85)}
+.panel.info{flex-direction:column;gap:12px}.panel.info .abis{display:flex;grid-template-columns:none}.panel.info .abi{width:70px;height:70px}
+
+/* tech flicker when a champion is locked in */
+.panel.pick.fx .sp{animation:gltImg .9s steps(1,end) 1}
+.panel.pick.fx .ov{animation:gltOv .9s steps(1,end) 1}
+.panel.pick.fx{animation:gltBox .9s steps(1,end) 1}
+.panel.pick .glt{position:absolute;inset:0;z-index:3;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(63,208,255,.28) 0 2px,transparent 2px 5px);mix-blend-mode:screen;animation:gltScan .9s linear 1 forwards}
+@keyframes gltImg{0%{opacity:0;transform:translateX(-14px)}8%{opacity:1;transform:translateX(10px);filter:hue-rotate(90deg) saturate(2.5)}16%{opacity:.1;transform:none}24%{opacity:1;filter:hue-rotate(-60deg) brightness(1.8);clip-path:inset(0 0 55% 0)}32%{opacity:.3;clip-path:none}42%{opacity:1;transform:translateX(-6px);filter:contrast(1.6)}52%{opacity:.2;transform:none;filter:none}62%{opacity:1;clip-path:inset(40% 0 0 0);filter:brightness(1.6)}72%{opacity:.6;clip-path:none}82%{opacity:1;filter:saturate(2)}100%{opacity:1;transform:none;filter:none;clip-path:none}}
+@keyframes gltOv{0%,20%{opacity:0}28%{opacity:1}40%{opacity:0}55%{opacity:1}65%{opacity:.2}78%,100%{opacity:1}}
+@keyframes gltBox{0%{box-shadow:0 0 0 rgba(63,208,255,0)}20%,60%{box-shadow:0 0 40px rgba(63,208,255,.9)}100%{box-shadow:0 0 26px rgba(255,210,63,.35)}}
+@keyframes gltScan{0%{opacity:1;transform:translateY(-30%)}70%{opacity:.8}100%{opacity:0;transform:translateY(30%)}}
+
+/* ability tooltips: stat scaling */
+.si{width:15px;height:15px;vertical-align:-3px;margin:0 2px;image-rendering:pixelated}
+#tip .scb{margin-top:8px;padding-top:6px;border-top:1px solid rgba(63,208,255,.35)}#tip .scb em{display:block;font-style:normal;font-size:12px;color:#8aa0c8;margin-bottom:3px}
+#tip .scl{margin:2px 0;font-size:14px}#tip .scl small{display:block;font-size:12px;color:#8aa0c8;margin-left:2px}

@@ -101,6 +101,18 @@
    "death": 6,
    "attack2": 4
   },
+  "junior": {
+   "idle": 4,
+   "walk": 6,
+   "run": 6,
+   "attack": 5,
+   "power1": 6,
+   "power2": 5,
+   "power3": 6,
+   "ult": 8,
+   "death": 6,
+   "attack3": 6
+  },
   "leandro": {
    "idle": 4,
    "walk": 6,
@@ -183,6 +195,17 @@
    "power3": 6,
    "ult": 8,
    "death": 6
+  },
+  "yonaiker": {
+   "idle": 4,
+   "walk": 6,
+   "run": 6,
+   "attack": 5,
+   "power1": 6,
+   "power2": 6,
+   "power3": 6,
+   "ult": 8,
+   "death": 6
   }
  },
  "icons": [
@@ -206,6 +229,10 @@
   "julio_p2",
   "julio_p3",
   "julio_ult",
+  "junior_p1",
+  "junior_p2",
+  "junior_p3",
+  "junior_ult",
   "leandro_p1",
   "leandro_p2",
   "leandro_p3",
@@ -217,10 +244,17 @@
   "xeviche_p1",
   "xeviche_p2",
   "xeviche_p3",
-  "xeviche_ult"
+  "xeviche_ult",
+  "yonaiker_p1",
+  "yonaiker_p2",
+  "yonaiker_p3",
+  "yonaiker_ult"
  ],
  "objects": [
+  "anchor_chain",
+  "barricade_seg",
   "bill",
+  "bomber_reticle",
   "bot_melee",
   "bot_ranged",
   "cactus",
@@ -230,6 +264,11 @@
   "egg",
   "egg_grenade",
   "egg_trap",
+  "fence_h",
+  "fence_v",
+  "fist_progress",
+  "ground_crack",
+  "heart",
   "hourglass",
   "ink_blot",
   "ink_drawing",
@@ -244,15 +283,30 @@
   "minion_red_auto",
   "minion_red_melee",
   "minion_red_ranged",
+  "missile",
   "package",
   "package_open",
+  "sentinel_robot",
+  "sentry_mound",
+  "sentry_robot",
+  "sentry_robot_fire",
   "ship_human",
   "ship_robot",
+  "smoke_grenade",
   "spear",
   "spear_stuck",
+  "supply_crate",
   "tire",
   "tower_blue",
-  "tower_red"
+  "tower_red",
+  "trap_plate",
+  "turret_robot",
+  "turret_robot_fire",
+  "yon_ship_side",
+  "lego_1",
+  "lego_2",
+  "lego_3",
+  "lego_4"
  ],
  "aim": [
   "aim_band",
@@ -280,6 +334,20 @@
   "neutral",
   "red"
  ],
+ "statics": {
+  "beam_harem": 6,
+  "flame_jet": 6,
+  "helper_a": 6,
+  "helper_b": 6,
+  "helper_c": 6,
+  "minigun_fire": 4,
+  "minigun_idle": 1,
+  "sentinel_float": 4,
+  "sentry_fire": 4,
+  "sentry_idle": 1,
+  "shield_bubble": 6,
+  "smoke_cloud": 6
+ },
  "items": [
   "teclado_mecanico",
   "guantes_tacticos",

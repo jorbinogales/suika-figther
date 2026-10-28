@@ -44,4 +44,10 @@ clip("luis_drones", "MOTRSrvo_Plasma Rifle Arm_01.wav"); clip("luis_cloak", "WHO
 clip("luis_static", "Static Glitch Short.wav", layers=[("Telemetry Ticker Loop-2.wav", 0.05, 0.5)]); clip("luis_glitch", "Audio Jack Noise Triplet_01.wav")
 clip("hector_bike", "Thruster Ignite Oneshot_02.wav", 0, 2.0, 0.5, layers=[("Spacecraft Vehicle Fly By 05.wav", 0.2, 0.7)])
 clip("eliud_boom", "Impact Asteroid Debris Tail_03.wav", 0, 1.0, 0.3)
+# Yonaiker
+clip("yon_atk", "GUNSupr_Silenced Pistol Fire Short_01.wav"); clip("yon_p1", "MECHClik_Mine Deploy_02.wav", 0, 0.25); clip("yon_p2", "GUNMech_Mechanical_12.wav")
+clip("yon_p3", "SCIEnrg_Energy Orb_05.wav", 0, 1.2, 0.3); clip("yon_ult", "Raise Stone Pillar Long.wav", 0, 1.8, 0.5)
+# Junior
+clip("jr_p1", "Blade Metal Impact Recoil 01.wav", 0, 1.0, 0.3); clip("jr_p2", "WHOOSH_ARM_SWING_01_WIDE.wav"); clip("jr_p3", "GUNArtl_Grenade Launcher Fire_05.wav", 0, 0.9, 0.3)
+clip("jr_ult", "EXPLDsgn_Implode_15.wav", 0, 2.4, 0.6); clip("jr_atk", "PUNCH_CLEAN_HEAVY_10.wav")
 print("custom 24-bit clips:", len(list(OUT.glob("*.wav"))))

@@ -47,10 +47,18 @@ def main():
         if src.exists():
             (pub / kind).mkdir(parents=True, exist_ok=True)
             for f in sorted(src.glob("*.png")):
+                if f.stem == "lego_brick": continue   # 4-cell strip, split below
                 im = key(Image.open(f).convert("RGB"))
                 im = im.crop(im.getbbox()) if kind != "aim" and im.getbbox() else im  # tight crop (aim textures keep their canvas)
                 im.save(pub / kind / f.name); names.append(f.stem)
         extra[kind] = names
+    # xeviche's lego bricks: art/raw/objects/lego_brick.png (4 cells) -> lego_1..4 (tight-cropped)
+    lb = RAW / "objects" / "lego_brick.png"
+    if lb.exists():
+        sh = Image.open(lb).convert("RGB"); cw = sh.width // 4
+        for i in range(4):
+            im = key(sh.crop((i * cw, 0, (i + 1) * cw, sh.height))); im = im.crop(im.getbbox()) if im.getbbox() else im
+            im.save(pub / "objects" / f"lego_{i + 1}.png"); extra["objects"].append(f"lego_{i + 1}")
     # item icons: art/raw/items/sheet_N.png (5x2 cells of 256px) -> public/assets/items/<id>.png (128px, magenta keyed, tight-cropped)
     ids = []
     import re
@@ -114,6 +122,29 @@ def main():
             for i in range(n): out.paste(key(sh.crop((i * cw, 0, (i + 1) * cw, sh.height))).resize((128, 128), Image.LANCZOS), (i * 128, 0))
             out.save(pub / "flags" / (fp.stem[5:] + ".png")); fgot.append(fp.stem[5:])
     extra["flags"] = fgot
+    # static robots: art/raw/statics/<name>.png = strip of N square cells (256px) -> public/assets/statics/<name>.png (N x 192px, keyed, NOT cropped so frames stay aligned)
+    stg = {}
+    if (RAW / "statics").exists():
+        (pub / "statics").mkdir(parents=True, exist_ok=True)
+        for fp in sorted((RAW / "statics").glob("*.png")):
+            sh = Image.open(fp).convert("RGB"); n = max(1, sh.width // sh.height); cw = sh.width // n; out = Image.new("RGBA", (192 * n, 192))
+            for i in range(n): out.paste(key(sh.crop((i * cw, 0, (i + 1) * cw, sh.height))).resize((192, 192), Image.LANCZOS), (i * 192, 0))
+            if fp.stem == "flame_jet":   # the jet starts as a point: triangular wedge over the first 30 % of every frame (no cut-off start)
+                px = out.load()
+                for i in range(n):
+                    for x in range(192):
+                        if x >= 58: break
+                        half = 96 * (x / 58) ** 1.0
+                        for y in range(192):
+                            if abs(y - 96) > half: px[i * 192 + x, y] = (0, 0, 0, 0)
+            out.save(pub / "statics" / fp.name); stg[fp.stem] = n
+    extra["statics"] = stg
+    # fist progress: art/raw/objects/fist_progress.png (4 cells) -> public/assets/objects/fist_progress_sheet.png (4 x 128, aligned frames)
+    fpx = RAW / "objects" / "fist_progress.png"
+    if fpx.exists():
+        sh = Image.open(fpx).convert("RGB"); cw = sh.width // 4; out = Image.new("RGBA", (512, 128))
+        for i in range(4): out.paste(key(sh.crop((i * cw, 0, (i + 1) * cw, sh.height))).resize((128, 128), Image.LANCZOS), (i * 128, 0))
+        out.save(pub / "objects" / "fist_progress_sheet.png")
     extra["items"] = got
     # class icons: art/raw/classes/sheet.png (3x2 cells) -> public/assets/classes/<id>.png
     cls_ids = ["todos", "ai", "hacker", "cyber", "soporte", "programador"]; cgot = []

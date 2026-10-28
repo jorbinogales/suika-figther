@@ -1,0 +1,10 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--enable-unsafe-swiftshader', '--use-gl=angle', '--mute-audio'], defaultViewport: { width: 1280, height: 720 } });
+const p = await b.newPage(); p.on('pageerror', e => console.log('[pageerror]', e.message));
+await p.goto('http://localhost:5173/#char=yonaiker&train=1&keep=1&noai=1&nofog=1', { waitUntil: 'load' }); await new Promise(r => setTimeout(r, 20000));
+const w = t => new Promise(r => setTimeout(r, t));
+await p.evaluate(`(() => { const a = window.__arena, x = a.player; x.ranks.p1 = 3; x.charge = 99.9; a.enemy.ai = false; a.enemy.x = x.x + 300; a.enemy.y = x.y + 40; })()`);
+await w(1900); await p.screenshot({ path: 'shot_yb1.png' });
+await w(3500);
+await p.evaluate(`(() => { const a = window.__arena; a.input.activePointer.positionToCamera = () => ({ x: a.enemy.x, y: a.enemy.y }); Object.defineProperty(a.input.activePointer, 'leftButtonDown', { value: () => true, configurable: true }); })()`);
+await w(2500); await p.screenshot({ path: 'shot_yb2.png' }); await b.close();

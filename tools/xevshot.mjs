@@ -1,0 +1,11 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--enable-unsafe-swiftshader', '--use-gl=angle', '--mute-audio'], defaultViewport: { width: 1280, height: 720 } });
+const p = await b.newPage(); p.on('pageerror', e => console.log('[pageerror]', e.message));
+await p.goto('http://localhost:5173/#char=xeviche&train=1&keep=1&noai=1&nofog=1', { waitUntil: 'load' }); await new Promise(r => setTimeout(r, 22000));
+const w = t => new Promise(r => setTimeout(r, t));
+await p.evaluate(`(() => { const a = window.__arena, x = a.player, e = a.enemy; ['p1','p2','p3','ult'].forEach(k => { x.ranks[k] = 3; x.cds[k] = 0; }); x.mana = 9999; e.ai = false; e.maxHp = e.hp = 99999; e.x = x.x + 380; e.y = x.y; x.setAim(1, 0); })()`);
+await w(500); await p.screenshot({ path: 'shot_x0.png' });
+await p.evaluate(`window.__arena.player.tryCast('p1')`); await w(350); await p.screenshot({ path: 'shot_x1.png' });
+await w(1500); await p.evaluate(`(() => { const a = window.__arena; a.enemy.x = a.player.x + 380; a.enemy.y = a.player.y; a.player.tryCast('p3'); })()`); await w(700); await p.screenshot({ path: 'shot_x2.png' });
+await w(3500); await p.evaluate(`(() => { const a = window.__arena; a.enemy.lure = null; a.enemy.x = a.player.x + 380; a.enemy.y = a.player.y; a.player.setAim(1, 0); a.player.tryCast('ult'); })()`); await w(2300); await p.screenshot({ path: 'shot_x3.png' });
+await b.close();

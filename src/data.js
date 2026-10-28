@@ -42,23 +42,24 @@ export const CHAMPIONS = {
     },
   },
   xeviche: {
-    name: 'Xeviche', cls: 'cyber', ref: 'ref_xeviche', height: 134,
-    stats: { hp: 900, mana: 200, atk: 52, ap: 10, armor: 45, mr: 28, speed: 130, run: 210, range: 85, atkCd: 0.9 },
-    grow: { hp: 0.09, atk: 0.05, ap: 0.03 },
-    basic: { kind: 'melee', base: 18, atkScale: 1.0, type: 'physical', reach: 100, windup: 0.25, dur: 0.5, vfx: 'punch' },
+    name: 'Xeviche', cls: 'ai', ref: 'ref_xeviche', height: 128,
+    stats: { hp: 620, mana: 340, atk: 18, ap: 55, armor: 20, mr: 22, speed: 140, run: 235, range: 400, atkCd: 0.8 },
+    grow: { hp: 0.07, atk: 0.03, ap: 0.08 },
+    basic: { kind: 'projectile', apScale: 0.5, base: 12, type: 'magic', speed: 620, vfx: 'magic_missile',
+             every3: { mult: 1.5, scale: 1.2 }, windup: 0.2, dur: 0.45 },
     abilities: {
-      p1: { name: 'Lanzamiento de lego', icon: 'xeviche_p1', cd: [9, 8, 7], mana: [35, 40, 45], windup: 0.4, dur: 0.65,
-            desc: 'Lanza un lego gigante que stunea al enemigo alcanzado.',
-            speed: 520, stun: [0.9, 1.1, 1.3], dmg: [40, 65, 90], atkScale: 0.6 },
-      p2: { name: 'Arepa reina pepiada', icon: 'xeviche_p2', cd: [16, 15, 14], mana: [30, 35, 40], windup: 0, dur: 0.35,
-            desc: 'Se come una enorme arepa al instante y restablece vida: una parte fija y una parte que escala con su vida máxima.',
-            heal: [60, 100, 140], healHpPct: [0.12, 0.17, 0.22] },
-      p3: { name: 'Setup', icon: 'xeviche_p3', passive: true,
-            desc: 'Pasiva: cada cierto número de golpes que da (ataques básicos que impactan o habilidades que usa) Xeviche agrega una pieza a su setup. Cada pieza sube su armadura física y su resistencia a la IA (acumulable).',
-            interval: [4, 3, 2], maxStacks: [3, 5, 7], armorPer: [6, 8, 10], mrPer: [6, 8, 10] },
-      ult: { name: 'Temblor', icon: 'xeviche_ult', cd: [80, 70, 60], mana: [100, 100, 100], windup: 0.55, dur: 1.0,
-             desc: 'Se lanza al suelo: todo alrededor tiembla y queda stuneado.',
-             radius: [260, 320, 380], stun: [1.4, 1.8, 2.2], dmg: [80, 140, 200], atkScale: 0.8 },
+      p1: { name: 'Lluvia de lego', icon: 'xeviche_p1', cd: [8, 7, 6], mana: [40, 45, 50], windup: 0.2, dur: 0.75,
+            desc: 'Lanza rápidamente una ráfaga de piezas de lego hacia donde apuntas. Cada pieza que impacta causa daño de IA. Cuanto más alto el nivel de la habilidad, más piezas lanza y más daño causa. Escala con tu poder de IA.',
+            pieces: [5, 7, 9], gap: 0.07, speed: 720, dmg: [14, 19, 24], apScale: 0.28 },
+      p2: { name: 'Arepa reina pepiada', icon: 'xeviche_p2', passive: true,
+            desc: 'Pasiva: un escudo lo vuelve inalcanzable ante cualquier habilidad o ataque. En cuanto recibe un ataque básico o una habilidad, el escudo desaparece (y el golpe no le hace nada) hasta que vuelve a recargarse. Mejorarla reduce el tiempo de recarga.',
+            cd: [14, 11, 8] },
+      p3: { name: 'Una bonita sonrisita', icon: 'xeviche_p3', cd: [14, 13, 12], mana: [60, 65, 70], windup: 0.3, dur: 0.6,
+            desc: 'Lanza un corazón hacia donde apuntas. Si impacta a un enemigo, este pierde el control de su campeón y camina lentamente hacia Xeviche durante unos segundos (no puede atacar ni usar habilidades). Causa un poco de daño de IA.',
+            speed: 480, range: 520, lure: [2.0, 2.5, 3.0], dmg: [20, 35, 50], apScale: 0.3 },
+      ult: { name: 'Karis Harem', icon: 'xeviche_ult', cd: [90, 80, 70], mana: [120, 120, 120], windup: 0.5, dur: 3.5,
+             desc: 'Xeviche se da la vuelta e invoca a tres empleadas con el mismo uniforme que, juntas, lanzan un gran rayo que atraviesa cualquier unidad causando daño de IA continuo. Xeviche no puede moverse hasta que la habilidad termine. Mejorarla aumenta el tiempo y el daño del rayo. Escala con tu poder de IA.',
+             length: 650, width: 130, time: [3, 4, 5], dps: [70, 95, 120], apScale: 0.55 },
     },
   },
 };
@@ -195,14 +196,60 @@ CHAMPIONS.hector = {
     p3: { name: 'Equipo de protección', icon: 'hector_p3', cd: [16, 15, 14], mana: [40, 40, 40], windup: 0, dur: 0.4,
           desc: 'Se equipa con protección y gana un escudo temporal (barra blanca delante de su vida). Escala con su vida máxima y su armadura, así que crece con el nivel y con el Setup/equipo.',
           shieldFlat: [60, 100, 140], shieldPct: [0.2, 0.28, 0.36], shieldArmor: [0.8, 1.2, 1.6], time: [6, 7, 8] },
-    ult: { name: 'Ciclismo profesional', icon: 'hector_ult', cd: [90, 80, 70], mana: [100, 100, 100], windup: 0.7, dur: 1.3,
-           desc: 'Se sube a su bicicleta y avanza a gran velocidad atravesando unidades. Deja una estela de fuego que causa daño físico y aturde a los enemigos que atraviesa.',
-           dist: [560, 640, 720], dmg: [70, 110, 150], atkScale: 0.7, stun: [1.0, 1.3, 1.6], fireDmg: [18, 26, 34], fireTime: 3.2 },
+    ult: { name: 'Ciclismo profesional', icon: 'hector_ult', cd: [90, 80, 70], mana: [100, 100, 100], windup: 0.4, dur: 0.6,
+           desc: 'Se sube a su bicicleta, que avanza sola y siempre hacia delante: arranca muy lenta y acelera poco a poco hasta alcanzar una gran velocidad. Héctor la dirige libremente por el mapa. Atropella a los enemigos (daño físico y aturdimiento) y deja una estela de fuego. La bici desaparece al acabarse su tiempo (barra blanca bajo el maná); mientras la monta no puede atacar ni usar otras habilidades.',
+           life: [8, 9, 10], ramp: 3.5, startSpeed: 50, maxSpeed: [480, 520, 560], dmg: [60, 90, 120], atkScale: 0.6, stun: [0.8, 1.0, 1.2], fireDmg: [18, 26, 34], fireTime: 3.2 },
   },
 };
 
 // small helper
 export const rk = (arr, rank) => arr[Math.min(Math.max(rank, 1), arr.length) - 1];
+
+// Yonaiker — soporte (ranged, physical). Q = buried sentry robots, W = invisible snare, E = invisible vision/healing sentinel (one at a time),
+// R = barricade with a robot turret at each end (one at a time; its cooldown starts when it is gone).
+CHAMPIONS.yonaiker = {
+  name: 'Yonaiker', cls: 'soporte', ref: 'ref_yonaiker', height: 118, charge: true,   // no mana: a charge bar fills until the ship picks him up
+  stats: { hp: 540, mana: 0, atk: 46, ap: 20, armor: 20, mr: 18, speed: 138, run: 220, range: 400, atkCd: 0.85 },
+  grow: { hp: 0.06, atk: 0.045, ap: 0.05 },
+  basic: { kind: 'projectile', base: 12, atkScale: 0.9, type: 'physical', speed: 620, vfx: 'bullet_tracer', scale: 1.3, windup: 0.22, dur: 0.4 },
+  abilities: {
+    p1: { name: 'Bombardero', icon: 'yonaiker_p1', cd: [3, 2.6, 2.2], mana: [0, 0, 0], windup: 0.2, dur: 1.0,
+          desc: 'Yonaiker no usa maná: tiene una barra de carga que se llena sola. Al llenarse se detiene y una nave pasa a recogerlo. A bordo tiene una vista aérea (50 % más lejos que la normal) con la mira en el centro de la pantalla; se mueve con WASD. Con clic (o Q) lanza un misil, con unos segundos de enfriamiento entre misil y misil, sobre la mira, que causan daño físico y quemadura (escala con tu ataque) y dejan llamas y la tierra rasgada. La barra se vacía mientras vuela; al vaciarse, la nave lo devuelve a tierra y la carga empieza de nuevo. A bordo no puede ser atacado. Mejorarla acelera la carga, alarga el vuelo y aumenta el daño.',
+          chargeTime: [40, 34, 28], time: [10, 12, 14], rate: [3, 2.6, 2.2], dmg: [55, 85, 115], atkScale: 0.7, hit: 95, burn: [10, 14, 18], burnTime: 3, fireLife: 4, fireDmg: [8, 12, 16] },
+    p2: { name: 'Granada de humo', icon: 'yonaiker_p2', cd: [12, 11, 10], mana: [0, 0, 0], windup: 0.3, dur: 0.6,
+          desc: 'Solo a pie. Lanza una granada de humo a la zona que elijas (dentro de su alcance). La nube envenena a todos los enemigos que estén dentro causando daño físico continuo (escala con tu ataque).',
+          range: 520, radius: 140, life: [5, 6, 7], dps: [16, 24, 32], atkScale: 0.3 },
+    p3: { name: 'Cajas de ayuda', icon: 'yonaiker_p3', cd: [28, 25, 22], mana: [0, 0, 0], windup: 0.3, dur: 0.6,
+          desc: 'Solo a bordo de la nave. Pide suministros por radio: caen tres cajas de ayuda sobre la zona de la mira. El aliado que las recoja (pasando por encima) obtiene una ventaja al azar: vida, maná, más ataque, más defensa, más velocidad de ataque o más velocidad de movimiento.',
+          heal: [0.2, 0.28, 0.36], buff: [0.2, 0.28, 0.36], time: [8, 10, 12] },
+    ult: { name: 'Cortina de humo', icon: 'yonaiker_ult', cd: [100, 90, 80], mana: [0, 0, 0], windup: 0.4, dur: 0.8,
+           desc: 'Solo a bordo de la nave. Lanza humo sobre una gran zona del mapa (donde apunta la mira): solo los campeones enemigos dentro quedan cegados (ven muy poco a su alrededor) y silenciados (no pueden usar habilidades) durante un tiempo prolongado.',
+           radius: 650, time: [6, 8, 10] },
+  },
+};
+
+// Junior — peleador cuerpo a cuerpo, capitán de un navío. Basic punches: every 4th hit stuns. Q = anchor drag, W = somersault + shield, E = flamethrower (5 s, can move), R = missile barrage.
+CHAMPIONS.junior = {
+  name: 'Junior', cls: 'programador', ref: 'ref_junior', height: 122,
+  stats: { hp: 780, mana: 260, atk: 44, ap: 18, armor: 34, mr: 22, speed: 135, run: 215, range: 90, atkCd: 0.8 },
+  grow: { hp: 0.085, atk: 0.05, ap: 0.03 },
+  basic: { kind: 'melee', base: 15, atkScale: 1.0, type: 'physical', reach: 92, windup: 0.22, dur: 0.45, vfx: 'punch' },
+  fist: { hits: 4, stun: 1.0, dmg: 0.9, reset: 6 },
+  abilities: {
+    p1: { name: 'Ancla de abordaje', icon: 'junior_p1', cd: [14, 13, 12], mana: [55, 60, 65], windup: 0.35, dur: 0.7,
+          desc: 'Se lanza como un ancla hacia donde apuntas y arrastra consigo a todo campeón enemigo que alcance. Quedan aturdidos mientras los arrastra y, si chocan con una pared, se aturden de nuevo al impactar y la rompen. Causa daño físico.',
+          range: 440, width: 110, speed: 1100, dmg: [40, 65, 90], atkScale: 0.7, stun: [0.8, 1.0, 1.2], wallStun: [1.6, 2.0, 2.4], wallDmg: [30, 45, 60] },
+    p2: { name: 'Voltereta', icon: 'junior_p2', cd: [10, 9, 8], mana: [40, 40, 40], windup: 0, dur: 0.38,
+          desc: 'Realiza una voltereta rápida hacia donde apuntas. Al terminar obtiene un escudo temporal.',
+          dist: [170, 190, 210], shield: [70, 110, 150], shieldHpPct: 0.06, time: [3, 3.5, 4] },
+    p3: { name: 'Lanzallamas', icon: 'junior_p3', cd: [18, 17, 16], mana: [60, 60, 60], windup: 0.25, dur: 0.45,
+          desc: 'Se equipa un lanzallamas durante 5 segundos y quema todo lo que está frente a él (zona en forma de triángulo). Los enemigos alcanzados quedan quemados un tiempo. Puede moverse mientras lo mantiene encendido. Escala con ataque físico.',
+          length: 300, nearW: 70, farW: 260, active: 5, dps: [26, 38, 50], atkScale: 0.45, burn: [3, 3.5, 4] },
+    ult: { name: 'Bombardeo', icon: 'junior_ult', cd: [90, 80, 70], mana: [100, 100, 100], windup: 0.8, dur: 1.2,
+           desc: 'Ordena un bombardeo: caen misiles del cielo sobre una gran zona, causando daño físico a todo el que esté dentro. Siguen cayendo durante 5 segundos (más a mayor nivel).',
+           range: 650, radius: [300, 330, 360], time: [5, 6.5, 8], dmg: [55, 80, 105], atkScale: 0.45, rate: 0.16, hit: 95 },
+  },
+};
 
 // Targeting preview shown while aiming a power (first press/click), cast on the second click.
 //  line: projectile trajectory | circle: area/range | wall: row of objects placed at the cursor
@@ -213,9 +260,8 @@ export function aimSpec(champ, key, rank, f) {
     case 'leandro:p2':  return { type: 'trapezoid', length: 760, nearW: 70, farW: 560, color: 0xb0ff60 };
     case 'leandro:p3':  return { type: 'wall', min: 80, max: 260, count: 4, spacing: 44, color: 0x9ad7ff };
     case 'leandro:ult': return { type: 'circle', radius: 160, color: 0x66ffcc };
-    case 'xeviche:p1':  return { type: 'line', range: 900, width: 56, color: 0xff5a4a };
-    case 'xeviche:p2':  return { type: 'circle', radius: 70, color: 0x5dff8a };
-    case 'xeviche:p3':  return { type: 'circle', radius: 70, color: 0x7ee0ff };
+    case 'xeviche:p1':  return { type: 'line', range: 620, width: 70, color: 0xffd23f };
+    case 'xeviche:p3':  return { type: 'line', range: a.range, width: 44, color: 0xff3b60 };
     case 'julio:p1':    return { type: 'line', range: a.length, width: a.width, color: 0x8a5cff };
     case 'julio:p2':    return { type: 'line', range: rk(a.dashDist, rank), width: 56, color: 0x6a8cff };
     case 'julio:p3':    return { type: 'zone', max: a.range, radius: rk(a.radius, rank), color: 0x7a4cff };
@@ -231,7 +277,6 @@ export function aimSpec(champ, key, rank, f) {
     case 'hector:p1':   return { type: 'circle', radius: 60, color: 0x5dff8a };
     case 'hector:p2':   return { type: 'line', range: a.range, width: 44, color: 0xc9a14a };
     case 'hector:p3':   return { type: 'circle', radius: 60, color: 0x7ee0ff };
-    case 'hector:ult':  return { type: 'line', range: rk(a.dist, rank), width: 80, color: 0xff7a3a };
     case 'axel:p1':     return { type: 'line', range: 900, width: 44, color: 0xc77dff };
     case 'axel:p2':     return { type: 'circle', radius: rk(a.radius, rank), color: 0x5dff8a };
     case 'axel:p3':     return { type: 'zone', max: a.range, radius: rk(a.radius, rank), color: 0x9a5cff };
@@ -239,7 +284,12 @@ export function aimSpec(champ, key, rank, f) {
     case 'jorbi:p1':    return { type: 'trapezoid', length: a.length, nearW: a.nearW, farW: a.farW, color: 0x7dff8a };
     case 'jorbi:p2':    return { type: 'line', range: rk(a.dashDist, rank), width: 46, color: 0xffd23f };
     case 'jorbi:ult':   return { type: 'circle', radius: 95, color: 0x66d0ff };
-    case 'xeviche:ult': return { type: 'circle', radius: rk(a.radius, rank), color: 0xff5a4a };
+    case 'yonaiker:p2': return { type: 'zone', max: a.range, radius: a.radius, color: 0x9be37a };
+    case 'junior:p1': return { type: 'line', range: a.range, width: a.width, color: 0x66b0ff };
+    case 'junior:p2': return { type: 'line', range: rk(a.dist, rank), width: 60, color: 0x7ee0ff };
+    case 'junior:p3': return { type: 'trapezoid', length: a.length, nearW: a.nearW, farW: a.farW, color: 0xff7a2a };
+    case 'junior:ult': return { type: 'zone', max: a.range, radius: rk(a.radius, rank), color: 0xff4a3a };
+    case 'xeviche:ult': return { type: 'line', range: a.length, width: a.width, color: 0xffd23f };
   }
   return { type: 'circle', radius: 80, color: 0xffffff };
 }

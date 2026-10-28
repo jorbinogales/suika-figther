@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { ABILITY_KEYS, MAX_RANK, aimSpec, rk } from './data.js';
+import { CHAMPIONS, ABILITY_KEYS, MAX_RANK, aimSpec, rk } from './data.js';
 import { Fighter, UNIT_DEFS, BODY_R, WORLD_W, WORLD_H, LANE_Y0, LANE_Y1, WALK_Y0, WALK_Y1, dist } from './fighter.js';
 import { walk, GW, GH, CELL, cellWalk, walkField, MID, CAMP_SITES, LANE_NORTH, LANE_SOUTH } from './mapdata.js';
 import { Audio } from './audio.js';
@@ -29,7 +29,7 @@ const MAP_SCALE = 2;
 const YR = 0.75;   // the map is seen at an angle: ground areas are ellipses squashed to this ratio, not perfect circles
 const eDist = (ax, ay, bx, by) => Math.hypot(ax - bx, (ay - by) / YR);   // distance measured in that ellipse metric
 const FOREST = ['wall1', 'wall2', 'wall3', 'tree1', 'tree2', 'tree3', 'tree4', 'bush1', 'bush2', 'trunk1', 'stone1', 'stone2', 'stone3', 'stone4', 'flower1', 'flower2', 'flower3', 'mush1', 'mush2', 'mush3', 'mush4', 'mush5', 'mush6'];
-const CHAMP_ORDER = ['leandro', 'xeviche', 'jorbi', 'axel', 'julio', 'luis', 'eliud', 'hector'];   // TAB cycles through these
+const CHAMP_ORDER = ['leandro', 'xeviche', 'jorbi', 'axel', 'julio', 'luis', 'eliud', 'hector', 'yonaiker', 'junior'];   // TAB cycles through these
 
 // circular XP gauge around the level number: gold arc from 12 o'clock, full ring = level up
 export function levelGauge(g, cx, cy, r, f, thick) {
@@ -52,6 +52,7 @@ export class Boot extends Phaser.Scene {
   preload() {
     bootScreen.show(); this.load.on('progress', v => bootScreen.progress(v * 25, 'CARGANDO INTERFAZ...'));
     this.load.json('manifest', 'assets/sprites/manifest.json?' + Date.now());
+    Object.keys(CHAMPIONS).forEach(k => this.load.image('face_' + k, `assets/concept/${k}_face.webp`));   // death recap portraits
     this.load.image('ref_leandro', 'assets/ref_leandro.png');
     this.load.image('ref_xeviche', 'assets/ref_xeviche.png');
     this.load.image('ref_jorbi', 'assets/ref_jorbi.png');
@@ -60,6 +61,9 @@ export class Boot extends Phaser.Scene {
     this.load.image('ref_luis', 'assets/ref_luis.png');
     this.load.image('ref_eliud', 'assets/ref_eliud.png');
     this.load.image('ref_hector', 'assets/ref_hector.png');
+    this.load.image('ref_yonaiker', 'assets/ref_yonaiker.png');
+    this.load.image('ref_junior', 'assets/ref_junior.png');
+    this.load.spritesheet('fist_progress', 'assets/objects/fist_progress_sheet.png', { frameWidth: 128, frameHeight: 128 });
     this.load.image('shadow', 'assets/map/shadow.png');
     ['blue', 'red', 'gold', 'blue_l', 'red_l', 'gold_l', 'gold_plain'].forEach(c => this.load.image('ui_hud_banner_' + c, `assets/ui/hud_banner_${c}.png?${Date.now()}`));
     this.load.json('uilayout', 'assets/ui/layout.json?' + Date.now());
@@ -69,6 +73,9 @@ export class Boot extends Phaser.Scene {
     this.load.spritesheet('details', 'assets/map/details.png', { frameWidth: 32, frameHeight: 32 });
     ['trees', 'bushes', 'rocks'].forEach(n => this.load.image(n, `assets/map/${n}.png`));
     this.load.image('f_trail', 'assets/map/forest/trail.png'); this.load.image('f_gt', 'assets/map/forest/gtrans.png');   // path + grass transition tiles (Brendon Bancer)
+    ['zap_a', 'zap_b'].forEach(n => this.load.spritesheet(n, `assets/vfx/${n}.png`, { frameWidth: 112, frameHeight: 112 }));   // lightning lines by sanctumpixel (itch.io)
+    ['sentry_robot_fire', 'turret_robot_fire'].forEach(n => this.load.image(n, `assets/objects/${n}.png?${Date.now()}`));
+    ['fence_h', 'fence_v'].forEach(n => this.load.image(n, `assets/objects/${n}.png?${Date.now()}`));
     FOREST.forEach(n => this.load.image('f_' + n, `assets/map/forest/${n}.png`));   // forest props by Brendon Bancer (itch.io/brendon-bancer)
     VFX.forEach(n => this.load.spritesheet('vfx_' + n, `assets/vfx/${n}.png`, { frameWidth: 32, frameHeight: 32 }));
     this.load.on('loaderror', f => { if (!/^(manifest|uilayout)/.test(f.key)) console.warn('missing', f.src); });
@@ -85,6 +92,7 @@ export class Boot extends Phaser.Scene {
     Object.values(sfx).flat().forEach(f => this.load.audio('sfx_' + f, 'assets/sfx/' + f));
     (m.classes || []).forEach(n => this.load.image('class_' + n, `assets/classes/${n}.png?${t}`));
     (m.flags || []).forEach(n => this.load.spritesheet('flag_' + n, `assets/flags/${n}.png?${t}`, { frameWidth: 128, frameHeight: 128 }));
+    Object.entries(m.statics || {}).forEach(([n, fr]) => this.load.spritesheet('st_' + n, `assets/statics/${n}.png?${t}`, { frameWidth: 192, frameHeight: 192 }));
     (m.stats || []).forEach(n => this.load.image('stat_' + n, `assets/stats/${n}.png?${t}`));
     (m.items || []).forEach(n => this.load.image('item_' + n, `assets/items/${n}.png?${t}`));
     (m.aim || []).forEach(n => this.load.image(n, `assets/aim/${n}.png?${t}`));
@@ -103,6 +111,7 @@ export class Boot extends Phaser.Scene {
     // units that only ship walk/attack get a 1-frame idle (first walk frame)
     for (const ch in sprites) if (sprites[ch].walk && !sprites[ch].idle)
       this.anims.create({ key: `${ch}_idle`, frames: [{ key: `${ch}_walk`, frame: 0 }], frameRate: 1, repeat: -1 });
+    ['zap_a', 'zap_b'].forEach(n => { if (this.textures.exists(n)) this.anims.create({ key: n, frames: this.anims.generateFrameNumbers(n), frameRate: 16, repeat: -1 }); });
     for (const fl of (this.cache.json.get('manifest')?.flags || [])) this.anims.create({ key: 'flag_' + fl, frames: this.anims.generateFrameNumbers('flag_' + fl), frameRate: 8, repeat: -1 });
     for (const sheet in CROPS) for (const n in CROPS[sheet]) this.textures.get(sheet).add(n, 0, ...CROPS[sheet][n]);
     this.registry.set('sprites', sprites);
@@ -206,11 +215,11 @@ export class Arena extends Phaser.Scene {
     this.fog = { FW, FH, cw: WORLD_W / FW, ch: WORLD_H / FH, explored: new Uint8Array(FW * FH).fill(1), tex, t: 0, img: this.add.image(0, 0, 'fogmask').setOrigin(0, 0).setDisplaySize(WORLD_W, WORLD_H).setDepth(90000) };
     this.updateFog(1, true);
   }
-  sightOf(f) { return f.isNexus ? 900 : f.isTower ? 850 : f.isChamp ? 820 : f.isBot ? 520 : 560; }
+  sightOf(f) { return f.sight ? f.sight : f.sentinel ? 720 : f.isNexus ? 900 : f.isTower ? 850 : f.isChamp ? 820 : f.isBot ? 520 : 560; }
   updateFog(dt, force) {
     const F = this.fog; if (!F) return;
     if ((F.t -= dt) > 0 && !force) return; F.t = 0.06;
-    const team = this.pc.team, src = this.fighters.filter(f => f.alive && !f.away && f.team === team), { FW, FH, cw, ch, explored } = F;
+    const team = this.pc.team, src = this.fighters.filter(f => f.alive && !f.away && f.team === team).concat((this.sentinels || []).filter(q => q.team === team).map(q => ({ x: q.x, y: q.y, team, sentinel: true }))).concat(this.pc.bomber?.phase === 'fly' ? [{ x: this.pc.bomber.pt.x, y: this.pc.bomber.pt.y, team, sight: 520 }] : []), { FW, FH, cw, ch, explored } = F;
     // explore the ground around every unit of ours
     for (const s of src) {
       const r = this.sightOf(s) * 0.92, i0 = Math.max(0, Math.floor((s.x - r) / cw)), i1 = Math.min(FW - 1, Math.floor((s.x + r) / cw)), j0 = Math.max(0, Math.floor((s.y - r) / ch)), j1 = Math.min(FH - 1, Math.floor((s.y + r) / ch));
@@ -277,6 +286,28 @@ export class Arena extends Phaser.Scene {
       const g = this.make.graphics({ x: 0, y: 0, add: false });
       draw(g); g.generateTexture(key, w, h); g.destroy();
     };
+    for (const [key, up] of [['bird_a', true], ['bird_b', false]]) mk(key, 34, 28, g => {   // stun bird: chubby yellow chick facing right, wings up / down
+      g.fillStyle(0x1a1208).fillTriangle(0, 13, 11, 8, 11, 18).fillEllipse(15, 16, 23, 17).fillCircle(23, 10, 9).fillTriangle(29, 8, 34, 11, 29, 14);   // outlines: tail, body, head, beak
+      g.fillStyle(0xffd23f).fillTriangle(2, 13, 11, 10, 11, 17).fillEllipse(15, 16, 19, 13).fillCircle(23, 10, 7);
+      g.fillStyle(0xfff0a0).fillEllipse(16, 19, 12, 6);   // belly
+      g.fillStyle(0xff7a2a).fillTriangle(29, 9, 33, 11, 29, 13);   // beak
+      g.fillStyle(0xffffff).fillCircle(25, 8, 2.4); g.fillStyle(0x111111).fillCircle(25.8, 8, 1.2);   // eye
+      g.fillStyle(0xff7a2a).fillRect(12, 24, 2, 3).fillRect(18, 24, 2, 3);   // feet
+      if (up) { g.fillStyle(0x1a1208).fillTriangle(5, 14, 11, 0, 18, 14); g.fillStyle(0xffffff).fillTriangle(7, 14, 11, 3, 16, 14); g.fillStyle(0x9fd0ff).fillTriangle(9, 7, 11, 3, 13, 8); }
+      else { g.fillStyle(0x1a1208).fillTriangle(6, 14, 12, 27, 19, 17); g.fillStyle(0xffffff).fillTriangle(8, 15, 12, 24, 17, 17); g.fillStyle(0x9fd0ff).fillTriangle(10, 21, 12, 24, 14, 20); }
+    });
+    mk('icon_poison', 48, 48, g => {   // poison: green droplet with a skull on a dark tile
+      g.fillStyle(0x0c1a0a).fillRect(0, 0, 48, 48).lineStyle(2, 0x7be05a).strokeRect(1, 1, 46, 46);
+      g.fillStyle(0x2f8f2a).fillTriangle(24, 5, 11, 26, 37, 26).fillCircle(24, 28, 13);
+      g.fillStyle(0x7be05a).fillTriangle(24, 8, 14, 26, 34, 26).fillCircle(24, 28, 10);
+      g.fillStyle(0xe9ffe0).fillRect(19, 22, 10, 9).fillRect(21, 31, 6, 3).fillStyle(0x0c1a0a).fillRect(20, 25, 3, 3).fillRect(26, 25, 3, 3).fillRect(23, 30, 2, 2);
+    });
+    mk('icon_invul', 48, 48, g => {   // invulnerability: a yellow aura rising from a ground ring around a small figure
+      g.fillStyle(0x1a1405).fillRect(0, 0, 48, 48).lineStyle(2, 0xffd23f).strokeRect(1, 1, 46, 46);
+      [[10, 14], [17, 22], [24, 28], [31, 22], [38, 14]].forEach(([x, h], i) => { g.fillStyle(i === 2 ? 0xfff0a0 : 0xffd23f, 0.9).fillTriangle(x - 4, 38, x + 4, 38, x, 38 - h - 8); });
+      g.fillStyle(0x0a0a0a).fillRect(21, 16, 6, 6).fillRect(20, 22, 8, 12).fillStyle(0xffe27a).fillRect(22, 17, 4, 4).fillRect(21, 23, 6, 10);
+      g.lineStyle(3, 0xffd23f).strokeEllipse(24, 38, 34, 10); g.lineStyle(1, 0xfff0a0).strokeEllipse(24, 38, 30, 7);
+    });
     mk('bill', 20, 10, g => { g.fillStyle(0x2f8f3f).fillRect(0, 0, 20, 10).fillStyle(0x7fdc8a).fillRect(2, 2, 16, 6).fillStyle(0x2f8f3f).fillRect(8, 3, 4, 4); });
     mk('chain_hook', 20, 10, g => { g.fillStyle(0x222222).fillRect(0, 3, 14, 4).fillRect(10, 0, 6, 10); g.fillStyle(0x888888).fillRect(12, 2, 6, 6); });
     mk('chain_link', 10, 6, g => { g.fillStyle(0x333333).fillRect(0, 1, 10, 4); g.fillStyle(0x777777).fillRect(2, 2, 6, 2); });
@@ -293,6 +324,15 @@ export class Arena extends Phaser.Scene {
     Object.values(UNIT_DEFS).forEach(d => mk(d.tex, 16, 20, g => {
       g.fillStyle(d.tex.includes('blue') ? 0x3b6ea5 : 0xa53b3b).fillRect(3, 0, 10, 8).fillRect(2, 9, 12, 8).fillRect(3, 17, 4, 3).fillRect(9, 17, 4, 3);
     }));
+    mk('sentry_robot', 16, 14, g => { g.fillStyle(0x2f6ea8).fillRect(2, 4, 12, 9).fillStyle(0xffffff).fillRect(4, 6, 8, 3).fillStyle(0xff9a2e).fillRect(12, 6, 4, 2); });
+    mk('sentry_mound', 16, 8, g => { g.fillStyle(0x6b4a2a).fillRect(1, 3, 14, 5).fillStyle(0x8a6238).fillRect(3, 1, 10, 4); });
+    mk('sentinel_robot', 12, 20, g => { g.fillStyle(0xe8eef5).fillRect(3, 6, 6, 12).fillStyle(0x3fa0ff).fillRect(4, 8, 4, 3).fillStyle(0x5dff8a).fillRect(5, 13, 2, 3).fillRect(4, 14, 4, 1).fillStyle(0x888888).fillRect(5, 0, 2, 6); });
+    mk('trap_plate', 16, 8, g => { g.fillStyle(0x56688a).fillRect(0, 2, 16, 6).fillStyle(0x9fd8ff).fillRect(3, 4, 10, 2); });
+    mk('barricade_seg', 24, 12, g => { g.fillStyle(0x6a7a8a).fillRect(0, 2, 24, 10).fillStyle(0xffd23f).fillRect(2, 4, 4, 6).fillRect(10, 4, 4, 6).fillRect(18, 4, 4, 6); });
+    mk('turret_robot', 16, 16, g => { g.fillStyle(0xe8eef5).fillRect(2, 8, 12, 7).fillStyle(0x3fa0ff).fillRect(5, 3, 7, 6).fillStyle(0x222222).fillRect(12, 4, 4, 2).fillRect(12, 7, 4, 2); });
+    mk('fence_h', 64, 12, g => { g.fillStyle(0x6a7a8a).fillRect(0, 3, 64, 6).fillStyle(0x2a3040).fillRect(0, 5, 64, 2); for (let i = 0; i < 64; i += 8) g.fillStyle(0x9aa8b8).fillRect(i, 1, 2, 10); g.fillStyle(0xffd23f).fillRect(0, 0, 4, 12).fillRect(60, 0, 4, 12); });
+    mk('fence_v', 12, 64, g => { g.fillStyle(0x6a7a8a).fillRect(3, 0, 6, 64).fillStyle(0x2a3040).fillRect(5, 0, 2, 64); for (let i = 0; i < 64; i += 8) g.fillStyle(0x9aa8b8).fillRect(1, i, 10, 2); g.fillStyle(0xffd23f).fillRect(0, 0, 12, 4).fillRect(0, 60, 12, 4); });
+    mk('minigun', 16, 16, g => { g.fillStyle(0x444a55).fillRect(2, 8, 10, 7).fillStyle(0x222222).fillRect(8, 5, 8, 2).fillRect(8, 8, 8, 2).fillRect(8, 11, 8, 2).fillStyle(0xff9a2e).fillRect(3, 9, 3, 2); });
     mk('bot_ranged', 16, 16, g => { g.fillStyle(0x223333).fillRect(3, 0, 10, 7).fillRect(2, 8, 12, 6); });
   }
 
@@ -426,6 +466,7 @@ export class Arena extends Phaser.Scene {
     const ptr = this.input.activePointer, overUi = (this.uiRects || []).some(r => ptr.x >= r.x && ptr.x <= r.x + r.w && ptr.y >= r.y && ptr.y <= r.y + r.h);
     const left = ptr.leftButtonDown(), leftClick = left && !this.prevLeft, right = ptr.rightButtonDown(), rightClick = right && !this.prevRight;
     this.prevLeft = left; this.prevRight = right;
+    if (p.bomber) { p.in = { mx: 0, my: 0, run: false }; ['p3', 'ult'].forEach(a => J(k[a]) && this.beginAim(a)); return; }   // aboard: clicks / Q fire in updateBomber; E and R are cast here
     if (leftClick && !overUi && !this.aimKey) {   // click on a champion selects it (info panel, top-right)
       const m = ptr.positionToCamera(this.cameras.main);
       const hit = this.fighters.find(f => f.isChamp && !f.hiddenFor(this.player) && Math.abs(m.x - f.x) < 48 && m.y > f.y - f.def.height - 10 && m.y < f.y + 15);
@@ -454,7 +495,10 @@ export class Arena extends Phaser.Scene {
     const p = this.pc, rank = p.ranks[a], d = p.def.abilities[a];
     if (d.passive) { this.float(p.x, p.y - p.def.height - 30, 'Habilidad pasiva', '#ffe066'); return; }
     if (p.silenceT > 0) { this.float(p.x, p.y - p.def.height - 30, 'SILENCIADO', '#c77dff'); this.audio.play('glitch', { gap: 250 }); return; }
-    if ((p.key === 'luis' && a !== 'ult') || (p.key === 'xeviche' && a === 'p2') || (p.key === 'hector' && (a === 'p1' || a === 'p3'))) { p.tryCast(a); return; }   // instant casts: no aiming step
+    if (p.key === 'yonaiker' && p.abilityLocked(a)) { this.float(p.x, p.y - p.def.height - 30, a === 'p2' ? 'No disponible a bordo de la nave' : 'Solo disponible a bordo de la nave', '#9fe8ff'); return; }   // F on foot, Q / E / R aboard
+    if (p.key === 'yonaiker' && a === 'p1') { this.float(p.x, p.y - p.def.height - 30, 'Dispara con clic o manteniendo Q', '#9fe8ff'); return; }
+    if ((p.key === 'luis' && a !== 'ult') || (p.key === 'hector' && a !== 'p2') || (p.key === 'yonaiker' && a !== 'p2' && a !== 'p1')) { p.tryCast(a); return; }   // instant casts: no aiming step
+    if (p.key === 'junior' && a === 'p2') { const m = this.mouseGround(); if (!this.hoverKey) p.setAim(m.x - p.x, m.y - p.y); p.tryCast(a); return; }   // somersault is instant; the flamethrower is aimed (the triangle preview) and then locks that direction
     if (p.key === 'jorbi' && a === 'p2') {   // instant dash toward the cursor (no aim step)
       const m = this.mouseGround(); if (!this.hoverKey) p.setAim(m.x - p.x, m.y - p.y);
       p.tryCast('p2'); return;
@@ -471,7 +515,8 @@ export class Arena extends Phaser.Scene {
   confirmAim() {
     const p = this.pc, a = this.aimKey, spec = aimSpec(p.key, a, p.ranks[a], p);
     const m = this.mouseGround(); p.setAim(m.x - p.x, m.y - p.y);
-    p.castPoint = spec.type === 'wall' || spec.type === 'zone' ? this.wallCenter(spec) : spec.type === 'pick' ? this.mouseGround() : null;
+    p.castPoint = spec.type === 'wall' || spec.type === 'zone' || spec.type === 'rect' ? this.wallCenter(spec) : spec.type === 'pick' ? this.mouseGround() : null;
+    if (spec.type === 'rect' && p.castPoint) p.castPoint.vert = Math.abs(p.ax) >= Math.abs(p.ay);   // aiming sideways -> vertical fence, aiming up/down -> horizontal fence
     this.cancelAim();
     p.tryCast(a);
   }
@@ -532,6 +577,11 @@ export class Arena extends Phaser.Scene {
         return;
       }
       cap('cap', ex, ey, spec.width * 1.6);
+    } else if (spec.type === 'rect') {   // straight fence preview: axis-aligned rectangle (vertical or horizontal), never rotated
+      const ctr = this.wallCenter(spec), vert = Math.abs(p.ax) >= Math.abs(p.ay), w = vert ? spec.thick : spec.length, h = vert ? spec.length : spec.thick;
+      ring('range', p.x, p.y, spec.max, 0.3);
+      const g = this.aimG; g.fillStyle(c, 0.25).fillRect(ctr.x - w / 2, ctr.y - h / 2, w, h).lineStyle(3, c, 0.95).strokeRect(ctr.x - w / 2, ctr.y - h / 2, w, h);
+      g.fillStyle(c, 0.6).fillRect(vert ? ctr.x - w / 2 : ctr.x - w / 2, vert ? ctr.y - h / 2 : ctr.y - h / 2, vert ? w : 18, vert ? 18 : h).fillRect(vert ? ctr.x - w / 2 : ctr.x + w / 2 - 18, vert ? ctr.y + h / 2 - 18 : ctr.y - h / 2, vert ? w : 18, vert ? 18 : h);   // turret slots at both ends
     } else if (spec.type === 'trapezoid') {
       const px = -p.ay, py = p.ax, n = spec.nearW / 2, f = spec.farW / 2, L = spec.length;
       const g = this.aimG;
@@ -707,6 +757,7 @@ export class Arena extends Phaser.Scene {
     f.in = { mx: 0, my: 0, run: false };
     if (!f.alive || !f.free || f.away || f.drop) return;
     if (f.antivirus) return this.runAntivirus(f);
+    if (f.def.bot === 'wall') return;
     if (f.isNexus) return;
     if (f.isTower) return this.runTower(f);
     if (f.isMinion) return this.runMinion(f);
@@ -714,11 +765,12 @@ export class Arena extends Phaser.Scene {
     const t = this.nearestEnemy(f, f.blindT > 0 ? 150 : f.isBot ? 600 : 900);
     if (!t) {
       if (!f.owner && f.isChamp) { f.in.mx = f.team === 0 ? 1 : -1; f.in.my = (LANE_MID - f.y) * 0.03; f.setAim(f.in.mx, 0); return; }   // AI champions push the middle lane
-      if (f.owner) this.escort(f);
+      if (f.owner && !f.def.static) this.escort(f);   // sentries, turrets and walls never follow their owner (escort would even teleport them when far away)
       return;
     }
     const dx = t.x - f.x, dy = t.y - f.y, ad = Math.hypot(dx, dy) - (t.br - BODY_R);
     f.setAim(dx, dy);
+    if (f.def.static) { if (ad <= range) f.tryBasic(); return; }   // static robots only turn and shoot
     const ranged = range > 150;
     if (ad > range * 0.85) { f.in.mx = dx; f.in.my = dy; }
     else if (ranged && ad < range * 0.4) { f.in.mx = -dx; f.in.my = -dy; }
@@ -938,6 +990,402 @@ export class Arena extends Phaser.Scene {
     }
   }
 
+
+  /* ---------- Yonaiker: sentries, traps, sentinel, barricade ---------- */
+  spawnSentry(owner, x, y, dmg, life, hp) {
+    if (this.net?.role === 'client') return;
+    const b = new Fighter(this, 'sentry', owner.team, x, y, { ai: true, owner, life, botAp: dmg });
+    b.def = { ...b.def, stats: { ...b.def.stats, hp } }; b.hp = b.maxHp; b.invis = { t: Infinity, trail: 1e9 }; b.ax = owner.ax; b.ay = 0; b.noOwnerDespawn = true;
+    this.fighters.push(b); this.vfx('run_dust', x, y - 4, { scale: 2.4, alpha: 0.8, below: true });
+    this.sentryMounds ||= []; this.sentryMounds.push({ f: b });
+  }
+  plantTrap(owner, x, y, r, root, life) {
+    if (this.net?.role === 'client') return;
+    (this.traps ||= []).push({ x, y, owner, team: owner.team, r, root, t: life, ctx: this.castCtx }); this.vfx('run_dust', x, y - 4, { scale: 2, alpha: 0.7, below: true });
+  }
+  placeSentinel(owner, x, y, heal, r, life) {   // healing pads: any number; the first allied champion to step on one is healed instantly and it is used up
+    if (this.net?.role === 'client') return;
+    (this.sentinels ||= []).push({ owner, team: owner.team, x, y, heal, r, t: life }); this.vfx('summon', x, y - 10, { scale: 2.4 });
+  }
+  buildBarricade(owner, c, rank, a) {   // one long straight fence (vertical or horizontal) + a minigun turret at each end
+    if (this.net?.role === 'client') return;
+    const vert = !!c.vert, L = a.length, hp = rk(a.wallHp, rank), key = vert ? 'fence_v' : 'fence_h';
+    const fence = new Fighter(this, 'fence', owner.team, c.x, c.y, { ai: true, owner });
+    fence.def = { ...fence.def, ref: key, tex: key, stats: { ...fence.def.stats, hp }, vert, len: L }; fence.hp = fence.maxHp; fence.ax = 1; fence.ay = 0; this.fighters.push(fence);
+    const n = Math.round(L / 40);
+    for (let i = 0; i < n; i++) { const o = (i - (n - 1) / 2) * 40, x = vert ? c.x : c.x + o, y = vert ? c.y + o : c.y; this.obstacles.push({ x, y, r: 24, team: owner.team, left: Infinity, s: { destroy() {} }, nx: vert ? 1 : 0, ny: vert ? 0 : 1, f: fence }); }
+    const turrets = [];
+    for (const sg of [-1, 1]) {
+      const x = vert ? c.x : c.x + sg * (L / 2 + 26), y = vert ? c.y + sg * (L / 2 + 26) : c.y, t = new Fighter(this, 'minigun', owner.team, x, y, { ai: true, owner, botAp: rk(a.turretDmg, rank) + owner.atk * a.atkScale });
+      t.def = { ...t.def, stats: { ...t.def.stats, hp: rk(a.turretHp, rank) } }; t.hp = t.maxHp; t.ax = vert ? 1 : 0; t.ay = vert ? 0 : -1; this.fighters.push(t); turrets.push(t);
+    }
+    owner.barr = { segs: [fence], turrets, t: 0, maxT: a.maxTime, cd: rk(a.cd, rank) }; this.vfx('shockwave', c.x, c.y - 10, { scale: 4, below: true, tint: 0xffb84a }); this.zoneDecal(c.x, c.y, 120, 0xffb84a, 0.8);
+  }
+  endBarricade(f) {
+    const b = f.barr; if (!b) return; f.barr = null;
+    this.obstacles = this.obstacles.filter(o => !b.segs.includes(o.f));
+    [...b.segs, ...b.turrets].forEach(u => { if (u.alive) { u.dispose = true; this.vfx('spark', u.x, u.cy, { scale: 3, tint: 0xffb84a }); } });
+    f.cds.ult = b.cd;   // the cooldown only starts once the barricade is gone
+  }
+  updateYonaiker(dt) {
+    if (this.net?.role === 'client') return;
+    for (const f of this.champs) if (f.barr) { const b = f.barr; b.t += dt; if (!f.alive || b.t > b.maxT || b.segs.every(s => !s.alive)) this.endBarricade(f); }
+    this.traps = (this.traps || []).filter(tr => {
+      if ((tr.t -= dt) <= 0 || !tr.owner.alive && false) return false;
+      const hit = this.fighters.find(e => e.alive && !e.away && !e.drop && !e.isTower && e.team !== tr.team && eDist(e.x, e.y, tr.x, tr.y) <= tr.r * 0.8);
+      if (!hit) return true;
+      this.castCtx = { f: tr.owner, k: 'p2' };
+      this.fighters.forEach(e => { if (e.alive && !e.isTower && e.team !== tr.team && eDist(e.x, e.y, tr.x, tr.y) <= tr.r * 1.5) { e.rootT = Math.max(e.rootT || 0, tr.root); this.markSrc(e, 'root'); this.vfx('block', e.x, e.cy, { scale: 3, tint: 0xffd23f }); } });
+      this.castCtx = null; this.vfx('shockwave', tr.x, tr.y - 4, { scale: 3, below: true, tint: 0x66e0ff }); this.audio.play('stun', { at: tr, vol: 0.9, gap: 80 }); this.float(tr.x, tr.y - 60, '¡ATRAPADOS!', '#66e0ff');
+      this.breakTrap(tr); return false;
+    });
+    this.sentinels = (this.sentinels || []).filter(s => {
+      if ((s.t -= dt) <= 0) { s.img?.destroy(); s.shd?.destroy(); return false; }
+      const who = this.fighters.find(f => f.isChamp && f.alive && !f.away && f.team === s.team && eDist(f.x, f.y, s.x, s.y) <= s.r);
+      if (!who) return true;
+      const h = Math.min(s.heal, who.maxHp - who.hp);   // instant heal, then the robot is spent
+      who.hp += h; this.float(who.x, who.y - who.def.height - 8, `+${Math.round(h)}`, '#5dff8a'); this.vfx('heal', who.x, who.cy, { scale: 4 }); this.vfx('levelup', s.x, s.y - 10, { scale: 2.4, tint: 0x5dff8a }); this.audio.play('heal', { at: who, vol: 0.7, gap: 60 });
+      s.img?.destroy(); s.shd?.destroy(); return false;
+    });
+  }
+  // the trap is destroyed when it catches someone: its plate shatters into flying pieces and sparks
+  breakTrap(tr) {
+    tr.img?.destroy(); tr.img = null;
+    if (!this.inView(tr.x, tr.y, 200)) return;
+    const key = this.textures.exists('trap_plate') ? 'trap_plate' : null;
+    for (let i = 0; i < 7; i++) {
+      const a = Math.random() * 6.283, d = 40 + Math.random() * 60, s = key ? this.add.image(tr.x, tr.y, key).setDisplaySize(18, 10).setCrop(0, 0, 40, 40).setDepth(tr.y + 5) : this.add.rectangle(tr.x, tr.y, 8, 5, 0x6a7a8a).setDepth(tr.y + 5);
+      if (key) s.setScale(0.12 + Math.random() * 0.08);
+      this.tweens.add({ targets: s, x: tr.x + Math.cos(a) * d, y: tr.y + Math.sin(a) * d * 0.7 - 30, angle: Math.random() * 540 - 270, alpha: 0, duration: 650 + Math.random() * 300, ease: 'Cubic.Out', onComplete: () => s.destroy() });
+    }
+    for (let i = 0; i < 5; i++) { const z = this.add.sprite(tr.x + Phaser.Math.Between(-26, 26), tr.y - 10 + Phaser.Math.Between(-12, 12), i % 2 ? 'zap_b' : 'zap_a').setScale(1.3 + Math.random() * 0.6).setAngle(Math.random() * 360).setDepth(tr.y + 8).setBlendMode(Phaser.BlendModes.ADD); if (this.anims.exists(z.texture.key)) z.play({ key: z.texture.key, repeat: 2 }); this.time.delayedCall(700, () => z.destroy()); }
+    this.vfx('spark', tr.x, tr.y - 20, { scale: 5, tint: 0x66e0ff });
+  }
+  // electric arcs around every snared unit for as long as it is held
+  drawZaps() {
+    for (const f of this.fighters) {
+      const on = f.alive && f.rootT > 0 && this.textures.exists('zap_a') && this.inView(f.x, f.y, 150);
+      if (!on) { if (f.zaps) { f.zaps.forEach(z => z.destroy()); f.zaps = null; } continue; }
+      if (!f.zaps) { f.zaps = []; for (let i = 0; i < 4; i++) { const z = this.add.sprite(0, 0, i % 2 ? 'zap_b' : 'zap_a').setBlendMode(Phaser.BlendModes.ADD); z.off = [-20, -7, 8, 21][i]; z.tilt = (Math.random() - 0.5) * 14; if (this.anims.exists(z.texture.key)) z.play({ key: z.texture.key, startFrame: i % 4 }); f.zaps.push(z); } }
+      // bolts rise from the ground straight up along the body (no orbiting): vertical, anchored at the feet, a hair of jitter
+      const hgt = Math.max(70, f.def.height * 0.95);
+      f.zaps.forEach((z, i) => { z.setAngle(-90 + z.tilt + Math.sin(this.time.now / 90 + i * 2) * 5).setScale(hgt / 80, 1.15).setOrigin(0.5, 0.17).setPosition(f.x + z.off, f.y - 6 - hgt * 0.5).setDepth(f.y + 9).setAlpha(0.95); });
+    }
+  }
+  drawYonaiker() {
+    const g = (this.yonG ||= this.add.graphics().setDepth(-855)); g.clear(); const mine = this.player.baseTeam, t = this.time.now / 1000;
+    for (const tr of this.traps || []) {   // only the owner's team sees the trap
+      if (tr.team !== mine || !this.inView(tr.x, tr.y, 120)) continue;
+      g.lineStyle(2, 0xffd23f, 0.5 + 0.25 * Math.sin(t * 4)).strokeEllipse(tr.x, tr.y, tr.r * 2, tr.r * 2 * YR); g.fillStyle(0xffd23f, 0.1).fillEllipse(tr.x, tr.y, tr.r * 2, tr.r * 2 * YR);
+      if (this.textures.exists('trap_plate')) { tr.img ||= this.add.image(tr.x, tr.y, 'trap_plate').setDisplaySize(46, 24).setAlpha(0.6).setDepth(tr.y - 4); }
+    }
+    this.traps = (this.traps || []).filter(tr => { if (tr.t <= 0 && tr.img) { tr.img.destroy(); tr.img = null; } return true; });
+    this.drawZaps();
+    for (const s of this.sentinels || []) {   // healing robots stand on the ground (no floating); only the owner's team sees them
+      if (s.team !== mine) { s.img?.setVisible(false); s.shd?.setVisible(false); continue; }
+      if (!this.inView(s.x, s.y, 120)) continue;
+      const pulse = 0.5 + 0.5 * Math.sin(t * 4); g.lineStyle(2, 0x5dff8a, 0.5 + 0.3 * pulse).strokeEllipse(s.x, s.y, s.r * 2, s.r * 2 * YR); g.fillStyle(0x5dff8a, 0.1 + 0.08 * pulse).fillEllipse(s.x, s.y, s.r * 2, s.r * 2 * YR);
+      s.shd ||= this.add.ellipse(s.x, s.y + 4, 40, 14, 0x000000, 0.35).setDepth(s.y - 2); s.shd.setPosition(s.x, s.y + 4).setVisible(true);
+      if (this.textures.exists('st_sentinel_float')) {   // animated: hovers and pulses its two signal arcs
+        if (!s.img || s.img.texture.key !== 'st_sentinel_float') { s.img?.destroy(); s.img = this.add.sprite(s.x, s.y, 'st_sentinel_float').setOrigin(0.5, 0.9); }
+        const n = this.textures.get('st_sentinel_float').frameTotal - 1; s.img.setFrame(Math.floor(t * 6 + s.x * 0.01) % n).setScale(96 / 150).setPosition(s.x, s.y - 6 + Math.sin(t * 2.4 + s.x) * 4).setDepth(s.y).setVisible(true);
+      } else if (this.textures.exists('sentinel_robot')) { s.img ||= this.add.image(s.x, s.y, 'sentinel_robot').setOrigin(0.5, 0.97); const k = 70 / s.img.height; s.img.setScale(k).setPosition(s.x, s.y - 4 + Math.sin(t * 2.4 + s.x) * 4).setDepth(s.y).setVisible(true).setAlpha(0.95); }
+    }
+    for (const m of this.sentryMounds || []) {   // buried sentries show a mound to their team until they pop up
+      const f = m.f; if (!f.alive || f.dispose) { m.img?.destroy(); m.dead = true; continue; }
+      if (!f.invis) { m.img?.setVisible(false); continue; }
+      if (f.team !== mine) { m.img?.setVisible(false); continue; }
+      if (this.textures.exists('sentry_mound')) { m.img ||= this.add.image(f.x, f.y + 4, 'sentry_mound').setOrigin(0.5, 0.8).setAlpha(0.85); const k = 40 / m.img.width; m.img.setScale(k).setDepth(f.y - 2).setVisible(true); }
+    }
+    this.sentryMounds = (this.sentryMounds || []).filter(m => !m.dead);
+  }
+
+
+  /* ---------- Junior: fist progress, anchor drag, flamethrower, bombardment ---------- */
+  anchorDrag(o, a, rank) {   // Junior lunges along the aim and carries every enemy champion he reaches
+    if (this.net?.role === 'client') return;
+    const T = a.range / a.speed;
+    o.stateT = 0; o.stateDur = T; o.dashV = { x: o.ax * a.speed, y: o.ay * a.speed };
+    (this.lunges ||= []).push({ o, a, rank, dx: o.ax, dy: o.ay, grabbed: [], dmg: rk(a.dmg, rank) + o.atk * a.atkScale, stun: rk(a.stun, rank), wallStun: rk(a.wallStun, rank), wallDmg: rk(a.wallDmg, rank) + o.atk * 0.3 });
+    this.vfx('shockwave', o.x, o.y - 10, { scale: 2.5, below: true, tint: 0x66b0ff });
+    if (this.textures.exists('anchor_chain')) { const im = this.add.image(o.x, o.cy, 'anchor_chain').setDepth(99000).setScale(0.18).setRotation(Math.atan2(o.ay, o.ax)); this.tweens.add({ targets: im, x: o.x + o.ax * a.range, y: o.cy + o.ay * a.range, alpha: 0, duration: T * 1000, onComplete: () => im.destroy() }); }
+  }
+  updateJunior(dt) {
+    if (this.net?.role === 'client') return;
+    this.lunges = (this.lunges || []).filter(L => {
+      const o = L.o, end = !o.alive || !o.dashV || o.stunT > 0;
+      let crash = false;
+      if (!end) {
+        for (const t of this.fighters) if (t.isChamp && t.alive && !t.away && !t.drop && t.team !== o.team && !L.grabbed.includes(t) && Math.hypot(t.x - (o.x + L.dx * 30), (t.y - (o.y + L.dy * 30)) / YR) <= L.a.width / 2 + t.br) {
+          L.grabbed.push(t); this.damage(o, t, L.dmg, 'physical'); t.pending = null; t.stun(0.6); this.vfx('punch', t.x, t.y - 30, { scale: 3 });
+        }
+        L.grabbed.forEach((t, i) => {   // carried in front of Junior, side by side
+          if (!t.alive || t.dispose) return; const off = (i - (L.grabbed.length - 1) / 2) * 36, nx = o.x + L.dx * 46 - L.dy * off, ny = o.y + L.dy * 46 + L.dx * off;
+          if (!isWalk(nx, ny) || this.obstacles.some(ob => ob.team !== o.team && Math.hypot(ob.x - nx, ob.y - ny) < ob.r + 16)) crash = t; else { t.x = nx; t.y = ny; }
+          t.stunT = Math.max(t.stunT, 0.25);
+        });
+        if (L.dust = (L.dust || 0) - dt, L.dust <= 0) { L.dust = 0.05; this.vfx('run_dust', o.x, o.y - 4, { scale: 1.8, alpha: 0.7, below: true }); }
+      }
+      if (crash) { o.dashV = null; o.stateT = o.stateDur; }
+      if (crash || end) {
+        L.grabbed.forEach(t => { if (!t.alive) return; if (crash) { t.stun(L.wallStun); this.damage(o, t, L.wallDmg, 'physical'); this.crackFloor(t.x + L.dx * 30, t.y + L.dy * 20); this.float(t.x, t.y - t.def.height - 34, '¡IMPACTO!', '#ffd23f'); } else t.stun(L.stun); });
+        if (crash) this.audio.play('hit_heavy', { at: o, vol: 0.9, gap: 60 });
+        return false;
+      }
+      return true;
+    });
+    for (const f of this.fighters) if (f.fist && (f.fist.t -= dt) <= 0) f.fist = null;
+  }
+  /* ---------- Xeviche: Karis Harem ---------- */
+  startHarem(o, a, rank, T) {
+    if (this.net?.role === 'client') return;
+    const H = { o, t: T, T, ax: o.ax, ay: o.ay, L: a.length, W: a.width, dps: rk(a.dps, rank) + o.ap * a.apScale, tick: 0, age: 0, helpers: [], beam: null };
+    const px = -H.ay, py = H.ax;
+    [-1, 0, 1].forEach((k, i) => {
+      const x = o.x + H.ax * (80 + (k === 0 ? 26 : 0)) + px * k * 74, y = o.y + H.ay * (80 + (k === 0 ? 26 : 0)) * YR + py * k * 74 * YR, key = 'helper_' + 'abc'[i];
+      const spr = this.textures.exists('st_' + key) ? this.add.sprite(x, y, 'st_' + key).setOrigin(0.5, 0.71).setScale(0.78).setFlipX(H.ax < 0).setAlpha(0) : this.add.rectangle(x, y - 40, 34, 80, [0xffb84a, 0xff8a4a, 0xffd23f][i]).setAlpha(0);
+      H.helpers.push({ spr, x, y, delay: i * 0.18, shown: false });
+    });
+    o.harem = H; (this.harems ||= []).push(H);
+    this.showBanner({ title: 'KARIS HAREM', sub: `${o.def.name} invoca a sus empleadas`, team: o.baseTeam, face: this.faceOf(o) }, 2000);
+  }
+  updateHarem(dt) {
+    this.harems = (this.harems || []).filter(H => {
+      const o = H.o; H.age += dt;
+      const over = !o.alive || o.stunT > 0 || o.state !== 'cast' || (H.t -= dt) <= 0;
+      H.helpers.forEach(h => {
+        if (!h.shown && H.age >= h.delay) { h.shown = true; this.vfx('summon', h.x, h.y - 20, { scale: 3 }); }
+        const spr = h.spr, al = over ? Math.max(0, spr.alpha - dt * 4) : h.shown ? Math.min(1, spr.alpha + dt * 5) : 0;
+        spr.setAlpha(al).setDepth(h.y);
+        if (spr.setFrame && spr.texture.key.startsWith('st_helper')) { const n = spr.texture.frameTotal - 1, t = H.age - h.delay; spr.setFrame(t < 0.25 ? Math.min(1, Math.floor(t * 8)) : 2 + (Math.floor(this.time.now / 90) % Math.max(1, n - 2))); }
+      });
+      if (!over && H.age > 0.35) {   // beam starts once the helpers have landed
+        const ox = o.x + H.ax * 110, oy = o.y + H.ay * 110 * YR - o.def.height * 0.5;
+        if (!H.beam) H.beam = this.textures.exists('st_beam_harem') ? this.add.sprite(ox, oy, 'st_beam_harem').setOrigin(0, 0.5).setBlendMode(Phaser.BlendModes.ADD) : this.add.rectangle(ox, oy, H.L, H.W * 0.7, 0xffe27a, 0.6).setOrigin(0, 0.5);
+        const b = H.beam.setPosition(ox, oy).setRotation(Math.atan2(H.ay * YR, H.ax)).setDepth(99000).setAlpha(0.85 + 0.15 * Math.sin(this.time.now / 50));
+        b.setDisplaySize(H.L, H.W * 0.8); if (b.setFrame) b.setFrame(Math.floor(this.time.now / 60) % (this.textures.get('st_beam_harem').frameTotal - 1));
+        if (Math.random() < 0.5 && this.inView(ox, o.y, 500)) this.vfx('spark', ox + H.ax * Math.random() * H.L, o.y + H.ay * Math.random() * H.L * YR - 30, { scale: 2, tint: 0xffe27a });
+        if ((H.tick -= dt) <= 0) {
+          H.tick = 0.25;
+          this.enemiesOf(o).forEach(t => { const dx = t.x - o.x, dy = t.y - o.y, along = dx * H.ax + dy * H.ay, side = Math.abs(dx * -H.ay + dy * H.ax); if (along > 40 && along < H.L + 40 && side < H.W / 2 + t.br) { this.damage(o, t, H.dps * 0.25, 'magic'); t.slow(0.45, 0.4); } });
+        }
+      }
+      if (over) { H.beam?.destroy(); H.beam = null; if (o.harem === H) o.harem = null; }
+      if (over && H.helpers.every(h => h.spr.alpha <= 0.01)) { H.helpers.forEach(h => h.spr.destroy()); return false; }
+      return true;
+    });
+  }
+  /* ---------- Yonaiker: bomber ship, smoke, supply crates ---------- */
+  startBomber(o, a, rank) {
+    if (this.net?.role === 'client') return;
+    o.state = 'cast'; o.pending = null; o.windup = 99; o.fired = true; o.playAnim('power1'); o.stateT = 0; o.stateDur = 1e5;   // holds the "calling the ship" pose until the ship takes him
+    const has = this.textures.exists('yon_ship_side');
+    const ship = has ? this.add.image(o.x + 900, o.y - 320, 'yon_ship_side').setDisplaySize(380, 190).setFlipX(true) : this.add.rectangle(o.x + 900, o.y - 320, 300, 70, 0x8a9bb0).setStrokeStyle(4, 0x000000);
+    ship.setDepth(99000);
+    const shadow = this.add.ellipse(o.x, o.y, 200, 60, 0x000000, 0.35).setAlpha(0).setDepth(o.y - 5);
+    const B = { o, a, rank, phase: 'arrive', t: 0, T: rk(a.time, rank), ammo: Infinity, cd: 0, ox: o.x, oy: o.y, ship, shadow, dmg: rk(a.dmg, rank) + o.atk * a.atkScale, pt: { x: o.x, y: o.y }, idle: 0 };
+    o.bomber = B; (this.bombers ||= []).push(B);
+    this.float(o.x, o.y - o.def.height - 34, 'Esperando la nave...', '#9fe8ff');
+  }
+  endBomber(B) { if (B.phase === 'fly') { B.phase = 'land'; B.t = 0; if (B.o === this.pc) this.cameras.main.fadeOut(600, 0, 0, 0); } }
+  updateBomber(dt) {
+    const g = (this.bomberG ||= this.add.graphics().setDepth(99995)); g.clear();
+    this.bombers = (this.bombers || []).filter(B => {
+      const o = B.o, ship = B.ship; B.t += dt; B.cd -= dt;
+      if (B.phase === 'arrive' || B.phase === 'board') o.charge = 100; else if (B.phase !== 'fly') o.charge = 0;
+      if (!o.alive && B.phase !== 'leave') { o.away = false; o.bomber = null; B.phase = 'leave'; B.t = 0; if (o === this.pc) this.cameras.main.resetFX(); }
+      if (B.phase === 'arrive') {
+        const k = Math.min(1, B.t / 1.5), e = 1 - (1 - k) * (1 - k);
+        ship.setPosition(B.ox + 900 * (1 - e), B.oy - 170 - 150 * (1 - e)); B.shadow.setAlpha(0.35 * k).setPosition(B.ox, B.oy);
+        if (o.stunT > 0 || !o.alive) { o.bomber = null; o.state = 'idle'; o.playAnim('idle'); B.phase = 'leave'; B.t = 0; }
+        else if (k >= 1) { B.phase = 'board'; B.t = 0; }
+      } else if (B.phase === 'board') {   // he climbs in, the ship flies off the map and the screen goes black
+        if (!B.faded) { B.faded = true; if (o === this.pc) this.cameras.main.fadeOut(800, 0, 0, 0); }
+        if (B.t < 0.45) ship.setPosition(B.ox, B.oy - 170 - 8 * Math.sin(this.time.now / 120));
+        else {
+          if (!o.away) { o.away = true; this.vfx('summon', o.x, o.y - 20, { scale: 4 }); this.audio.play('ui_confirm', { vol: 0.7, gap: 0 }); }
+          const k = Math.min(1, (B.t - 0.45) / 0.45); ship.setPosition(B.ox + 1100 * k * k, B.oy - 170 - 160 * k); B.shadow.setAlpha(0.35 * (1 - k));
+        }
+        if (B.t >= 0.9) { ship.destroy(); B.shadow.destroy(); B.ship = null; B.phase = 'fly'; B.t = 0; o.state = 'idle'; o.stateDur = 0; this.snapZoom = true; if (o === this.pc) this.cameras.main.fadeIn(1100, 0, 0, 0); }   // fade in on the global view
+      } else if (B.phase === 'fly') {
+        const human = o === this.pc && !o.ai;
+        let fire = false;
+        if (human) {
+          const K = this.k, dn = (a, b) => (a.isDown || b.isDown ? 1 : 0), mx = dn(K.right, K.right2) - dn(K.left, K.left2), my = dn(K.down, K.down2) - dn(K.up, K.up2), sp = 520 * dt / (Math.hypot(mx, my) || 1);   // the reticle is the center of the view; WASD slides the view
+          B.pt = { x: Phaser.Math.Clamp(B.pt.x + mx * sp, 60, WORLD_W - 60), y: Phaser.Math.Clamp(B.pt.y + my * sp, WALK_Y0, WALK_Y1) };
+          fire = (this.k.p1.isDown || this.input.activePointer.leftButtonDown()) && !(this.uiRects || []).some(r => this.input.activePointer.x >= r.x && this.input.activePointer.x <= r.x + r.w && this.input.activePointer.y >= r.y && this.input.activePointer.y <= r.y + r.h);
+        } else {   // bots and remote players: bomb the nearest enemy champion
+          const t = this.enemiesOf(o).filter(f => f.isChamp && f.alive && !f.away).sort((p, q) => dist(p, o) - dist(q, o))[0];
+          if (t) { B.pt = { x: t.x + (Math.random() - 0.5) * 60, y: t.y + (Math.random() - 0.5) * 40 }; fire = true; if (o.ranks.p3 && o.cds.p3 <= 0) o.tryCast('p3'); if (o.ranks.ult && o.cds.ult <= 0) o.tryCast('ult'); }
+        }
+        if (fire && B.ammo > 0 && B.cd <= 0) {
+          B.cd = rk(B.a.rate, B.rank); o.cds.p1 = B.cd; B.idle = 0;   // seconds between missiles (shown on the Q icon)
+          (this.yMissiles ||= []).push({ x: B.pt.x + (Math.random() - 0.5) * 26, y: B.pt.y + (Math.random() - 0.5) * 16, t: 0, fall: 0.85, B });
+          this.audio.play('ui_confirm', { vol: 0.4, gap: 60 });
+        }
+        if (human) {   // bomber reticle
+          const p = B.pt, r = 46 + 4 * Math.sin(this.time.now / 90);
+          if (this.textures.exists('bomber_reticle')) { B.ret ||= this.add.image(p.x, p.y, 'bomber_reticle').setDepth(99996).setBlendMode('ADD'); B.ret.setPosition(p.x, p.y).setDisplaySize(r * 3.2, r * 3.2 * YR).setVisible(true); }
+          else { g.lineStyle(3, 0x66ff88, 0.95).strokeEllipse(p.x, p.y, r * 2, r * 2 * YR).strokeEllipse(p.x, p.y, r * 1.1, r * 1.1 * YR).lineBetween(p.x - r * 1.3, p.y, p.x + r * 1.3, p.y).lineBetween(p.x, p.y - r * 1.3 * YR, p.x, p.y + r * 1.3 * YR); }
+        }
+        o.charge = 100 * Math.max(0, 1 - B.t / B.T);   // the bar drains while aboard
+        if (B.t >= B.T) this.endBomber(B);
+      } else if (B.phase === 'land') {   // black screen: he is dropped back on the ground, then the scene fades in
+        B.ret?.setVisible(false);
+        if (B.t >= 0.7 && o.away) { o.away = false; o.state = 'idle'; o.playAnim('idle'); this.vfx('summon', o.x, o.y - 20, { scale: 4 }); this.snapZoom = true; if (o === this.pc) this.cameras.main.fadeIn(700, 0, 0, 0); o.bomber = null; B.phase = 'leave'; B.t = 0; }
+      } else {   // leave (cleanup; also the ship flying off if he was cancelled while it was still arriving)
+        B.ret?.destroy(); B.ret = null; if (!B.ship) return false;
+        const k = Math.min(1, B.t / 1.0); ship.setPosition(B.ox + 1100 * k * k, B.oy - 170 - 160 * k); B.shadow.setAlpha(0.35 * (1 - k));
+        if (k >= 1) { ship.destroy(); B.shadow.destroy(); return false; }
+      }
+      return true;
+    });
+    // missiles falling on the reticle: burn, flames and torn ground
+    this.yMissiles = (this.yMissiles || []).filter(m => {
+      m.t += dt; const k = Math.min(1, m.t / m.fall);
+      g.lineStyle(2, 0xff3a2a, 0.75 * k).strokeEllipse(m.x, m.y, 26 + 44 * (1 - k), (26 + 44 * (1 - k)) * YR);
+      if (!m.img) { m.img = this.textures.exists('missile') ? this.add.image(m.x, m.y - 800, 'missile').setDisplaySize(26, 86) : this.add.rectangle(m.x, m.y - 800, 8, 30, 0xdddddd); m.img.setDepth(99900); }
+      m.img.setPosition(m.x, m.y - 800 * (1 - k * k) - 20);
+      if (m.t < m.fall) return true;
+      m.img.destroy(); const B = m.B, o = B.o, a = B.a, rank = B.rank;
+      this.vfx('shockwave', m.x, m.y, { scale: 2.8, below: true, tint: 0xff7a2a }); this.vfx('spark', m.x, m.y - 24, { scale: 5, tint: 0xffa040 });
+      if (this.inView(m.x, m.y, 200)) this.audio.play('explosion', { at: m, vol: 0.55, gap: 70 });
+      if (this.net?.role !== 'client') {
+        this.castCtx = { f: o, k: 'p1' };
+        this.enemiesNear(o.team, m.x, m.y, a.hit).forEach(t => { this.damage(o, t, B.dmg, 'physical'); t.burn(rk(a.burn, rank) + o.atk * 0.1, a.burnTime, o); });
+        this.firePatch(o, m.x, m.y, rk(a.fireDmg, rank), a.fireLife);
+        this.castCtx = null;
+      }
+      if (this.textures.exists('ground_crack')) { const c = this.add.image(m.x, m.y, 'ground_crack').setDepth(m.y - 8).setDisplaySize(110, 110 * YR); this.tweens.add({ targets: c, alpha: 0, delay: a.fireLife * 1000, duration: 800, onComplete: () => c.destroy() }); }
+      return false;
+    });
+  }
+  smokePuff(x, y, r, life, o = null, dps = 0) {   // a smoke cloud; with an owner it poisons the enemies inside
+    const spr = this.textures.exists('st_smoke_cloud') ? this.add.sprite(x, y - 10, 'st_smoke_cloud').setDisplaySize(r * 2.2, r * 2.2 * YR * 1.1).setAlpha(0) : this.add.ellipse(x, y, r * 2, r * 2 * YR, 0x9ab08a, 0).setStrokeStyle(2, 0x7a8f6a, 0.6);
+    spr.setDepth(y + 40);
+    (this.smokes ||= []).push({ x, y, r, t: life, T: life, owner: o, dps, tick: 0, spr });
+  }
+  smokeGrenade(o, x, y, a, rank) {
+    if (this.net?.role === 'client') return;
+    const life = rk(a.life, rank), dps = rk(a.dps, rank) + o.atk * a.atkScale, ctx = this.castCtx;
+    const gr = this.textures.exists('smoke_grenade') ? this.add.image(o.x, o.cy, 'smoke_grenade').setDisplaySize(30, 30) : this.add.circle(o.x, o.cy, 7, 0x5a7a4a);
+    gr.setDepth(99000); this.tweens.add({ targets: gr, x, y: y - 20, duration: 450, ease: 'Sine.Out', onComplete: () => { gr.destroy(); this.castCtx = ctx; this.smokePuff(x, y, a.radius, life, o, dps); this.castCtx = null; this.vfx('shockwave', x, y, { scale: 3, below: true, tint: 0x9be37a }); } });
+  }
+  callCrates(o, a, rank) {   // from the ship: three supply crates fall around the reticle
+    if (this.net?.role === 'client') return;
+    const c = o.bomber?.pt || { x: o.x, y: o.y };
+    [0, 1, 2].forEach(i => {
+      const x = Phaser.Math.Clamp(c.x + Math.cos(i * 2.1 + 0.5) * 80, 60, WORLD_W - 60), y = Phaser.Math.Clamp(c.y + Math.sin(i * 2.1 + 0.5) * 50, WALK_Y0, WALK_Y1);
+      const img = this.textures.exists('supply_crate') ? this.add.image(x, y - 700, 'supply_crate').setOrigin(0.5, 0.85).setDisplaySize(64, 64) : this.add.rectangle(x, y - 700, 34, 28, 0x4a6a8a).setStrokeStyle(3, 0xffd23f);
+      img.setDepth(y);
+      (this.crates ||= []).push({ x, y, team: o.team, t: -i * 0.15, fall: 1.2, img, a, rank, life: 40 });
+    });
+    this.float(c.x, c.y - 60, '¡Cajas de ayuda!', '#9fe8ff');
+  }
+  smokeScreen(o, a, rank) {   // from the ship: a huge smoke cloud over the reticle blinds and silences the enemy champions inside
+    if (this.net?.role === 'client') return;
+    const c = o.bomber?.pt || { x: o.x, y: o.y }, T = rk(a.time, rank);
+    this.champs.filter(t => t.alive && t.team !== o.team && !t.away && eDist(t.x, t.y, c.x, c.y) <= a.radius).forEach(t => {
+      if (t.key === 'xeviche' && t.arepaBlocks()) return;
+      t.silenceT = Math.max(t.silenceT, T); t.blindT = Math.max(t.blindT, T); this.markSrc(t, 'blind'); this.float(t.x, t.y - t.def.height - 28, 'CEGADO', '#9be37a');
+    });
+    for (let i = 0; i < 9; i++) { const ang = Math.random() * 6.283, d = Math.sqrt(Math.random()) * a.radius * 0.8; this.smokePuff(c.x + Math.cos(ang) * d, Phaser.Math.Clamp(c.y + Math.sin(ang) * d * YR, WALK_Y0, WALK_Y1), 200 + Math.random() * 110, 5 + Math.random() * 2); }
+    this.showBanner({ title: 'CORTINA DE HUMO', sub: `${o.def.name} cubre la zona: los enemigos quedan ciegos y silenciados`, team: o.baseTeam, face: this.faceOf(o) }, 2200);
+  }
+  updateSupport(dt) {
+    this.smokes = (this.smokes || []).filter(m => {
+      m.t -= dt; const k = Math.min(1, (m.T - m.t) / 0.6, m.t / 1.0), spr = m.spr;
+      spr.setAlpha(0.8 * Math.max(0, k)); if (spr.setFrame && spr.texture.key === 'st_smoke_cloud') spr.setFrame(Math.floor(this.time.now / 140) % (this.textures.get('st_smoke_cloud').frameTotal - 1)); else spr.setFillStyle(0x9ab08a, 0.35 * Math.max(0, k));
+      if (m.t <= 0) { spr.destroy(); return false; }
+      if (m.owner && this.net?.role !== 'client' && (m.tick -= dt) <= 0) { m.tick = 0.5; this.enemiesNear(m.owner.team, m.x, m.y, m.r).forEach(t => t.poison(m.dps, 1.2, m.owner, 'physical', 'smoke')); }
+      return true;
+    });
+    this.crates = (this.crates || []).filter(c => {
+      c.t += dt; const k = Math.max(0, Math.min(1, c.t / c.fall));
+      if (k < 1) { c.img.setPosition(c.x, c.y - 700 * (1 - k * k)); return true; }
+      c.img.setPosition(c.x, c.y); c.life -= dt;
+      const taker = this.net?.role === 'client' ? null : this.champs.find(f => f.alive && !f.away && f.team === c.team && Math.hypot(f.x - c.x, (f.y - c.y) / YR) < 48);
+      if (c.life <= 0 || taker) { if (taker) this.openCrate(taker, c); this.vfx('buff', c.x, c.y - 20, { scale: 3 }); c.img.destroy(); return false; }
+      return true;
+    });
+  }
+  openCrate(f, c) {   // a random advantage
+    const a = c.a, r = c.rank, T = rk(a.time, r), v = rk(a.buff, r), kinds = ['hp', 'mana', 'atk', 'def', 'aspd', 'speed'], k = kinds[Math.random() * kinds.length | 0];
+    const label = { hp: 'Vida', mana: 'Maná', atk: 'Ataque +', def: 'Defensa +', aspd: 'Vel. ataque +', speed: 'Velocidad +' }[k];
+    if (k === 'hp') f.heal(f.maxHp * rk(a.heal, r)); else if (k === 'mana') f.mana = Math.min(f.maxMana, f.mana + f.maxMana * 0.45);
+    else if (k === 'speed') { f.speedBoost = Math.max(f.speedT > 0 ? f.speedBoost : 0, 0.3); f.speedT = Math.max(f.speedT, T * 0.6); } else f.addPkBuff(k, T, v);
+    this.float(f.x, f.y - f.def.height - 34, label, '#9fe8ff'); this.audio.play('ui_upgrade', { at: f, vol: 0.6, gap: 0 });
+  }
+  crackFloor(x, y) {
+    if (!this.inView(x, y, 200)) return;
+    this.vfx('shockwave', x, y, { scale: 3, below: true, tint: 0xc8a070 }); this.vfx('run_dust', x, y, { scale: 4, alpha: 0.9, below: true });
+    if (this.textures.exists('ground_crack')) { const c = this.add.image(x, y, 'ground_crack').setDepth(y - 8).setDisplaySize(130, 130 * YR); this.tweens.add({ targets: c, alpha: 0, delay: 1800, duration: 900, onComplete: () => c.destroy() }); }
+    else { const g = this.add.graphics().setDepth(y - 8).lineStyle(3, 0x2a1a0a, 0.9); for (let i = 0; i < 7; i++) { const a = i * 0.9, l = 24 + Math.random() * 30; g.lineBetween(x, y, x + Math.cos(a) * l, y + Math.sin(a) * l * YR); } this.tweens.add({ targets: g, alpha: 0, delay: 1800, duration: 900, onComplete: () => g.destroy() }); }
+  }
+  flameTick(o, F, dt) {   // flamethrower: isosceles-triangle zone in front, burn on everyone inside; Junior can move meanwhile
+    const a = F.a, L = a.length, nW = a.nearW, fW = a.farW, ux = o.ax, uy = o.ay, px = -uy, py = ux;
+    if (this.textures.exists('st_flame_jet')) {   // animated jet sprite along the cone
+      F.spr ||= this.add.sprite(o.x, o.y, 'st_flame_jet').setOrigin(0, 0.5).setDepth(99000).setBlendMode(Phaser.BlendModes.ADD);
+      const n = this.textures.get('st_flame_jet').frameTotal - 1;
+      F.spr.setFrame(Math.floor(this.time.now / 60) % n).setPosition(o.x + ux * 34, o.y + uy * 34 - 52).setRotation(Math.atan2(uy, ux)).setDisplaySize(L + 10, fW * 0.95).setAlpha(Math.min(1, F.t / 0.4 + 0.2));
+    }
+    if (!this.textures.exists('st_flame_jet') && this.inView(o.x, o.y, 400) && (F.vfxT = (F.vfxT || 0) - dt) <= 0) {
+      F.vfxT = 0.05; for (let i = 0; i < 3; i++) { const u = 0.15 + Math.random() * 0.85, v = (Math.random() - 0.5) * (nW + (fW - nW) * u) * 0.8; this.vfx(Math.random() < 0.5 ? 'burning_ground' : 'fire_trail', o.x + ux * 40 + ux * L * u + px * v, o.y + uy * 40 + uy * L * u * YR + py * v * YR - 24, { scale: 1.2 + u * 1.5, alpha: 0.85 }); }
+    }
+    if ((F.tick -= dt) > 0) return; F.tick = 0.25;
+    const dps = rk(a.dps, F.rank) + o.atk * a.atkScale, burn = rk(a.burn, F.rank);
+    this.enemiesOf(o).forEach(t => {
+      if (t.isTower) return; const dx = t.x - o.x, dy = (t.y - o.y), along = dx * ux + dy * uy, side = Math.abs(dx * px + dy * py);
+      if (along < 0 || along > L) return; if (side > (nW + (fW - nW) * (along / L)) / 2 + t.br * 0.5) return;
+      this.damage(o, t, dps * 0.25, 'physical', true); t.burn(dps * 0.6, burn, o);
+    });
+  }
+  startBombardment(o, x, y, r, time, dmg, a) {
+    if (this.net?.role === 'client') return;
+    (this.bombs ||= []).push({ owner: o, x, y, r, t: time, T: time, dmg, a, acc: 0, ctx: this.castCtx }); this.showBanner({ title: '¡BOMBARDEO!', sub: `${o.def.name} ordena fuego sobre la zona`, team: o.baseTeam, face: this.faceOf(o) }, 2200);
+  }
+  drawJunior(dt) {
+    this.bombs = (this.bombs || []).filter(b => {
+      b.t -= dt; b.acc += dt;
+      while (b.acc >= b.a.rate && b.t > 0) {   // a new missile every few frames at a random point of the zone
+        b.acc -= b.a.rate; const ang = Math.random() * 6.283, d = Math.sqrt(Math.random()) * b.r, mx = b.x + Math.cos(ang) * d, my = b.y + Math.sin(ang) * d * YR;
+        (this.missiles ||= []).push({ x: mx, y: my, t: 0, fall: 0.75, b });
+      }
+      if (b.t > -1) return true;
+      (b.marks || []).forEach(k => this.tweens.add({ targets: k, alpha: 0, duration: 700, onComplete: () => k.destroy() }));   // craters and flames last until the ultimate ends
+      return false;
+    });
+    const g = (this.bombG ||= this.add.graphics().setDepth(-840)); g.clear();
+    for (const b of this.bombs) { if (b.t <= 0 || !this.inView(b.x, b.y, b.r)) continue; const p = 0.5 + 0.5 * Math.sin(this.time.now / 140); g.lineStyle(3, 0xff4a3a, 0.5 + 0.3 * p).strokeEllipse(b.x, b.y, b.r * 2, b.r * 2 * YR); g.fillStyle(0xff4a3a, 0.06 + 0.04 * p).fillEllipse(b.x, b.y, b.r * 2, b.r * 2 * YR); }
+    this.missiles = (this.missiles || []).filter(m => {
+      m.t += dt; const k = Math.min(1, m.t / m.fall), vis = this.inView(m.x, m.y, 200);
+      if (vis) {
+        g.lineStyle(2, 0xff3a2a, 0.7 * k).strokeEllipse(m.x, m.y, 24 + 40 * (1 - k), (24 + 40 * (1 - k)) * YR);   // landing marker shrinks as it falls
+        if (!m.img) { m.img = this.textures.exists('missile') ? this.add.image(m.x, m.y - 700, 'missile') : this.add.rectangle(m.x, m.y - 700, 8, 30, 0xdddddd); m.img.setDepth(99900); if (m.img.setDisplaySize && this.textures.exists('missile')) m.img.setDisplaySize(26, 86); }
+        m.img.setPosition(m.x, m.y - 700 * (1 - k * k) - 20);
+      }
+      if (m.t < m.fall) return true;
+      m.img?.destroy();
+      this.vfx('shockwave', m.x, m.y, { scale: 2.6, below: true, tint: 0xff7a2a }); this.vfx('spark', m.x, m.y - 24, { scale: 5, tint: 0xffa040 }); 
+      if (vis || true) {   // permanent crater + flames at the impact until the bombardment ends
+        const mk = (m.b.marks ||= []);
+        if (this.textures.exists('ground_crack')) mk.push(this.add.image(m.x, m.y, 'ground_crack').setDepth(m.y - 8).setDisplaySize(90, 90 * YR).setAlpha(0.9));
+        if (this.anims.exists('vfx_burning_ground')) mk.push(this.add.sprite(m.x, m.y - 6, 'vfx_burning_ground').setOrigin(0.5, 0.8).setScale(2.2).setDepth(m.y - 4).setAlpha(0.9).play('vfx_burning_ground'));
+        if (mk.length > 120) { const k = mk.shift(); k.destroy(); }
+      }
+      if (vis) this.audio.play('explosion', { at: m, vol: 0.6, gap: 70 });
+      if (this.net?.role !== 'client') { this.castCtx = m.b.ctx || null; this.enemiesNear(m.b.owner.team, m.x, m.y, m.b.a.hit).forEach(t => this.damage(m.b.owner, t, m.b.dmg, 'physical')); this.castCtx = null; }
+      return false;
+    });
+    // fist progress icon over every marked enemy (only Junior's team sees the marks of its own fighter)
+    for (const f of this.fighters) {
+      const mk = f.fist, on = !!mk && f.alive && !f.hiddenFor(this.player) && this.inView(f.x, f.y, 100); if (!on) { f.fistImg?.setVisible(false); continue; }
+      const fr = Math.min(3, mk.n);   // 1..3 hits drawn; the 4th hit stuns
+      if (this.textures.exists('fist_progress')) { f.fistImg ||= this.add.image(0, 0, 'fist_progress').setDepth(100002); f.fistImg.setVisible(true).setFrame(Math.min(3, fr)).setDisplaySize(34, 34).setPosition(f.x, f.y - f.def.height - (f.isChamp ? 72 : 36)); }
+      else { f.fistImg ||= this.add.text(0, 0, '', { fontFamily: 'monospace', fontSize: '14px', color: '#ff9a4a', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5).setDepth(100002); f.fistImg.setVisible(true).setText('✊'.repeat(0) + '●'.repeat(fr) + '○'.repeat(3 - fr)).setPosition(f.x, f.y - f.def.height - (f.isChamp ? 70 : 34)); }
+    }
+  }
+
   spawnWave(team) {
     if (team === 0) this.net?.onWave(this.waveN);
     if (this.waveN === 0 && team === 0) this.audio.voice('v_minions', 1, 'ann_minions', { title: '¡MINIONS DESPLEGADOS!', sub: 'La primera oleada avanza por el carril', team: 2 });
@@ -960,7 +1408,8 @@ export class Arena extends Phaser.Scene {
     let kk = killer?.owner || killer;
     const lh = v.lastChampHit;
     if (v.isChamp && !kk?.isChamp && lh && this.gameT - lh.t <= 10 && lh.champ.baseTeam !== v.baseTeam) kk = lh.champ;
-    killer = kk;
+    const raw = killer; killer = kk;
+    if (v.isChamp) v.recap = this.buildRecap(v, kk, raw);
     if (kk?.isRage && this.net?.role !== 'client' && v.team !== kk.team) kk.addRage(kk.def.hen.rageKill[v.isChamp ? 'champ' : v.isTower ? 'tower' : 'minion']);   // a kill feeds Eliud's rage
     this.net?.onDie(v, killer);
     {
@@ -1271,7 +1720,7 @@ export class Arena extends Phaser.Scene {
   damage(src, target, raw, type, dot = false) {
     if (this.net?.role === 'client') return 0;   // online clients only show what the host reports
     if (!target.alive) return 0;
-    if (this.basicDmg && src?.key === 'xeviche' && !dot && target.team !== src.team) src.setupHit();   // a landed basic attack feeds the Setup passive
+    if (!dot && src && src.team !== target.team && target.key === 'xeviche' && target.arepaBlocks()) return 0;   // Arepa reina pepiada: the shield swallows this hit
     if (target.isTower && !this.basicDmg) return 0;   // towers and nexus only take basic attacks
     if (!dot) this.audio.play(target.isNexus ? 'hit_heavy' : target.isTower ? 'hit_metal' : type === 'physical' ? 'hit_flesh' : 'debuff', { at: target, vol: target.isTower ? 0.5 : 0.55, gap: 90 });
     const resist = type === 'physical' ? target.armor : type === 'magic' ? target.mr : 0;
@@ -1297,6 +1746,7 @@ export class Arena extends Phaser.Scene {
       if (dmg <= 0) return 0;
     }
     target.hp -= dmg;
+    if (target.isChamp && dmg > 0) this.logDamage(src, target, dmg, type, dot);
     if (target.recall && dmg > 0) { target.recall = null; this.float(target.x, target.y - target.def.height - 30, 'Teletransporte cancelado', '#ff9a7a'); }
     { const o = src?.owner || src; if (o?.isChamp && o.it?.lifesteal && type === 'physical' && !dot && o !== target) o.hp = Math.min(o.maxHp, o.hp + dmg * o.it.lifesteal * (o.pas.has('garras_vampiricas') && o.hp < o.maxHp * 0.4 ? 1 + o.pas.get('garras_vampiricas') : 1)); }
     this.onHitPassives(src, target, dmg, type, dot);
@@ -1307,6 +1757,30 @@ export class Arena extends Phaser.Scene {
     this.net?.onDmg(src, target, dmg, type, dot);
     if (target.hp <= 0) { target.hp = 0; target.die(src); }
     return dmg;
+  }
+
+  /* ---------- death recap: who hit you, with what, for how much (last 10 s) ---------- */
+  logDamage(src, target, dmg, type, dot) {
+    const ctx = this.castCtx, atk = ctx?.f || src?.owner || src; if (!atk) return;
+    const ab = ctx?.f && ctx.k ? ctx.f.def.abilities?.[ctx.k] : null;
+    const label = ab ? ab.name : this.inPassive ? 'Objetos y pasivas' : this.basicDmg ? 'Ataque básico' : dot ? 'Veneno / quemadura' : 'Otros efectos';
+    const ev = (target.dmgEvents ||= []); ev.push({ t: this.gameT, atk, label, icon: ab ? 'icon_' + ab.icon : null, dmg, type });
+    while (ev.length && this.gameT - ev[0].t > 12) ev.shift();
+  }
+  buildRecap(v, kk, raw) {   // entries: the killer first, then the champions that assisted (by damage); each with its abilities and damage
+    if (this.net?.role === 'client') return v.recap;   // the host sends it
+    const now = this.gameT, by = new Map(), mk = (id, name, face) => ({ id, name, face, total: 0, ab: new Map() });
+    for (const e of (v.dmgEvents || []).filter(e => now - e.t <= 10)) {
+      const a = e.atk?.isChamp ? e.atk : null, id = a ? a.nid : 'minions'; let en = by.get(id); if (!en) by.set(id, en = mk(id, a ? a.def.name : 'Súbditos y torres', a ? a.key : null));
+      en.total += e.dmg; const x = en.ab.get(e.label) || { label: e.label, icon: e.icon, dmg: 0, type: e.type }; x.dmg += e.dmg; en.ab.set(e.label, x);
+    }
+    const kid = kk?.isChamp ? kk.nid : 'minions';
+    if (!by.has(kid)) by.set(kid, mk(kid, kk?.isChamp ? kk.def.name : (raw?.def?.name || 'Súbditos y torres'), kk?.isChamp ? kk.key : null));
+    v.dmgEvents = [];
+    const entries = [...by.values()].map(en => ({ id: en.id, name: en.name, face: en.face, killer: en.id === kid, total: Math.round(en.total), abilities: [...en.ab.values()].map(x => ({ ...x, dmg: Math.round(x.dmg) })).sort((p, q) => q.dmg - p.dmg) })).sort((p, q) => (q.killer - p.killer) || q.total - p.total);
+    const rc = { entries, victim: v.def.name };
+    this.net?.onRecap?.(v, rc);
+    return rc;
   }
 
   // 1 = fully visible, 0 = hidden by the player's blindness (units only; structures stay visible)
@@ -1326,6 +1800,13 @@ export class Arena extends Phaser.Scene {
       if (o.pas.has('punio_acero') && (o.punchN = (o.punchN || 0) + 1) % (o.pas.get('punio_acero') < 1 ? 6 : 4) === 0) {
         this.inPassive = true; this.damage(o, target, dmg * 0.5 * o.pas.get('punio_acero'), 'physical', true); this.inPassive = false;
         this.vfx('shockwave', target.x, target.y - 6, { scale: 2.2, below: true, tint: 0xff9a4a }); this.vfx('punch', target.x, target.cy, { scale: 4 }); this.float(target.x, target.y - target.def.height - 30, '¡DEMOLEDOR!', '#ff9a4a');
+      }
+    }
+    if (o?.key === 'junior' && this.basicDmg && !target.isTower && target.team !== o.team && !dot && target.alive) {   // fist progress: 3 hits fill the drawing, the 4th hit stuns
+      const F = o.def.fist, m = (target.fist && target.fist.owner === o) ? target.fist : (target.fist = { owner: o, n: 0, t: F.reset }); m.t = F.reset; m.n++;
+      if (m.n >= F.hits) {
+        target.fist = null; this.inPassive = true; this.damage(o, target, o.atk * F.dmg, 'physical', true); this.inPassive = false;
+        target.stun(F.stun); this.vfx('shockwave', target.x, target.y - 6, { scale: 2.6, below: true, tint: 0xff7a3a }); this.vfx('punch', target.x, target.cy, { scale: 5 }); this.float(target.x, target.y - target.def.height - 40, '¡PUÑETAZO!', '#ff9a4a');
       }
     }
     if (target.isChamp && target.pas?.size && target.alive) {
@@ -1532,9 +2013,12 @@ export class Arena extends Phaser.Scene {
     this.audio.tick();
     if (this.banner && (this.banner.t -= dt) <= 0) this.banner = null;
     if (this.over) this.over.t += dt;
-    const z = Phaser.Math.Clamp(this.scale.height / VIEW_H, 0.6, 4);
-    if (z !== this.zoom) { this.zoom = z; this.cameras.main.setZoom(z); }
-    this.camTarget.x = this.pc.x; this.camTarget.y = this.pc.y - 30;
+    const bm = this.pc.bomber, aboard = bm && (bm.phase === 'fly' || bm.phase === 'land');
+    const zn = Phaser.Math.Clamp(this.scale.height / VIEW_H, 0.6, 4), z = aboard ? zn / 1.5 : zn;   // aboard the ship: 50 % farther than the normal view
+    if (!this.zoom || this.snapZoom || Math.abs(z - this.zoom) < 0.002) this.zoom = z; else this.zoom += (z - this.zoom) * Math.min(1, dt * 4);
+    this.cameras.main.setZoom(this.zoom);
+    if (aboard) { this.camTarget.x = bm.pt.x; this.camTarget.y = bm.pt.y; this.cameras.main.centerOn(bm.pt.x, bm.pt.y); } else { this.camTarget.x = this.pc.x; this.camTarget.y = this.pc.y - 30; }
+    if (this.snapZoom) { this.snapZoom = false; this.cameras.main.centerOn(this.camTarget.x, this.camTarget.y); }
 
     if (this.ctrl || this.over) this.player.in = { mx: 0, my: 0, run: false };
     if (this.over) this.player.in = { mx: 0, my: 0, run: false }; else if (this.player.charmT > 0 && this.net?.role !== 'client') this.runAi(this.player, dt); else if (this.net && (this.paused || this.player.charmT > 0 || (this.control?.mode === 'remote' && this.control.target === this.player))) this.player.in = { mx: 0, my: 0, run: false }; else this.handleInput();
@@ -1546,8 +2030,10 @@ export class Arena extends Phaser.Scene {
     if (!this.over && this.net?.role !== 'client') this.fighters.forEach(f => { if (this.control?.mode === 'remote' && f === this.control.target) return; if ((f.ai && this.aiOn && f !== this.ctrl) || f.isBot || f.isMinion || f.isTower || f.charmT > 0) this.runAi(f, dt); });
     this.recordHistory(dt);
     this.updateCamps(dt);
+    this.updateYonaiker(dt);
+    this.updateJunior(dt);
     this.fighters.forEach(f => f.update(dt));
-    this.fighters.forEach(f => f.alive && !f.isTower && this.resolveSolids(f));
+    this.fighters.forEach(f => f.alive && !f.isTower && !f.def.static && f.def.bot !== 'wall' && this.resolveSolids(f));
     // AI champions spend their skill points (ultimate first when available)
     this.champs.forEach(e => { if (e === this.player || e.pid != null || this.net?.role === 'client') return; while (e.points > 0) { const open = ABILITY_KEYS.filter(a => e.canSpend(a)); if (!open.length) break; e.spend(open.includes('ult') ? 'ult' : open[Math.random() * open.length | 0]); } });
     if (this.control && this.net?.role !== 'client') { this.control.t -= dt; if (this.control.t <= 0 || !this.control.target.alive || !this.control.luis.alive) this.endControl(); }
@@ -1556,7 +2042,7 @@ export class Arena extends Phaser.Scene {
     this.updateChains(dt);
     this.updateZones(dt);
     this.updateProjectiles(dt);
-    this.obstacles = this.obstacles.filter(o => { o.left -= dt; if (o.left <= 0) { o.s.destroy(); return false; } return true; });
+    this.obstacles = this.obstacles.filter(o => { if (o.f && (!o.f.alive || o.f.dispose || !this.fighters.includes(o.f))) return false; /* the panel is gone (destroyed, expired or removed): its collision goes with it */ o.left -= dt; if (o.left <= 0) { o.s.destroy(); return false; } return true; });
     this.fighters = this.fighters.filter(f => { if (f.dispose) { f.destroy(); return false; } return true; });
     this.fighters.forEach(f => f.render(time));
     this.drawBars();
@@ -1566,6 +2052,8 @@ export class Arena extends Phaser.Scene {
     this.drawRangeHint();
     this.drawRewind(dt);
     this.drawCamps(dt);
+    this.drawYonaiker();
+    this.drawJunior(dt); this.updateHarem(dt); this.updateBomber(dt); this.updateSupport(dt);
     this.drawPassiveFx();
     if (this.rwGlow) { this.rwGlow.t -= dt; this.rwGlow.hg -= dt; if (this.rwGlow.t <= 0) this.rwGlow = null; }
     this.updateFog(dt);
@@ -1684,7 +2172,7 @@ export class Arena extends Phaser.Scene {
       let dead = p.left <= 0 || p.x < 0 || p.x > WORLD_W || p.y < 0 || p.y > WORLD_H;
       if (!dead) {
         const wall = this.obstacles.find(o => o.team !== p.team && segDist(p.px, p.py, p.x, p.y, o.x, o.y) < o.r + (p.r || 14) * 0.5);
-        if (wall) { this.vfx('block', wall.x, wall.y - 40, { scale: 3 }); dead = true; }
+        if (wall) { this.vfx('block', wall.x, wall.y - 40, { scale: 3 }); if (wall.f && !p.noDamage) this.damage(p.owner, wall.f, p.dmg * 0.7, p.type, true); dead = true; }
       }
       if (!dead) {
         const t = this.enemiesOf(p.owner).find(t => segDist(p.px, p.py, p.x, p.y, t.x, t.y) < t.br + (p.r || 14));
@@ -1709,12 +2197,12 @@ export class Arena extends Phaser.Scene {
     const me = this.player;
     for (const f of this.fighters) {
       const champ = f.isChamp;
-      if (f.hiddenFor(me) || this.blindVis(f) <= 0) { f.bt && Object.values(f.bt).forEach(t => t.setVisible(false)); continue; }
+      if (f.hiddenFor(me) || this.blindVis(f) <= 0) { f.bt && Object.values(f.bt).forEach(t => t.setVisible(false)); f.invIc?.setVisible(false); f.poisIc?.setVisible(false); continue; }
       if (champ && !f.bt) {
         const mk = () => this.add.text(0, 0, '', { fontFamily: 'monospace', fontSize: '10px', fontStyle: 'bold', color: '#fff', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5).setDepth(100000);
         f.bt = { hp: mk(), mp: mk(), name: mk(), lvl: mk() };
       }
-      if (!f.alive) { f.bt && Object.values(f.bt).forEach(t => t.setVisible(false)); continue; }
+      if (!f.alive) { f.bt && Object.values(f.bt).forEach(t => t.setVisible(false)); f.invIc?.setVisible(false); f.poisIc?.setVisible(false); continue; }
       const w = champ ? 96 : f.isNexus ? 160 : f.isTower ? 90 : 36, h = champ ? 12 : f.isNexus ? 14 : f.isTower ? 9 : 6, x = f.x - w / 2, mh = 8, xh = 4;
       const y = f.y - f.def.height - (champ ? 38 : 14);
       g.fillStyle(0x000000, 0.75).fillRect(x - 2, y - 2, w + 4, h + 4 + (champ ? mh + 2 : 0));
@@ -1723,16 +2211,22 @@ export class Arena extends Phaser.Scene {
       if (sh > 0) g.fillStyle(0xffffff).fillRect(x + w * f.hp / tot, y, w * sh / tot, h).fillStyle(0xbfc8d8).fillRect(x + w * f.hp / tot, y + h * 0.65, w * sh / tot, h * 0.35);
       if (champ) {
         // second bar: mana (blue) or, for champions without mana, their own resource (Eliud: rage in orange, hen durability in gold)
-        const rb = f.isRage, fr = rb ? (f.hen ? f.henHp / f.henMax : f.rage / 100) : f.maxMana ? f.mana / f.maxMana : 0;
-        g.fillStyle(rb ? 0x3a1a0a : 0x12264a).fillRect(x, y + h + 2, w, mh).fillStyle(rb ? (f.hen ? 0xffd23f : 0xff7a2a) : 0x3b8cff).fillRect(x, y + h + 2, w * Phaser.Math.Clamp(fr, 0, 1), mh);
+        const cb = !!f.def.charge, rb = f.isRage, fr = cb ? f.charge / 100 : rb ? (f.hen ? f.henHp / f.henMax : f.rage / 100) : f.maxMana ? f.mana / f.maxMana : 0;
+        g.fillStyle(cb ? 0x0a2a24 : rb ? 0x3a1a0a : 0x12264a).fillRect(x, y + h + 2, w, mh).fillStyle(cb ? 0x4fe0c0 : rb ? (f.hen ? 0xffd23f : 0xff7a2a) : 0x3b8cff).fillRect(x, y + h + 2, w * Phaser.Math.Clamp(fr, 0, 1), mh);
+        if (f.ride) g.fillStyle(0x000000, 0.75).fillRect(x - 2, y + h + mh + 3, w + 4, 6).fillStyle(0xffffff).fillRect(x, y + h + mh + 4, w * Phaser.Math.Clamp(f.ride.t / f.ride.T, 0, 1), 3);   // bike lifetime
+        if (f.flame) g.fillStyle(0x000000, 0.75).fillRect(x - 2, y + h + mh + 3, w + 4, 6).fillStyle(0xffffff).fillRect(x, y + h + mh + 4, w * Phaser.Math.Clamp(f.flame.t / f.flame.T, 0, 1), 3);   // flamethrower time left
         const gx = x - 17, gy = y + (h + mh + 2) / 2;
         levelGauge(g, gx, gy, 12, f.level >= 12 ? 1 : f.xp / f.xpNeed, 4);
         f.bt.lvl.setVisible(true).setText(`${f.level}`).setPosition(gx, gy).setFontSize(11);
         f.bt.hp.setVisible(true).setText(`${Math.ceil(f.hp)}/${Math.ceil(f.maxHp)}`).setPosition(f.x, y + h / 2).setFontSize(10);
-        f.bt.mp.setVisible(true).setText(`${f.isRage ? Math.floor(f.hen ? f.henHp : f.rage) : Math.floor(f.mana)}`).setPosition(f.x, y + h + 2 + mh / 2).setFontSize(8);
+        f.bt.mp.setVisible(true).setText(`${f.def.charge ? Math.floor(f.charge) + '%' : f.isRage ? Math.floor(f.hen ? f.henHp : f.rage) : Math.floor(f.mana)}`).setPosition(f.x, y + h + 2 + mh / 2).setFontSize(8);
         f.bt.name.setVisible(true).setText(`${f.def.name}`).setPosition(f.x, y - 11).setColor(f === me ? '#7dff9a' : f.team === me.baseTeam ? '#8ab4ff' : '#ff8a8a');
       }
       if (f.pkBuffs) { let n = 0; const C = { hp: 0x5dff8a, atk: 0xff7a5a, aspd: 0xffd23f, def: 0x7ee0ff }; for (const k in f.pkBuffs) { g.fillStyle(0x000000, 0.8).fillRect(x + n * 14 - 1, y + h + (champ ? 20 : 4) , 12, 6).fillStyle(C[k]).fillRect(x + n * 14, y + h + (champ ? 21 : 5), 10 * Math.max(0, f.pkBuffs[k].t / f.pkBuffs[k].T), 4); n++; } }
+      const nb = (f.ride ? 1 : 0) + (f.flame ? 1 : 0), sb = champ && f.shieldHp > 0 && f.shieldMaxT > 0;   // white duration bars stack under the mana bar
+      if (sb) { const by = y + h + mh + 3 + nb * 7; g.fillStyle(0x000000, 0.75).fillRect(x - 2, by, w + 4, 6).fillStyle(0xffffff).fillRect(x, by + 1, w * Phaser.Math.Clamp(f.shieldT / f.shieldMaxT, 0, 1), 3); }
+      if (champ && f.poisoned) { const pi = (f.poisIc ||= this.add.image(0, 0, 'icon_poison').setDepth(100001).setDisplaySize(14, 14)); pi.setVisible(true).setPosition(x + 8, y + h + mh + 9 + (nb + (sb ? 1 : 0)) * 7); } else f.poisIc?.setVisible(false);   // poisoned: icon under the mana bar
+      if (champ && f.arepaUp) { const ic = (f.invIc ||= this.add.image(0, 0, 'icon_invul').setDepth(100001).setDisplaySize(22, 22)); ic.setVisible(true).setPosition(x + w + 16, y + h / 2 + 4); } else f.invIc?.setVisible(false);   // invulnerable: yellow aura icon by the bars
       if (f.stunT > 0) g.fillStyle(0xffd23f).fillRect(x, y - 6, w * Math.min(1, f.stunT / 2), 3);
       if (f.ink) { g.fillStyle(0x1d0f4a).fillCircle(f.x, y - 14, 7).fillStyle(0x8a5cff).fillCircle(f.x - 2, y - 16, 2.5); }
       const ly = y + h + (champ ? mh + 4 : 2);

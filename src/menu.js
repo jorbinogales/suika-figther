@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { CHAMPIONS, CLASSES, CLASS_TABS, classLabel, rk } from './data.js';
 import { Audio } from './audio.js';
 
-const LIST = ['leandro', 'xeviche', 'jorbi', 'axel', 'julio', 'luis', 'eliud', 'hector'];   // Héctor still missing
+const LIST = ['leandro', 'xeviche', 'jorbi', 'axel', 'julio', 'luis', 'eliud', 'hector', 'yonaiker', 'junior'];   // Héctor still missing
 const SIDES = [
   { team: 0, name: 'AZUL', sub: 'Militares', col: 0x3b82f6, hex: '#8ab4ff' },
   { team: 1, name: 'ROJO', sub: 'Robots', col: 0xef4444, hex: '#ff8a8a' },

@@ -71,6 +71,8 @@ def build(K, RV, RP, OG, SND, short_yells):
      "a_hector_p1": pick(RP("39_Absorb_04.wav"), KR("bookClose.ogg")),                  # protein shake
      "a_hector_p2": pick(KR("metalPot2.ogg"), KP("impactMetal_medium_001.ogg")), "ev_hector_chain": pick(KP("impactMetal_medium_003.ogg"), KR("metalPot3.ogg")),   # chains
      "a_hector_p3": pick(KP("impactPlate_medium_000.ogg"), KR("beltHandle1.ogg")),      # strapping on protection
+     "atk_yonaiker": pick(CU("yon_atk")), "a_yonaiker_p1": pick(CU("yon_p1")), "a_yonaiker_p2": pick(CU("yon_p2")), "a_yonaiker_p3": pick(CU("yon_p3")), "a_yonaiker_ult": pick(CU("yon_ult")),
+     "atk_junior": pick(CU("jr_atk")), "a_junior_p1": pick(CU("jr_p1")), "a_junior_p2": pick(CU("jr_p2")), "a_junior_p3": pick(CU("jr_p3")), "a_junior_ult": pick(CU("jr_ult")),
      "a_hector_ult": pick(CU("hector_bike")),    # bike + fire
      # ---- Eliud ----
      "a_eliud_p1": pick(OG("fuse.ogg")), "ev_eliud_boom": pick(OG("dynamite.wav")),   # grenade egg: fuse, then boom

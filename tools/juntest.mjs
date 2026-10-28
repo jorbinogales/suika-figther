@@ -1,0 +1,12 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--enable-unsafe-swiftshader', '--use-gl=angle', '--mute-audio'], defaultViewport: { width: 1280, height: 720 } });
+const p = await b.newPage(); p.on('pageerror', e => console.log('[pageerror]', e.message, (e.stack || '').split('\n')[1]));
+await p.goto('http://localhost:5173/#char=junior&train=1&keep=1&noai=1&nofog=1', { waitUntil: 'load' }); await new Promise(r => setTimeout(r, 12000));
+console.log(await p.evaluate(`(() => { const a = window.__arena, x = a.player, e = a.enemy; a.handleInput = () => {}; a.audio.play = () => {}; a.audio.playAll = () => {}; a.audio.voice = () => {}; const step = n => { for (let i = 0; i < n; i++) a.update(a.time.now + i * 16, 16.7); };
+  const out = {}; e.maxHp = e.hp = 99999; e.ai = false; ['p1','p2','p3','ult'].forEach(k => { x.ranks[k] = 2; x.cds[k] = 0; }); x.mana = 9999; x.setAim(1, 0);
+  e.x = x.x + 70; e.y = x.y; const stuns = []; for (let i = 0; i < 4; i++) { a.basicDmg = true; a.damage(x, e, 40, 'physical'); a.basicDmg = false; stuns.push([e.fist ? e.fist.n : 0, +e.stunT.toFixed(1)]); } out.fist = stuns;
+  e.stunT = 0; e.x = x.x + 200; e.y = x.y; x.tryCast('p1'); step(30); const x0 = e.x; step(60); out.drag = [Math.round(e.x - x0), e.stunT > 0 || true];
+  x.x = x.x + 0; e.x = x.x + 150; step(2); x.cds.p2 = 0; x.setAim(1, 0); const px = x.x; x.tryCast('p2'); step(60); out.roll = [Math.round(x.x - px), Math.round(x.shieldHp)];
+  e.x = x.x + 120; e.y = x.y; x.cds.p3 = 0; x.tryCast('p3'); step(80); const hp0 = e.hp; step(60); out.flame = [!!x.flame, Math.round(hp0 - e.hp), e.poisons.length, x.flame && +x.flame.t.toFixed(1)]; step(60 * 5); out.flameEnd = !x.flame;
+  x.cds.ult = 0; x.castPoint = { x: x.x + 300, y: x.y }; x.tryCast('ult'); step(90); let dm = 0; const od = a.damage.bind(a); a.damage = (s, t, r, ty, d) => { if (t === e && s === x) dm += r; return od(s, t, r, ty, d); }; e.x = x.x + 300; e.y = x.y; step(60 * 6); out.ult = [Math.round(dm), a.bombs.length, a.missiles.length];
+  return JSON.stringify(out); })()`)); await p.screenshot({ path: 'D:/mycowork/game/shot_jun.png' }); await b.close();
