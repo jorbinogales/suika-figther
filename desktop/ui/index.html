@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Suika Figther</title>
+<link rel="stylesheet" href="launcher.css">
+</head><body>
+<div class="grid"></div><div class="scan"></div><div class="vig"></div>
+<main>
+  <div class="logo">SUIKA <b>FIGTHER</b></div>
+  <div class="sub">LAUNCHER</div>
+  <section class="panel">
+    <div id="status" class="status">BUSCANDO ACTUALIZACIONES</div>
+    <div class="bar"><i id="fill"></i></div>
+    <div id="detail" class="detail">&nbsp;</div>
+    <div id="err" class="err"></div>
+    <div class="actions">
+      <button id="play" class="btn go" disabled>Jugar</button>
+      <button id="retry" class="btn ghost" hidden>Reintentar</button>
+    </div>
+  </section>
+  <div id="ver" class="ver">&nbsp;</div>
+</main>
+<script src="launcher.js"></script>
+</body></html>

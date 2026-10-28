@@ -96,6 +96,41 @@ app.get('/api/version', (req, res) => {
   res.set('Cache-Control', 'no-store');
   try { res.json(JSON.parse(fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../dist/version.json'), 'utf8'))); } catch (e) { res.json({ id: 'dev' }); }
 });
+// file list of the built game for the desktop launcher: { id, files: [{ path, size, sha256 }] }. Hashes are cached per file (path+size+mtime), so only changed files are re-read.
+const GAME_DIR = path.resolve(DIR, '../dist');
+const hashCache = new Map();
+let manifestJob = null;
+const sha256 = (f) => new Promise((resolve, reject) => { const h = crypto.createHash('sha256'); fs.createReadStream(f).on('data', (d) => h.update(d)).on('error', reject).on('end', () => resolve(h.digest('hex'))); });
+async function buildManifest() {
+  const files = [];
+  const walk = async (dir, rel) => {
+    for (const e of await fs.promises.readdir(dir, { withFileTypes: true })) {
+      if (e.name.startsWith('.')) continue;   // express.static does not serve dotfiles (.gitkeep)
+      const p = rel ? rel + '/' + e.name : e.name;
+      if (e.isDirectory()) { await walk(path.join(dir, e.name), p); continue; }
+      if (!e.isFile()) continue;
+      const abs = path.join(dir, e.name), st = await fs.promises.stat(abs);
+      let c = hashCache.get(p);
+      if (!c || c.size !== st.size || c.mtimeMs !== st.mtimeMs) { c = { size: st.size, mtimeMs: st.mtimeMs, sha256: await sha256(abs) }; hashCache.set(p, c); }
+      files.push({ path: p, size: c.size, sha256: c.sha256 });
+    }
+  };
+  await walk(GAME_DIR, '');
+  files.sort((a, b) => (a.path < b.path ? -1 : 1));
+  const live = new Set(files.map((f) => f.path));
+  for (const k of hashCache.keys()) if (!live.has(k)) hashCache.delete(k);
+  let id = 'dev';
+  try { id = JSON.parse(await fs.promises.readFile(path.join(GAME_DIR, 'version.json'), 'utf8')).id || id; } catch { /* no build yet */ }
+  return { id, files };
+}
+app.get('/api/game/manifest', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  if (!fs.existsSync(path.join(GAME_DIR, 'index.html'))) return res.status(404).json({ error: 'El juego no está compilado (npm run build)' });
+  try {
+    manifestJob ||= buildManifest().finally(() => { manifestJob = null; });   // concurrent requests share one scan
+    res.json(await manifestJob);
+  } catch (e) { console.error(e); res.status(500).json({ error: 'No se pudo generar el manifest' }); }
+});
 app.use('/api', (req, res) => res.status(404).json({ error: 'No encontrado' }));
 // production: the same process serves the built game (npm run build -> dist/); in development Vite does it
 const DIST = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../dist');

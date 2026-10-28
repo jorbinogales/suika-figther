@@ -1,0 +1,30 @@
+:root{--bg:#050a14;--panel:rgba(8,16,32,.88);--cy:#3fd0ff;--cy2:#7ee0ff;--am:#ffd23f;--rd:#ff5a6a;--gr:#5dff9a;--tx:#cfe3ff;--mut:#7a8db3}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden}
+body{font-family:'Rajdhani','Segoe UI',system-ui,sans-serif;color:var(--tx);background:radial-gradient(ellipse at 30% 20%,#0c2144 0,#050a14 60%);user-select:none}
+.grid{position:fixed;inset:0;background-image:linear-gradient(rgba(63,208,255,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(63,208,255,.07) 1px,transparent 1px);background-size:48px 48px;mask-image:radial-gradient(ellipse at center,#000 30%,transparent 80%);animation:gridmove 14s linear infinite}
+@keyframes gridmove{to{background-position:0 48px,48px 0}}
+.scan{position:fixed;inset:0;background:repeating-linear-gradient(0deg,rgba(0,0,0,.18) 0 1px,transparent 1px 3px);pointer-events:none}
+.vig{position:fixed;inset:0;background:radial-gradient(ellipse at center,transparent 55%,rgba(0,0,0,.7));pointer-events:none}
+main{position:relative;height:100%;display:flex;flex-direction:column;justify-content:center;padding:0 32px}
+.logo{font-family:'Orbitron','Rajdhani',sans-serif;font-weight:900;letter-spacing:.18em;color:#fff;font-size:38px;text-align:center;text-shadow:0 0 18px var(--cy),0 0 2px var(--cy)}
+.logo b{color:var(--am);text-shadow:0 0 18px var(--am)}
+.sub{text-align:center;color:var(--mut);letter-spacing:.3em;font-size:13px;margin:4px 0 20px}
+.panel{position:relative;background:var(--panel);border:1px solid rgba(63,208,255,.45);padding:18px 20px;clip-path:polygon(14px 0,100% 0,100% calc(100% - 14px),calc(100% - 14px) 100%,0 100%,0 14px);box-shadow:inset 0 0 40px rgba(63,208,255,.06)}
+.status{font-family:'Orbitron','Rajdhani',sans-serif;font-size:14px;letter-spacing:.2em;color:var(--cy2);font-weight:700;margin-bottom:12px}
+.status::before{content:'▌';color:var(--am);margin-right:8px}
+.bar{background:rgba(2,8,18,.9);border:1px solid var(--cy);height:16px;padding:2px}
+.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--cy),var(--gr));box-shadow:0 0 14px var(--cy);transition:width .2s}
+.bar.busy i{width:30%!important;animation:slide 1.2s ease-in-out infinite alternate}
+@keyframes slide{from{margin-left:0}to{margin-left:70%}}
+.detail{margin-top:10px;font-size:15px;color:var(--tx);min-height:20px}
+.err{min-height:20px;color:var(--rd);font-size:15px;margin-top:6px}
+.actions{display:flex;gap:10px;margin-top:12px}
+.btn{flex:1;font-family:'Orbitron','Rajdhani',sans-serif;font-weight:700;letter-spacing:.14em;font-size:14px;color:#fff;border:1px solid var(--cy);padding:13px 20px;cursor:pointer;text-transform:uppercase;clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);transition:.15s;background:linear-gradient(180deg,rgba(25,90,140,.85),rgba(10,40,72,.9))}
+.btn[hidden]{display:none}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.go{background:linear-gradient(180deg,rgba(30,150,80,.9),rgba(10,70,40,.95));border-color:var(--gr)}
+.btn.go:hover:not(:disabled){background:linear-gradient(180deg,rgba(50,200,110,.95),rgba(15,100,55,.95));box-shadow:0 0 22px rgba(93,255,154,.55)}
+.btn.ghost{background:transparent;border-color:rgba(63,208,255,.35);color:var(--cy2)}
+.btn.ghost:hover{box-shadow:0 0 20px rgba(63,208,255,.55)}
+.ver{text-align:center;color:var(--mut);font-size:13px;letter-spacing:.1em;margin-top:14px}

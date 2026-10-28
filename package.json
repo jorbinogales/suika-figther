@@ -1,15 +1,19 @@
 {
   "name": "game",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "SUIKA FIGTHER - launcher de escritorio",
+  "main": "desktop/main.js",
   "scripts": {
     "dev": "vite",
     "server": "node server/index.js",
     "test:server": "node server/test.mjs",
     "build": "vite build",
     "sprites": "python tools/process_sprites.py",
-    "start": "node server/index.js"
+    "start": "node server/index.js",
+    "desktop": "electron .",
+    "desktop:dist": "electron-builder --config electron-builder.config.cjs --win",
+    "desktop:pack": "electron-builder --config electron-builder.config.cjs --win --dir",
+    "test:desktop": "node desktop/test-updater.mjs && node desktop/test-gameserver.mjs"
   },
   "keywords": [],
   "author": "",
@@ -25,6 +29,8 @@
     "ws": "^8.22.0"
   },
   "devDependencies": {
+    "electron": "^45.1.0",
+    "electron-builder": "^26.18.0",
     "puppeteer-core": "^25.16.0"
   }
 }

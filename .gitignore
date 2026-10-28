@@ -9,3 +9,9 @@ __pycache__/
 *.pyc
 vite.log
 server.log
+
+release/
+*.pfx
+*.p12
+.env.sign*
+.env.prod
