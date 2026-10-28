@@ -195,3 +195,15 @@ label.l{display:block;font-size:12px;letter-spacing:.2em;color:var(--mut);margin
 .stage.m-templo .st-fx .fx2{left:68%;top:20%}
 .stage.m-ciudad .st-fx .fx1{left:19%;top:24%;background:radial-gradient(circle,rgba(64,220,255,.32),rgba(64,180,255,.10) 55%,transparent 70%)}
 .stage.m-ciudad .st-fx .fx2{left:64%;top:15%;background:radial-gradient(circle,rgba(255,84,200,.28),rgba(255,84,200,.09) 55%,transparent 70%)}
+
+/* ===== Dirección artística v3: la escena manda (zoom a la plaza, campeón protagonista, habilidades sobre la escena) ===== */
+.stage.art{height:clamp(335px,46vh,445px)}
+.stage.m-ruinas .st-scene{background-size:174% auto;background-position:50% 71%}
+.stage.m-templo .st-scene{background-size:170% auto;background-position:50% 67%}
+.stage.m-ciudad .st-scene{background-size:172% auto;background-position:50% 69%}
+.stage.art .cwrap{left:31%;bottom:28px;height:min(372px,94%)}
+.stage.art .st-stats{width:184px;background:rgba(4,12,24,.74)}
+.lobby.prac .panel.info{margin-top:-36px;position:relative;z-index:6;background:rgba(5,12,24,.85)}
+@media(max-width:1180px){.stage.art .cwrap{left:25%}}
+/* v3.1: retratos más compactos en práctica, para que la fila completa se vea sin corte */
+.lobby.prac .champs{grid-template-columns:repeat(auto-fill,minmax(67px,1fr));gap:8px}
