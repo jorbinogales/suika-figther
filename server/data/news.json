@@ -1,5 +1,17 @@
 [
   {
+    "id": "0.9.3",
+    "date": "2026-11-02",
+    "version": "0.9.3",
+    "title": "Ping y carga del servidor en pantalla, 30 actualizaciones por segundo",
+    "tag": "RED",
+    "items": [
+      "Nuevo: en las partidas online se muestra arriba a la derecha tu ping, su pico reciente, la carga del servidor y el jitter, en verde, amarillo o rojo según su estado.",
+      "El estado de la partida online ahora se actualiza 30 veces por segundo (antes 20): los movimientos de los demás se ven más fluidos y con menos picos.",
+      "Corregido: la partida se congelaba cuando terminaba de pasar una nave de refuerzos sobre un campamento."
+    ]
+  },
+  {
     "id": "0.9.2",
     "date": "2026-11-02",
     "version": "0.9.2",
@@ -8,13 +20,11 @@
     "items": [
       "Las partidas online de 2 o más jugadores ya no las simula el navegador de un jugador: ahora el servidor es el anfitrión. Todos los jugadores reciben el mismo trato y nadie depende de la conexión ni del PC de otro.",
       "Cada acción viaja una sola vez a internet (tú -> servidor -> todos) en lugar de dos (tú -> servidor -> anfitrión -> servidor -> todos): la respuesta a tus movimientos, ataques y habilidades llega antes.",
-      "El estado de la partida se actualiza 30 veces por segundo en todas las salas (antes 12 en salas grandes) y ocupa unas 3 veces menos datos.",
-      "Nuevo: en las partidas online se muestra arriba a la derecha tu ping, su pico reciente, la carga del servidor y el jitter, en verde, amarillo o rojo según su estado.",
       "Si un jugador se desconecta o recarga la página, la partida sigue igual para los demás y puede volver a entrar; ya no existe el caso de que la partida termine porque el anfitrión cerró su pestaña.",
       "Yonaiker a bordo de la nave: en partidas online tu mira y tus disparos se envían al servidor (antes los misiles caían sobre el enemigo más cercano).",
       "Corregido: en partidas online no se veían la marca de tinta de Julio ni la desaparición de Yonaiker al subir a la nave en las pantallas de los demás jugadores.",
-      "Corregido: la partida se congelaba cuando terminaba de pasar una nave de refuerzos sobre un campamento.",
-      "Las partidas de práctica, entrenamiento y las online de un solo jugador no cambian."
+      "Las partidas de práctica, entrenamiento y las online de un solo jugador no cambian.",
+      "El estado de la partida se actualiza 20 veces por segundo (antes 12 en salas grandes) y ocupa unas 3 veces menos datos."
     ]
   },
   {
