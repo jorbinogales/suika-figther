@@ -1,5 +1,20 @@
 [
   {
+    "id": "0.9.4",
+    "date": "2026-11-02",
+    "version": "0.9.4",
+    "title": "Red más rápida: 60 actualizaciones por segundo y movimiento más preciso",
+    "tag": "RED",
+    "items": [
+      "El estado de la partida online ahora se actualiza 60 veces por segundo (antes 30) y usa menos datos que antes: la respuesta a tus movimientos, ataques y habilidades llega casi el doble de rápido.",
+      "Tu campeón se mueve al instante y ahora termina exactamente donde está en el servidor: antes podía quedarse desfasado (por ejemplo tras un aturdimiento); ahora esa diferencia se corrige en una décima de segundo, sin tirones.",
+      "Los demás campeones, súbditos y torretas se ven con un movimiento continuo aunque tu conexión tenga picos de retardo: el juego los muestra una fracción de segundo en el pasado para no saltar de una posición a otra.",
+      "Tus órdenes se envían 60 veces por segundo y cada envío repite las dos anteriores, así que una orden retrasada no se pierde.",
+      "Al recargar la página o reconectarte en mitad de una partida, todo se sincroniza de nuevo en menos de un segundo; corregido además que los campeones caídos aparecían en su base en lugar de donde murieron.",
+      "Las partidas de práctica, entrenamiento y las online de un solo jugador no cambian."
+    ]
+  },
+  {
     "id": "0.9.3",
     "date": "2026-11-02",
     "version": "0.9.3",

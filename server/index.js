@@ -1,6 +1,7 @@
 // SUIKA FIGTHER launcher server: auth + news (REST) and lobby/relay (WebSocket).
 import express from 'express';
-import { WebSocketServer } from 'ws';
+import { WebSocketServer, Sender } from 'ws';
+import zlib from 'node:zlib';
 import Database from 'better-sqlite3';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
@@ -161,7 +162,7 @@ const rooms = new Map();      // code -> room
 const userRoom = new Map();   // userId -> code
 const sockets = new Map();    // userId -> ws
 
-const sendRaw = (ws, s) => { if (ws && ws.readyState === 1) ws.send(s); };
+const sendRaw = (ws, s) => { if (ws && ws.readyState === 1) ws.send(s, { compress: false }); };   // never per-socket deflate: see toRoomZ
 const send = (ws, msg) => sendRaw(ws, JSON.stringify(msg));
 const err = (ws, msg) => send(ws, { t: 'error', msg });
 const teamCount = (room, t) => [...room.players.values()].filter((p) => p.team === t).length;
@@ -177,6 +178,30 @@ const toRoom = (room, msg, except) => {
 const toRoomRaw = (room, s, except) => {
   for (const p of room.players.values()) if (p.id !== except) sendRaw(sockets.get(p.id), s);
 };
+// The host's broadcasts (60 snapshots/s) are compressed ONCE per room, not once per socket. permessage-deflate with context takeover:
+// a socket's inflater window is the text of the compressed messages it got so far. Every player of the room gets the same broadcasts,
+// so one deflate with the last 8 KB of that text as dictionary is a valid continuation for all of them, and the same frame is written
+// to every socket. Everything else a player receives goes uncompressed (sendRaw), which keeps those windows identical. A socket that
+// joins (or misses one, z.gen = -1) gets plain copies until the next reset (every 2 s), where it starts with everybody else.
+const ZDICT = 8192, ZRESET_MS = 2000, Z_LEVEL = Number(process.env.WS_DEFLATE_LEVEL) || 3;
+const zOk = (ws) => { const p = ws._extensions?.['permessage-deflate']?.params; return !!p && !p.server_no_context_takeover && !(p.server_max_window_bits < 15); };
+function toRoomZ(room, s, except) {
+  if (!DEFLATE) return toRoomRaw(room, s, except);
+  const z = (room.z ||= { gen: 0, t: 0, dict: null }), now = Date.now(), buf = Buffer.from(s);
+  if (now - z.t >= ZRESET_MS) {
+    z.gen++; z.t = now; z.dict = null;
+    for (const p of room.players.values()) { const ws = sockets.get(p.id); if (ws?.readyState === 1 && zOk(ws)) { ws.z = z; ws.zGen = z.gen; } }
+  }
+  const out = zlib.deflateRawSync(buf, { level: Z_LEVEL, memLevel: 7, windowBits: 15, finishFlush: zlib.constants.Z_SYNC_FLUSH, ...(z.dict && { dictionary: z.dict }) });
+  const frame = Sender.frame(out.subarray(0, out.length - 4), { fin: true, rsv1: true, opcode: 1, mask: false, readOnly: true });   // RFC 7692: without the trailing 00 00 ff ff
+  const d = z.dict ? Buffer.concat([z.dict, buf]) : buf; z.dict = d.length > ZDICT ? d.subarray(d.length - ZDICT) : d;
+  for (const p of room.players.values()) {
+    const ws = sockets.get(p.id); if (!ws || ws.readyState !== 1) continue;
+    if (p.id === except) { if (ws.z === z) ws.zGen = -1; continue; }   // it misses this one: its window is no longer the room's
+    if (ws.z === z && ws.zGen === z.gen && ws._sender._state === 0) ws._sender.sendFrame(frame);   // _state 0: nothing queued in ws's own sender
+    else { if (ws.z === z) ws.zGen = -1; sendRaw(ws, s); }
+  }
+}
 const HOST_BCAST = '{"t":"relay","to":null,"data":';   // exactly how net.js serialises a broadcast relay ({ t, to: null, data })
 const roomMsg = (room) => ({ t: 'room', code: room.code, public: room.public, host: room.host, state: room.state, players: playerList(room), ...(room.bot && { hostUp: room.bot.connected }) });
 const pushRoom = (room) => toRoom(room, roomMsg(room));
@@ -360,13 +385,14 @@ const handlers = {
     const room = rooms.get(userRoom.get(user.id));
     if (!room) return;
     if (raw.length > 65536) return err(ws, 'Mensaje demasiado grande');
-    if (!user.bot) {   // the host sends snapshots + events at ~40 msg/s for the whole room: not limited
+    if (!user.bot) {   // the host sends snapshots + events at ~60 msg/s for the whole room: not limited
       const now = Date.now();
       if (now - ws.rateAt >= 1000) { ws.rateAt = now; ws.rateN = 0; }
-      if (++ws.rateN > 120) return; // silently drop above 120 msg/s
+      if (++ws.rateN > 150) return; // silently drop above 150 msg/s (inputs are 60/s + casts / shop; each input repeats the 2 previous ones)
     }
     const out = { t: 'relay', from: user.id, data: m.data };
     if (m.to != null) { if (m.to !== user.id && (room.players.has(m.to) || m.to === room.bot?.id)) send(sockets.get(m.to), out); }
+    else if (!room.bot) toRoomZ(room, JSON.stringify(out), user.id);   // a player's browser hosting (no server host): its snapshots, compressed once too
     else toRoom(room, out, user.id);
   },
   chat(ws, user, m) {
@@ -379,9 +405,11 @@ const handlers = {
 
 // ---------- WebSocket ----------
 const server = http.createServer(app);
-// snapshots are ~4-8 KB of repetitive JSON at 20 Hz per player. permessage-deflate keeps its window between messages (context takeover):
-// each snapshot is mostly the previous one, so it compresses against it (a cheap delta); ~64 KB of zlib state per socket.
-const wss = new WebSocketServer({ noServer: true, maxPayload: 70 * 1024, perMessageDeflate: { threshold: 400, zlibDeflateOptions: { level: 3, memLevel: 7 }, serverNoContextTakeover: false, serverMaxWindowBits: 15, clientNoContextTakeover: true, concurrencyLimit: 8 } });
+// snapshots are deltas (keyframe every second, src/netgame.js): ~0.5-1.5 KB of JSON at 60 Hz per player. permessage-deflate keeps its
+// window between messages (context takeover), so each delta compresses against the previous ones; ~64 KB of zlib state per socket.
+// The host page's own socket (localhost) never compresses: it would only cost CPU on both ends. WS_DEFLATE=0 turns it off for players too.
+const DEFLATE = process.env.WS_DEFLATE === '0' ? false : { threshold: 200, zlibDeflateOptions: { level: Number(process.env.WS_DEFLATE_LEVEL) || 3, memLevel: 7 }, serverNoContextTakeover: false, serverMaxWindowBits: 15, clientNoContextTakeover: true, concurrencyLimit: 8 };
+const wss = new WebSocketServer({ noServer: true, maxPayload: 70 * 1024, perMessageDeflate: DEFLATE });
 
 server.on('upgrade', (req, socket, head) => {
   const url = new URL(req.url, 'http://x');
@@ -389,6 +417,7 @@ server.on('upgrade', (req, socket, head) => {
   const local = /^(::1|127\.|::ffff:127\.)/.test(req.socket.remoteAddress || '');   // host pages always connect from this machine
   const user = url.pathname !== '/ws' ? null : bot ? (local ? { id: bot.id, name: 'Servidor', bot: true, room: bot.code } : null) : userFromToken(token);
   if (!user) { socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n'); return socket.destroy(); }
+  if (user.bot) delete req.headers['sec-websocket-extensions'];   // the host page: no permessage-deflate on localhost
   wss.handleUpgrade(req, socket, head, (ws) => connect(ws, user));
 });
 
@@ -417,7 +446,7 @@ function connect(ws, user) {
   ws.on('message', (buf) => {
     const raw = buf.toString();
     // host broadcasts (snapshots, ~20 per second per match) are forwarded as they are: no parse + re-serialise of a few KB each time
-    if (user.bot && raw.startsWith(HOST_BCAST) && raw.length <= 65536) { const room = rooms.get(user.room); if (room?.bot?.id === user.id) toRoomRaw(room, `{"t":"relay","from":${user.id},"data":${raw.slice(HOST_BCAST.length)}`, user.id); return; }
+    if (user.bot && raw.startsWith(HOST_BCAST) && raw.length <= 65536) { const room = rooms.get(user.room); if (room?.bot?.id === user.id) toRoomZ(room, `{"t":"relay","from":${user.id},"data":${raw.slice(HOST_BCAST.length)}`); return; }
     let m;
     try { m = JSON.parse(raw); } catch { return err(ws, 'Mensaje no válido'); }
     const h = m && typeof m.t === 'string' && Object.hasOwn(handlers, m.t) && (!user.bot || BOT_MSGS.has(m.t)) ? handlers[m.t] : null;

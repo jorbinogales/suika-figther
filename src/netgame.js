@@ -8,17 +8,24 @@ import { PERM_KEYS } from './items.js';
 //  host   : simulates everything (AI, waves, damage, rewards, shop) and applies the inputs of remote players.
 //  client : renders. It sends its own inputs / casts / shop requests to the host and receives
 //           snapshots (state of every unit, ~15 Hz) plus events (casts, hits, deaths) that it replays visually.
-// Messages travel through the server's `relay` channel: {k:'in'|'cast'|'op'} client->host, {k:'snap'|'ev'} host->clients.
-const SNAP = 1 / 30, INP = 1 / 30;
+// Messages travel through the server's `relay` channel: {k:'in'|'cast'|'op'|'kf'} client->host, {k:'snap'|'ev'} host->clients.
+// Snapshots are deltas against the previous one (a keyframe every second, or when a client asks for one with 'kf');
+// remote units are drawn ~50 ms in the past, interpolated between two snapshots; our own champion is predicted and
+// reconciled with the host through the sequence number of our inputs (o.q = the last input the host applied).
+const SNAP = 1 / 60, SNAP_P = 1 / 30, INP = 1 / 60, KF_MS = 1000;   // server host: 60 snapshots/s; a player's browser hosting: 30 (his upload)
 const r1 = v => Math.round(v), r2 = v => Math.round(v * 100) / 100;
 const TYPES = ['physical', 'magic', 'true'];
+const TOP = ['m', 'g', 'ld', 'ctl', 'cp', 'wv', 'tr', 'sn'];   // snapshot fields besides the units: sent only when they change
+const STILL = { mx: 0, my: 0, run: false }, NONE = {};
+const JUMP = 220, DEAD = 3;   // px: a step between two snapshots longer than JUMP is a teleport (no sliding); own errors below DEAD are ignored
 
 export class NetGame {
   constructor(w, role, hostId) {
     this.w = w; this.role = role; this.hostId = hostId; this.live = !!w.cfg.rejoin; this.hostGone = 0;   // rejoining a running match: no waiting for 'go'
     this.replaying = false;
-    this.snapDt = !w.bot && (w.cfg.roster || []).filter(r => r.pid != null).length >= 7 ? 1 / 12 : SNAP;   // a player's browser hosting a big room: fewer snapshots (his upload); the server host always sends 30 Hz
+    this.snapDt = w.bot ? SNAP : (w.cfg.roster || []).filter(r => r.pid != null).length >= 7 ? 1 / 12 : SNAP_P;   // a player's browser hosting a big room: fewer snapshots (his upload)
     this.ev = []; this.pred = []; this.snapT = 0; this.inT = 0; this.atkT = 0; this.clock = 0; this.remote = new Map(); this.mortarImgs = [];
+    this.sn = 0; this.seq = 0; this.sent = []; this.hist = []; this.fix = { x: 0, y: 0 }; this.offs = []; this.delay = 60; this.moveHold = 0;
     for (const f of w.champs) if (f.pid != null && f.pid !== conn.user.id && role === 'host') this.remote.set(f.pid, { f, in: { mx: 0, my: 0, run: false }, ax: f.ax, ay: f.ay, atk: 0, at: 0 });
     this.off = conn.on(m => this.onMsg(m));
   }
@@ -58,7 +65,15 @@ export class NetGame {
   /* ======================= HOST ======================= */
   onClientData(from, d) {
     const r = this.remote.get(from); if (!r) return; const f = r.f, w = this.w;
-    if (r.off) return; if (d.k === 'in') { r.in = { mx: d.mx, my: d.my, run: !!d.run }; r.ax = d.ax; r.ay = d.ay; r.at = this.clock; r.atk = d.atk ? this.clock + 0.12 : 0; r.bp = Array.isArray(d.bp) ? d.bp : null; }
+    if (d.k === 'kf') { this.wantKf = true; return; }   // a client without a base (rejoin, reconnection): the next snapshot is a keyframe
+    if (r.off) return; if (d.k === 'in') {
+      let v = d, atk = !!d.atk;
+      if (Array.isArray(d.i) && Array.isArray(d.i[0])) {   // [current, previous, the one before]: only the entries newer than the last applied count (a q below it = the player reloaded)
+        const n = d.q > r.q ? Math.min(d.i.length, d.q - r.q) : d.i.length, e = d.i[0];
+        atk = d.i.slice(0, n).some(x => x?.[3]); v = { mx: +e[0] || 0, my: +e[1] || 0, run: e[2] }; r.q = +d.q || 0;
+      }
+      r.in = { mx: v.mx, my: v.my, run: !!v.run }; r.ax = d.ax; r.ay = d.ay; r.at = this.clock; r.atk = atk ? this.clock + 0.12 : 0; r.bp = Array.isArray(d.bp) ? d.bp : null;
+    }
     else if (d.k === 'cast') { const c = w.control; if (c?.mode === 'remote' && c.target === f) return; const a = this.actor(r); if (!a.alive) return; a.setAim(d.ax, d.ay); a.castPoint = d.cp ? { x: d.cp[0], y: d.cp[1] } : null; if (!a.tryCast(d.c)) a.castPoint = null; }
     else if (d.k === 'op') {
       if (['buy', 'sell', 'perm'].includes(d.op) && !w.canShop(f)) return;   // the shop only works in the base
@@ -71,10 +86,6 @@ export class NetGame {
     this.clock += dt;
     if (this.role === 'host') { const n = performance.now(), ft = this.lastPre ? n - this.lastPre : 0; this.lastPre = n; this.ftSum = (this.ftSum || 0) + ft; this.ftN = (this.ftN || 0) + 1; this.ftMax = Math.max(this.ftMax || 0, ft); }   // real host frame time -> load shown in every player's HUD
     if (this.role === 'client' && this.hostGone && performance.now() - this.hostGone > 45000) this.hostLost();   // the host has been gone for 45 s: give up
-    if (this.role === 'client') {   // spread each snapshot's position correction over the next frames instead of jumping
-      const k = 1 - Math.exp(-dt * 10);
-      for (const f of this.w.fighters) if (f.corr) { const cx = f.corr.x * k, cy = f.corr.y * k; f.x += cx; f.y += cy; f.corr.x -= cx; f.corr.y -= cy; }
-    }
     if (this.role !== 'host') return;
     const ctl = this.w.control;
     for (const r of this.remote.values()) {
@@ -111,6 +122,7 @@ export class NetGame {
     if (!f.alive) o.a = 0;
     if (f.nid >= 1000) { o.k = f.key; o.t = f.baseTeam; if (f.owner) o.o = f.owner.nid; if (f.antivirus) o.av = 1; }
     const v = f.in; if (v && (v.mx || v.my)) o.v = [r2(v.mx), r2(v.my), v.run ? 1 : 0];
+    if (f.pid != null) { const r = this.remote.get(f.pid); if (r?.q) o.q = r.q; }   // ack: the last input of that player already applied
     if (f.team !== f.baseTeam) o.tm = f.team;
     if (f.rootT > 0) o.rt = r2(f.rootT); if (f.stunT > 0) o.st = r2(f.stunT); if (f.silenceT > 0) o.sl = r2(f.silenceT); if (f.blindT > 0) o.bl = r2(f.blindT); if (f.charmT > 0) o.ch = r2(f.charmT);
     if (f.shieldHp > 0) o.sd = [r1(f.shieldHp), r2(f.shieldT)]; if (f.speedT > 0) o.sp = [r2(f.speedBoost), r2(f.speedT)];
@@ -133,11 +145,35 @@ export class NetGame {
     return o;
   }
   sendSnap() {
-    const w = this.w;
-    const c = w.control;
+    const w = this.w, c = w.control, ts = Math.round(performance.now());
     const l = this.ev.length ? this.ev : undefined; this.ev = [];   // the events since the last snapshot travel in it (one message per tick instead of two); applied before it
-    this.send(null, { k: 'snap', l, f: w.fighters.map(f => this.packF(f)), m: w.mortars.map(m => [r1(m.x), r1(m.y)]), g: r1(w.gameT), ld: [r1((this.ftSum || 0) / Math.max(1, this.ftN || 1)), r1(this.ftMax || 0)], ctl: c ? [c.luis.nid, c.target.nid, r2(c.t)] : 0, cp: (w.camps || []).map(k => [k.owner ?? -1, r2(k.prog[0]), r2(k.prog[1]), k.contested ? 1 : 0, r1(k.spawnT)]), wv: r1(w.waveT), tr: (w.traps || []).map(q => [r1(q.x), r1(q.y), q.team, q.r, r1(q.t)]), sn: (w.sentinels || []).map(q => [r1(q.x), r1(q.y), q.team, q.r, r1(q.t)]) });
-    this.ftSum = this.ftN = this.ftMax = 0;
+    if (!this.ld || ts - this.ldT >= 500) { this.ld = [r1((this.ftSum || 0) / Math.max(1, this.ftN || 1)), r1(this.ftMax || 0)]; this.ldT = ts; this.ftSum = this.ftN = this.ftMax = 0; }   // host frame time, every 0.5 s
+    const top = { m: w.mortars.map(m => [r1(m.x), r1(m.y)]), g: r1(w.gameT), ld: this.ld, ctl: c ? [c.luis.nid, c.target.nid, r2(c.t)] : 0, cp: (w.camps || []).map(k => [k.owner ?? -1, r2(k.prog[0]), r2(k.prog[1]), k.contested ? 1 : 0, r1(k.spawnT)]), wv: r1(w.waveT), tr: (w.traps || []).map(q => [r1(q.x), r1(q.y), q.team, q.r, r1(q.t)]), sn: (w.sentinels || []).map(q => [r1(q.x), r1(q.y), q.team, q.r, r1(q.t)]) };
+    const fs = w.fighters.map(f => this.packF(f)), P = this.prevF, cur = new Map(), msg = { k: 'snap', n: ++this.sn, ts, l }, tj = {};
+    for (const k of TOP) tj[k] = JSON.stringify(top[k]);
+    if (!P || this.wantKf || ts - this.kfT >= KF_MS) {   // keyframe: the whole state
+      Object.assign(msg, top, { kf: 1, f: fs }); this.kfT = ts; this.wantKf = false;
+      for (const o of fs) cur.set(o.i, { o, s: JSON.stringify(o), cdT: ts });
+    } else {   // delta against the previous snapshot: changed fields only, x/y as an offset, removed fields in z, gone units in rm
+      msg.f = [];
+      for (const o of fs) {
+        const p = P.get(o.i);
+        if (!p) { msg.f.push(o); cur.set(o.i, { o, s: JSON.stringify(o), cdT: ts }); continue; }
+        // cooldowns: every client counts them down itself; they travel only when they stop matching that count (cast, reset, cdr)
+        if (o.cd && p.o.cd && o.cd.length === p.o.cd.length) { const e = (ts - p.cdT) / 1000; if (o.cd.every((v, k) => Math.abs(v - Math.max(0, p.o.cd[k] - e)) < 0.1)) o.cd = p.o.cd; }
+        const s = JSON.stringify(o), cdT = o.cd === p.o.cd ? p.cdT : ts;
+        if (s === p.s) { cur.set(o.i, p); continue; }
+        const d = { i: o.i };
+        for (const k in o) if (k !== 'i' && o[k] !== p.o[k] && (typeof o[k] !== 'object' || JSON.stringify(o[k]) !== JSON.stringify(p.o[k]))) d[k] = o[k];
+        if ('x' in d || 'y' in d) { d.p = [o.x - p.o.x, o.y - p.o.y]; delete d.x; delete d.y; }
+        const z = Object.keys(p.o).filter(k => !(k in o)); if (z.length) d.z = z;
+        msg.f.push(d); cur.set(o.i, { o, s, cdT });
+      }
+      const rm = [...P.keys()].filter(i => !cur.has(i)); if (rm.length) msg.rm = rm;
+      for (const k of TOP) if (tj[k] !== this.prevTop[k]) msg[k] = top[k];
+    }
+    this.prevF = cur; this.prevTop = tj;
+    this.send(null, msg);
   }
 
   /* ======================= CLIENT ======================= */
@@ -161,15 +197,97 @@ export class NetGame {
     this.predict(f, k, () => f._tryCast(k)); f.castPoint = null; return true;
   }
   op(op, a) { this.send(this.hostId, { k: 'op', op, a }); return true; }
+  // 60 Hz, numbered; the 2 previous inputs ride along (the host skips the ones it already applied). hist: where our prediction
+  // stood after each input, to compare with the host once it acknowledges that input.
   sendInput(dt) {
-    this.atkT -= dt; this.inT += dt; if (this.inT < INP) return; this.inT = 0;
-    const p = this.w.pc, i = p.in || { mx: 0, my: 0, run: false };
+    this.atkT -= dt; this.inT += dt; if (this.inT < INP) return; this.inT = Math.min(this.inT - INP, INP);
+    const p = this.w.pc, i = p.in || STILL, q = ++this.seq;
     const B = p.bomber, bp = B?.phase === 'fly' ? [r1(B.pt.x), r1(B.pt.y), B.fire ? 1 : 0] : undefined;   // Yonaiker aboard: our reticle and trigger
-    this.send(this.hostId, { k: 'in', mx: r2(i.mx), my: r2(i.my), run: i.run ? 1 : 0, ax: r2(p.ax), ay: r2(p.ay), atk: this.atkT > 0 ? 1 : 0, bp });
+    this.sent.unshift([r2(i.mx), r2(i.my), i.run ? 1 : 0, this.atkT > 0 ? 1 : 0]); if (this.sent.length > 3) this.sent.pop();
+    this.hist.push({ q, x: p.x, y: p.y }); if (this.hist.length > 240) this.hist.shift();
+    this.send(this.hostId, { k: 'in', q, i: this.sent, ax: r2(p.ax), ay: r2(p.ay), bp });
   }
   onHostData(d) {
     if (!this.live) return;
-    if (d.k === 'snap') { d.l?.forEach(e => this.applyEvent(e)); this.applySnap(d); } else if (d.k === 'ev') d.l.forEach(e => this.applyEvent(e));
+    if (d.k === 'snap') { d.l?.forEach(e => this.applyEvent(e)); const s = this.decode(d); if (s) this.applySnap(s); } else if (d.k === 'ev') d.l.forEach(e => this.applyEvent(e));
+  }
+  // delta snapshot -> full state on top of the last keyframe; null (and a keyframe request) while we have no base
+  decode(s) {
+    if (s.kf) { this.base = new Map(s.f.map(o => [o.i, o])); this.top = {}; for (const k of TOP) this.top[k] = s[k]; }
+    else if (!this.base || s.n !== this.sn + 1) {
+      this.base = null; const t = performance.now();
+      if (t - (this.kfAsk || 0) > 300) { this.kfAsk = t; this.send(this.hostId, { k: 'kf' }); }
+      return null;
+    } else {
+      for (const d of s.f) {
+        const o = this.base.get(d.i); if (!o) { this.base.set(d.i, d); continue; }
+        for (const k in d) if (k !== 'p' && k !== 'z') o[k] = d[k];
+        if (d.p) { o.x += d.p[0]; o.y += d.p[1]; } if (d.z) for (const k of d.z) delete o[k];
+      }
+      if (s.rm) for (const i of s.rm) this.base.delete(i);
+      for (const k of TOP) if (k in s) this.top[k] = s[k];
+    }
+    this.sn = s.n;
+    return { ...this.top, ts: s.ts, f: [...this.base.values()], dm: s.kf ? null : new Map(s.f.map(d => [d.i, d])) };
+  }
+  // charmed / mind-controlled: the host moves our unit, we only show it (like a remote one)
+  forced(p) { return p.charmT > 0; }
+  // our own unit vs the host, at the same input: the difference is how far our prediction is off. It is absorbed over the next
+  // frames (smooth) and applied to the inputs still in flight too, which is the same as replaying them from the host's state.
+  reconcile(s) {
+    const w = this.w, pc = w.pc, F = this.fix, me = s.f.find(o => o.i === w.player.nid), o = pc === w.player ? me : s.f.find(x => x.i === pc.nid);
+    if (pc !== this.histFor || !pc.alive || this.forced(pc) || !o) { this.hist = []; F.x = F.y = 0; this.histFor = pc; return; }
+    const h = this.hist, q = me?.q; while (h.length > 1 && h[0].q < q) h.shift();
+    const e = h[0];
+    if (!e || e.q !== q) {   // no comparable input (the host is not applying ours: disconnected for it, ...): fall back to the host position if far off
+      if (Math.hypot(o.x - pc.x - F.x, o.y - pc.y - F.y) > 160) { F.x = o.x - pc.x; F.y = o.y - pc.y; }
+      return;
+    }
+    if (pc.dashV || pc.pullTo || pc.rw || pc.drop || this.clock < this.moveHold) return;   // our own dash / pull: both sides move fast, compare once it is over
+    const ex = o.x - e.x - F.x, ey = o.y - e.y - F.y, d = Math.hypot(ex, ey);
+    (this.rs ||= { n: 0, sum: 0, max: 0, fixes: 0 }); this.rs.n++; this.rs.sum += d; this.rs.max = Math.max(this.rs.max, d);   // stats (tools/netsync)
+    if (d > 500) { const cx = F.x + ex, cy = F.y + ey; pc.x += cx; pc.y += cy; for (const k of h) { k.x += cx; k.y += cy; } F.x = F.y = 0; }   // a real teleport
+    // tolerance while walking: one frame of our own movement. The host applies our input from its next frame (16 ms) while we
+    // applied it for our whole frame, so the first ack of each input is off by up to that much and the next one by the opposite:
+    // correcting it would make the champion shiver at low fps. Standing still: exact.
+    const tol = pc.in?.mx || pc.in?.my ? Math.max(DEAD, pc.speed * Math.max(this.fdt || 0, 1 / 60) * 1.2) : 0.5;
+    if (d > tol) { F.x += ex; F.y += ey; this.rs.fixes++; }
+  }
+  // every frame, after the simulation moved the units and before they are drawn
+  smooth(dt) {
+    if (this.role !== 'client') return;
+    const w = this.w, pc = w.pc, F = this.fix, forced = this.forced(pc);
+    if (dt > 0) this.fdt = this.fdt == null ? dt : this.fdt + (dt - this.fdt) * 0.1;   // our frame time (reconcile tolerance)
+    if (pc.dashV || pc.pullTo || pc.rw) this.moveHold = this.clock + 0.2;
+    if (F.x || F.y) {   // our reconciliation error, absorbed in ~0.1 s
+      const k = 1 - Math.exp(-dt * 15), cx = Math.abs(F.x) < 0.1 ? F.x : F.x * k, cy = Math.abs(F.y) < 0.1 ? F.y : F.y * k;
+      pc.x += cx; pc.y += cy; F.x -= cx; F.y -= cy; for (const h of this.hist) { h.x += cx; h.y += cy; }
+    }
+    if (this.clk == null) return;
+    // render clock, in host time: real time, slewed gently toward (newest - delay) so it never jumps
+    const want = performance.now() - this.clk - this.delay, adv = (this.rt ?? want) + dt * 1000;
+    if (!Number.isFinite(want) || !Number.isFinite(dt)) { (this.bad ||= []).length < 5 && this.bad.push({ dt, clk: this.clk, delay: this.delay, rt: this.rt }); return; }
+    this.rt = !(Math.abs(want - adv) <= 300) ? want : adv + (want - adv) * 0.08;   // !(<=): a NaN resyncs too
+    const rt = this.rt, fade = Math.exp(-dt * 12);
+    for (const f of w.fighters) {
+      const b = f.nb; if (!b?.length || !f.alive || f.isTower || f.drop || (f === pc && !forced)) continue;
+      while (b.length > 2 && b[1].t <= rt) b.shift();
+      let x, y, v, j = b.length - 1;
+      if (rt >= b[j].t) {   // nothing newer yet: carry on along the last motion for up to 100 ms, then hold
+        const B = b[j], A = b[j - 1], e = Math.min(rt - B.t, 100);
+        if (A && B.t > A.t && Math.hypot(B.x - A.x, B.y - A.y) < JUMP) { x = B.x + (B.x - A.x) * e / (B.t - A.t); y = B.y + (B.y - A.y) * e / (B.t - A.t); } else { x = B.x; y = B.y; }
+        v = B.v; f.nx = 1;
+      } else {
+        while (j > 0 && b[j - 1].t > rt) j--;
+        const B = b[j], A = b[j - 1] || B;
+        if (A === B || Math.hypot(B.x - A.x, B.y - A.y) >= JUMP) { x = A.x; y = A.y; } else { const k = (rt - A.t) / (B.t - A.t); x = A.x + (B.x - A.x) * k; y = A.y + (B.y - A.y) * k; }
+        v = A.v;
+        if (f.nx) { f.nx = 0; const ex = f.rx - x, ey = f.ry - y; f.ne = Math.hypot(ex, ey) < 120 ? { x: ex, y: ey } : null; }   // back from extrapolating: no jump, the gap fades out
+      }
+      if (f.ne) { x += f.ne.x; y += f.ne.y; f.ne.x *= fade; f.ne.y *= fade; if (Math.abs(f.ne.x) + Math.abs(f.ne.y) < 0.3) f.ne = null; }
+      f.x = f.rx = x; f.y = f.ry = y;
+      f.in = v ? { mx: v[0], my: v[1], run: !!v[2], analog: true } : { mx: 0, my: 0, run: false };   // the walk / run animation follows the motion being shown
+    }
   }
 
   spawnFor(o) {
@@ -179,11 +297,18 @@ export class NetGame {
     return f;
   }
   applySnap(s) {
-    const nowT = performance.now(); if (this.lastSnapAt) { const gap = nowT - this.lastSnapAt; (this.gaps ||= []).push(gap); if (this.gaps.length > 90) this.gaps.shift(); conn.gapMax = Math.round(Math.max(...this.gaps)); } this.lastSnapAt = nowT;   // snapshot arrival gaps = jitter
-    if (s.ld) { const h = (this.lds ||= []); h.push(s.ld); if (h.length > 90) h.shift(); conn.load = [s.ld[0], Math.max(...h.map(x => x[1]))]; }   // host frame ms: now / worst of the last ~3 s
+    const nowT = performance.now(); if (this.lastSnapAt) { const gap = nowT - this.lastSnapAt; (this.gaps ||= []).push(gap); if (this.gaps.length > 180) this.gaps.shift(); conn.gapMax = Math.round(Math.max(...this.gaps)); } this.lastSnapAt = nowT;   // snapshot arrival gaps = jitter
+    if (s.ld) { const h = (this.lds ||= []); h.push(s.ld); if (h.length > 180) h.shift(); conn.load = [s.ld[0], Math.max(...h.map(x => x[1]))]; }   // host frame ms: now / worst of the last ~3 s
+    if (s.ts != null) {   // host clock -> ours: the fastest arrival of the last ~2 s is the base offset; the delay covers one interval + the jitter above it
+      const H = this.offs; H.push(nowT - s.ts); if (H.length > 120) H.shift(); this.clk = Math.min(...H);
+      const J = H.map(x => x - this.clk).sort((a, b) => a - b), iv = this.lastTs != null ? Math.min(100, s.ts - this.lastTs) : 33; this.lastTs = s.ts;
+      this.iv = this.iv == null ? iv : this.iv + (iv - this.iv) * 0.05;
+      const want = Math.max(40, Math.min(150, this.iv + J[Math.floor(J.length * 0.95)] + 8)); this.delay += (want - this.delay) * (want > this.delay ? 0.2 : 0.02);
+      this.ts = s.ts;
+    }
     const w = this.w, seen = new Set(); if (s.g != null) w.gameT = s.g;
     if (this.role === 'client') w.waveT = Math.max(0, (w.waveT ?? 0));
-    for (const o of s.f) { let f = w.byNid.get(o.i); if (!f) f = this.spawnFor(o); if (!f) continue; seen.add(o.i); this.unpack(f, o); }
+    for (const o of s.f) { let f = w.byNid.get(o.i); if (!f) f = this.spawnFor(o); if (!f) continue; seen.add(o.i); this.unpack(f, o, s.dm ? s.dm.get(o.i) || NONE : null); }
     for (const f of w.fighters) if (f.nid >= 1000 && !seen.has(f.nid) && f.alive && !f.dispose) f.dispose = true;   // vanished on the host (expired summon, ...)
     if (s.cp) s.cp.forEach((k, i) => { const c = w.camps?.[i]; if (c) { c.owner = k[0] < 0 ? null : k[0]; c.prog = [k[1], k[2]]; c.contested = !!k[3]; c.spawnT = k[4]; } });
     if (s.wv != null) w.waveT = s.wv;
@@ -192,19 +317,21 @@ export class NetGame {
     // Luis' mind control: the controller's camera and HUD follow the controlled champion
     if (s.ctl) { const L = w.byNid.get(s.ctl[0]), T = w.byNid.get(s.ctl[1]); if (L && T) { const mine = L === w.player; w.control = { luis: L, target: T, t: s.ctl[2], mode: mine ? 'ctrl' : 'view' }; w.ctrl = mine ? T : null; } }
     else if (w.control) { w.control = null; w.ctrl = null; w.cancelAim(); }
+    this.reconcile(s);
     // mortars (item): the host owns them, we only draw them
     s.m.forEach((m, i) => { let im = this.mortarImgs[i]; if (!im) { im = this.mortarImgs[i] = w.add.image(0, 0, 'item_mortero_portatil').setOrigin(0.5, 0.9); im.setScale(70 / Math.max(im.width, im.height)); } im.setPosition(m[0], m[1]).setDepth(m[1]); });
     while (this.mortarImgs.length > s.m.length) this.mortarImgs.pop().destroy();
   }
-  unpack(f, o) {
+  // o: the full state of the unit; d: what changed in this snapshot (null = keyframe / everything)
+  unpack(f, o, d) {
     const w = this.w, local = f === w.player, first = !f.netSeen; f.netSeen = true;
+    if (first) { f.x = o.x; f.y = o.y; }   // also a corpse seen for the first time (rejoin): where it fell, not at its spawn
     if (o.a === 0) { if (f.alive) { f.alive = false; f.state = 'dead'; f.pending = null; f.playAnim('death', 0.9); } }
-    else if (!f.alive && f.isChamp) { f.x = o.x; f.y = o.y; f.reset(); f.playAnim('idle'); f.netSeen = true; }
-    if (f.alive) {
-      const dx = o.x - f.x, dy = o.y - f.y, d = Math.hypot(dx, dy);
-      if (first || d > (local ? 160 : 220)) { f.x = o.x; f.y = o.y; f.corr = null; } else if (!local) f.corr = { x: dx * 0.6, y: dy * 0.6 };
+    else if (!f.alive && f.isChamp) { f.x = o.x; f.y = o.y; f.reset(); f.playAnim('idle'); f.netSeen = true; f.nb = null; if (f === w.pc) this.histFor = null; }   // respawn: no sliding from the corpse
+    if (f.alive) {   // position: a sample for the interpolation (remote units) and the reconciliation (ours)
+      const b = (f.nb ||= []); b.push({ t: this.ts ?? 0, x: o.x, y: o.y, v: o.v }); if (b.length > 40) b.shift();
     }
-    if (!local) { if (f.state !== 'cast') { f.ax = o.ax; f.ay = o.ay; } f.in = o.v ? { mx: o.v[0], my: o.v[1], run: !!o.v[2], analog: true } : { mx: 0, my: 0, run: false }; }
+    if (f !== w.pc && f.state !== 'cast') { f.ax = o.ax; f.ay = o.ay; }
     // statuses
     const stun = o.st || 0; if (stun > 0 && f.stunT <= 0) { f.state = 'stun'; f.pending = null; } f.stunT = stun; if (stun <= 0 && f.state === 'stun') { f.state = 'idle'; f.playAnim('idle'); }
     f.rootT = o.rt || 0; f.silenceT = o.sl || 0; f.blindT = o.bl || 0; f.charmT = o.ch || 0; f.team = o.tm ?? f.baseTeam;
@@ -218,7 +345,8 @@ export class NetGame {
       if (!first && o.lv > f.level) { w.audio.play('levelup', { at: f, vol: local ? 1 : 0.5, gap: 0 }); w.vfx('levelup', f.x, f.y - 20, { scale: 3.2 }); w.float(f.x, f.y - f.def.height - 30, `NIVEL ${o.lv}`, '#ffe066'); }
       if (o.kd) [f.kills, f.deaths, f.assists] = o.kd;
       f.level = o.lv; f.xp = o.xp; f.gold = o.gd; f.points = o.pt;
-      ABILITY_KEYS.forEach((a, i) => { f.ranks[a] = o.rk[i]; f.cds[a] = o.cd[i]; }); f.cds.basic = o.cd[4];
+      const cd = !d || d.cd;   // cooldowns come only when they stop matching our own countdown
+      ABILITY_KEYS.forEach((a, i) => { f.ranks[a] = o.rk[i]; if (cd) f.cds[a] = o.cd[i]; }); if (cd) f.cds.basic = o.cd[4];
       if (o.pm) { const ps = o.pm.join(); if (ps !== f.permSig) { f.permSig = ps; f.perm = {}; PERM_KEYS.forEach((k, i) => { if (o.pm[i]) f.perm[k] = o.pm[i]; }); f.recomputeItems(); } }
       const sig = JSON.stringify(o.inv); if (sig !== f.invSig) { f.invSig = sig; f.inv = o.inv.map(a => (a ? { id: a[0], cd: a[1], charges: a[2] } : null)); f.recomputeItems(); }
       else f.inv.forEach((sl, i) => { if (sl) sl.cd = o.inv[i][1]; });

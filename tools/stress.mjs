@@ -61,20 +61,25 @@ async function hostStats() { return fetch(`${BASE}/api/host/stats?key=${encodeUR
 /* ---------- simulated player ---------- */
 function player(u) {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(`${WS}?token=${encodeURIComponent(u.token)}`, { perMessageDeflate: true });
+    const ws = new WebSocket(`${WS}?token=${encodeURIComponent(u.token)}`, { perMessageDeflate: !A.nodeflate });
     const c = { u, ws, msgs: 0, snaps: 0, evs: 0, lat: [], probe: null, nid: null, host: null, live: false, gs: [], room: null, bytes0: 0 };
     c.send = m => ws.readyState === 1 && ws.send(JSON.stringify(m));
     c.wait = (pred, ms = 15000) => new Promise((res, rej) => { const t = setTimeout(() => { c.waiters.delete(w); rej(new Error('timeout ' + u.id)); }, ms); const w = m => { if (pred(m)) { clearTimeout(t); c.waiters.delete(w); res(m); } }; c.waiters.add(w); });
     c.waiters = new Set();
     ws.on('message', d => {
-      c.msgs++; const m = JSON.parse(d);
+      c.msgs++; c.raw = (c.raw || 0) + d.length; const m = JSON.parse(d);
       if (m.t === 'room') c.room = m;
       if (m.t === 'start') { c.start = m; c.nid = nidOf(m.players, u.id); c.host = m.host ?? c.room?.host; }
       if (m.t === 'go') c.live = true;
       if (m.t === 'relay' && m.data) {
         if (m.data.k === 'snap') {
-          c.snaps++; c.gs.push([performance.now(), m.data.g]);
-          if (c.probe && c.nid != null) { const o = m.data.f.find(x => x.i === c.nid); if (o?.v && o.v[0] === c.probe.mx) { c.lat.push(performance.now() - c.probe.t); c.probe = null; } }
+          const s = m.data; c.snaps++;
+          if (s.n == null || s.kf) { c.base = new Map(s.f.map(o => [o.i, o])); c.g = s.g; }   // old full snapshot / keyframe
+          else if (!c.base || s.n !== c.sn + 1) { c.base = null; if (c.host != null && performance.now() - (c.kfAsk || 0) > 300) { c.kfAsk = performance.now(); c.send({ t: 'relay', to: c.host, data: { k: 'kf' } }); } }
+          else { for (const d of s.f) { const o = c.base.get(d.i); if (!o) { c.base.set(d.i, d); continue; } Object.assign(o, d); if (d.p) { o.x += d.p[0]; o.y += d.p[1]; delete o.p; } if (d.z) for (const k of d.z) delete o[k]; delete o.z; } for (const i of s.rm || []) c.base.delete(i); if (s.g != null) c.g = s.g; }
+          c.sn = s.n;
+          if (c.base) c.gs.push([performance.now(), c.g]);
+          if (c.base && c.probe && c.nid != null) { const o = c.base.get(c.nid); if (o?.v && o.v[0] === c.probe.mx) { c.lat.push(performance.now() - c.probe.t); c.probe = null; } }
         } else if (m.data.k === 'ev') c.evs++;
       }
       for (const w of [...c.waiters]) w(m);
@@ -84,19 +89,25 @@ function player(u) {
 }
 // the roster every client builds (launcher.js buildCfg): per team, humans sorted by id then AI bots; the network id is the roster index
 function nidOf(players, id) { const H = t => players.filter(p => p.team === t).sort((a, b) => a.id - b.id), n = Math.max(H(0).length, H(1).length, 1), R = []; for (const t of [0, 1]) { H(t).forEach(p => R.push(p.id)); for (let i = H(t).length; i < n; i++) R.push(null); } const i = R.indexOf(id); return i < 0 ? null : i; }
-function drive(c) {   // 30 Hz inputs (like netgame.js), a cast every ~2 s, skill points, basic attacks, and a latency probe every second
-  let t = 0, dir = 1, probeAt = 1000 + Math.random() * 1000;
+// inputs like netgame.js: 60 Hz numbered with the 2 previous ones (--legacy: the old 30 Hz format), a cast every ~2 s, skill points,
+// basic attacks, and a latency probe every second
+const STEP = A.legacy ? 33 : 16;
+function drive(c) {
+  let t = 0, dir = 1, probeAt = 1000 + Math.random() * 1000, q = 0;
+  const sent = [];
   const iv = setInterval(() => {
-    if (!c.live || c.host == null) return; t += 33;
-    if (t % 2400 < 33) dir = -dir;
+    if (!c.live || c.host == null) return; t += STEP;
+    if (t % 2400 < STEP) dir = -dir;
     let mx = dir * 0.8, my = Math.sin(t / 700) * 0.4;
     if (t >= probeAt) { probeAt = t + 1000; const v = c.lastProbe === 0.5 ? -0.5 : 0.5; c.lastProbe = v; c.probe = { mx: v, t: performance.now() }; }
     if (c.probe) { mx = c.probe.mx; my = 0; }
-    c.send({ t: 'relay', to: c.host, data: { k: 'in', mx: Math.round(mx * 100) / 100, my: Math.round(my * 100) / 100, run: t % 6000 < 2000 ? 1 : 0, ax: dir, ay: 0, atk: t % 1000 < 300 ? 1 : 0 } });
-    if (t % 2000 < 33) c.send({ t: 'relay', to: c.host, data: { k: 'cast', c: ABIL[(Math.random() * 4) | 0], ax: dir, ay: 0, cp: null } });
-    if (t % 5000 < 33) c.send({ t: 'relay', to: c.host, data: { k: 'op', op: 'spend', a: ABIL[(Math.random() * 4) | 0] } });
+    const e = [Math.round(mx * 100) / 100, Math.round(my * 100) / 100, t % 6000 < 2000 ? 1 : 0, t % 1000 < 300 ? 1 : 0];
+    if (A.legacy) c.send({ t: 'relay', to: c.host, data: { k: 'in', mx: e[0], my: e[1], run: e[2], ax: dir, ay: 0, atk: e[3] } });
+    else { sent.unshift(e); if (sent.length > 3) sent.pop(); c.send({ t: 'relay', to: c.host, data: { k: 'in', q: ++q, i: sent, ax: dir, ay: 0 } }); }
+    if (t % 2000 < STEP) c.send({ t: 'relay', to: c.host, data: { k: 'cast', c: ABIL[(Math.random() * 4) | 0], ax: dir, ay: 0, cp: null } });
+    if (t % 5000 < STEP) c.send({ t: 'relay', to: c.host, data: { k: 'op', op: 'spend', a: ABIL[(Math.random() * 4) | 0] } });
     if (c.probe && performance.now() - c.probe.t > 3000) c.probe = null;   // dead / stunned: no answer
-  }, 33);
+  }, STEP);
   return () => clearInterval(iv);
 }
 
@@ -151,7 +162,7 @@ for (let i = 0; i < ROOMS; i++) { rs.push(await room(i, us.slice(i * PLAYERS, (i
 await sleep(3000);
 const roots = browser ? [browser.process().pid] : [];
 const s0 = await sample(roots), b0 = rs.flatMap(r => r.cs).map(c => c.ws._socket?.bytesRead || 0);
-rs.forEach(r => r.cs.forEach(c => { c.lat = []; c.snaps = 0; c.evs = 0; c.gs = []; }));
+rs.forEach(r => r.cs.forEach(c => { c.lat = []; c.snaps = 0; c.evs = 0; c.gs = []; c.raw = 0; }));
 let peakHost = s0?.hostMem || 0, peakSrv = s0?.srvMem || 0;
 const fpsSamples = [];
 for (let el = 0; el < SECS; el += 10) {
@@ -172,6 +183,8 @@ const res = {
   snapsPerSec: +(all.reduce((s, c) => s + c.snaps, 0) / all.length / wall).toFixed(1),
   latP50: pct(lat, 0.5), latP95: pct(lat, 0.95), latP99: pct(lat, 0.99), latN: lat.length,
   kbpsPerClient: +((b1.reduce((s, v, i) => s + v - b0[i], 0) / all.length / wall) / 1024).toFixed(1),
+  rawKbpsPerClient: +(all.reduce((s, c) => s + c.raw, 0) / all.length / wall / 1024).toFixed(1),   // after decompression: what the server had to deflate per socket
+  rawBytesPerSnap: Math.round(all.reduce((s, c) => s + c.raw, 0) / Math.max(1, all.reduce((s, c) => s + c.snaps, 0))),
   egressMBperHourAll: +((b1.reduce((s, v, i) => s + v - b0[i], 0) / wall) * 3600 / 1048576).toFixed(0),
   srvCpuPct: s1 && s0 ? +((s1.srvCpu - s0.srvCpu) / wall * 100).toFixed(1) : null,
   hostCpuPct: s1 && s0 ? +((s1.hostCpu - s0.hostCpu) / wall * 100).toFixed(1) : null,

@@ -2065,6 +2065,7 @@ export class Arena extends Phaser.Scene {
     this.updateJunior(dt);
     this.fighters.forEach(f => f.update(dt));
     this.fighters.forEach(f => f.alive && !f.isTower && !f.def.static && f.def.bot !== 'wall' && this.resolveSolids(f));
+    this.net?.smooth(dt);   // online client: remote units interpolated, our own position reconciled
     // AI champions spend their skill points (ultimate first when available)
     this.champs.forEach(e => { if ((e === this.player && !this.bot) || e.pid != null || this.net?.role === 'client') return; while (e.points > 0) { const open = ABILITY_KEYS.filter(a => e.canSpend(a)); if (!open.length) break; e.spend(open.includes('ult') ? 'ult' : open[Math.random() * open.length | 0]); } });
     if (this.control && this.net?.role !== 'client') { this.control.t -= dt; if (this.control.t <= 0 || !this.control.target.alive || !this.control.luis.alive) this.endControl(); }
