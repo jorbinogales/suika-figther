@@ -1,0 +1,14 @@
+art3d
+art
+release
+node_modules
+dist
+tools
+*.png
+!public/**/*.png
+*.log
+server/data/*.db
+server/data/*.db-*
+server/data/.secret
+.env*
+desktop

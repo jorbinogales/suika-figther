@@ -15,3 +15,8 @@ release/
 *.p12
 .env.sign*
 .env.prod
+
+art3d/
+server.err.log
+tools/.stress-users.json
+tools/_*.mjs

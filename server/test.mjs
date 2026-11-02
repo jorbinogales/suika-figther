@@ -6,8 +6,8 @@ import path from 'node:path';
 import WebSocket from 'ws';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'devbrawl-'));
-Object.assign(process.env, { DB_PATH: path.join(tmp, 't.db'), RATE_MAX: '1000', GRACE_MS: '300', LOAD_MS: '600', JWT_SECRET: 'test-secret' });
-const { start, stop } = await import('./index.js');
+Object.assign(process.env, { DB_PATH: path.join(tmp, 't.db'), RATE_MAX: '1000', GRACE_MS: '300', LOAD_MS: '600', JWT_SECRET: 'test-secret', HEADLESS_HOST: 'fake' });
+const { start, stop, _bots } = await import('./index.js');
 const srv = await start(0);
 const base = `http://localhost:${srv.address().port}`;
 const wsBase = `ws://localhost:${srv.address().port}`;
@@ -123,15 +123,37 @@ try {
   assert.ok(Number.isInteger(st.seed)); assert.equal(st.players.length, 3);
   await c[1].t('start');
   assert.equal((await c[0].room((m) => m.state === 'loading')).state, 'loading');
-  for (const k of [0, 1]) c[k].send({ t: 'loaded' });
+  // server-hosted match: the host is a bot user (negative id, not a player) that joins with a one-time secret
+  assert.equal(_bots.size, 1); const [[secret, bi]] = [..._bots];
+  assert.equal(st.host, bi.id); assert.ok(bi.id < 0);
+  assert.ok(!st.players.some((p) => p.id === bi.id), 'the host is not a player');
+  const H = await client(secret);
+  assert.equal((await H.t('hello')).user.bot, true);
+  const hs = await H.t('start'); assert.equal(hs.seed, st.seed); assert.equal(hs.host, bi.id); assert.equal(hs.players.length, 3);
+  assert.equal((await c[0].room((m) => m.hostUp === true)).host, bi.id);
+  ok('server host joins with its secret and gets the start data');
+  for (const k of [0, 1, 2]) c[k].send({ t: 'loaded' });
   await sleep(100);
-  assert.ok(!c[2].msgs.some((m, i) => i >= c[2].cursor && m.t === 'go'), 'go must wait for everyone');
-  c[2].send({ t: 'loaded' });
+  assert.ok(!c[2].msgs.some((m, i) => i >= c[2].cursor && m.t === 'go'), 'go must wait for the host too');
+  H.send({ t: 'loaded' });
   for (const k of [0, 1, 2]) await c[k].t('go');
+  await H.t('go');
   await c[0].room((m) => m.state === 'playing');
-  ok('start_game / loaded / go');
+  ok('start_game / loaded / go (waits for players and host)');
+  H.mark(); H.send({ t: 'pick_champ', key: 'x' });
+  assert.match((await H.t('error')).msg, /desconocido/);
+  ok('host may only relay');
 
-  // relay
+  // relay: players -> host (targeted), host -> every player (broadcast)
+  for (const k of [0, 1, 2]) c[k].mark(); H.mark();
+  c[1].send({ t: 'relay', to: bi.id, data: { k: 'in' } });
+  const hin = await H.t('relay'); assert.equal(hin.from, users[1].id); assert.deepEqual(hin.data, { k: 'in' });
+  H.send({ t: 'relay', data: { k: 'snap' } });
+  for (const k of [0, 1, 2]) assert.deepEqual((await c[k].t('relay')).data, { k: 'snap' });
+  H.send({ t: 'relay', to: null, data: { k: 'snap', f: [{ i: 1, x: 2 }] } });   // the exact shape net.js sends: forwarded without re-parsing
+  for (const k of [0, 1, 2]) { const r = await c[k].t('relay'); assert.equal(r.from, bi.id); assert.deepEqual(r.data, { k: 'snap', f: [{ i: 1, x: 2 }] }); }
+  await sleep(100);
+  assert.ok(!c[0].msgs.slice(c[0].cursor).some((m) => m.t === 'relay' && m.data.k === 'in'), 'inputs only reach the host');
   for (const k of [0, 1, 2]) c[k].mark();
   c[0].send({ t: 'relay', data: { hello: 1 } });
   const rl = await c[1].t('relay');
@@ -147,8 +169,29 @@ try {
   assert.match((await c[0].t('error')).msg, /grande/);
   ok('relay (broadcast, targeted, size limit)');
 
-  c[1].mark(); c[0].send({ t: 'chat', text: 'hola' });
-  const ch = await c[1].t('chat');
+  // a player reconnecting mid-match gets the start data again with the server host
+  c[2].ws.close();
+  await c[0].room((m) => m.players.find((p) => p.id === users[2].id).connected === false);
+  c[2] = await client(users[2].token);
+  const rj = await c[2].t('start'); assert.equal(rj.rejoin, true); assert.equal(rj.host, bi.id); assert.equal(rj.state, 'playing');
+  ok('rejoin during a server-hosted match');
+  // the host page dying is visible to the players (hostUp false) and the match is not handed to a player
+  H.ws.close();
+  const down = await c[0].room((m) => m.hostUp === false); assert.equal(down.host, bi.id);
+  const H2 = await client(secret); await H2.t('start');
+  await c[0].room((m) => m.hostUp === true);
+  ok('host socket drop / reconnect');
+  // end of the match: room goes to 'over', the host is released, a returning player is sent to the menu
+  H2.send({ t: 'host_over' });
+  await c[0].room((m) => m.state === 'over');
+  c[1].ws.close(); await sleep(50);
+  c[1] = await client(users[1].token); await c[1].t('left');
+  await sleep(5300);
+  assert.equal(_bots.size, 0, 'host released after the match'); assert.notEqual(H2.ws.readyState, WebSocket.OPEN);
+  ok('host_over: room over, host released, late rejoin -> menu');
+
+  c[2].mark(); c[0].send({ t: 'chat', text: 'hola' });
+  const ch = await c[2].t('chat');
   assert.equal(ch.text, 'hola'); assert.equal(ch.name, 'Player0');
   c[0].mark(); c[0].send({ t: 'chat', text: 'x'.repeat(201) });
   await c[0].t('error');

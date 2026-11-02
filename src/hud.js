@@ -126,7 +126,7 @@ export class Hud extends Phaser.Scene {
 
     // ---- worm: darkness, only a small circle around the champion stays visible ----
     if (p.alive && p.blindT > 0) {   // darkened map with an irregular, blurred vision area (not a perfect circle, not pitch black)
-      const cam = A.cameras.main, v = cam.worldView, z = cam.zoom, cx = (p.x - v.x) * z, cy = (p.y - 40 - v.y) * z, S = 560 * z;
+      const cam = A.cameras.main, v = cam.worldView, z = cam.zoom, sp = A.r3d?.toScreen(p.x, 40, p.y), cx = sp ? sp.x : (p.x - v.x) * z, cy = sp ? sp.y : (p.y - 40 - v.y) * z, S = 560 * z;
       if (!this.blindTex) { this.blindTex = this.textures.createCanvas('blindmask', 256, 256); this.blindImg = this.add.image(0, 0, 'blindmask').setDepth(0.45); this.blindTex.setFilter(Phaser.Textures.FilterMode.LINEAR); }
       if (!this.blindWas) {   // new random blob each time the blindness starts
         const ctx = this.blindTex.getContext(), id = ctx.createImageData(256, 256), ph = [0, 1, 2, 3, 4].map(() => Math.random() * 6.283), am = [0.1, 0.07, 0.05, 0.03, 0.02];
@@ -175,6 +175,11 @@ export class Hud extends Phaser.Scene {
       this.T('sR', `${tk[1]}`, nr.x + nr.w / 2, nr.y + nr.h / 2, { size: nr.h * 0.7, bold: true, color: '#ff8a8a', origin: [0.5, 0.5], stroke: 4 });
       pulse('sB', nb, tk[0], 0x4aa3ff); pulse('sR', nr, tk[1], 0xff4a4a);
       this.scoreH = sc.h * u + 6 * u;
+    }
+    if (A.net && net.online && net.ping != null) {   // live connection quality: ping, its worst recent value, snapshot jitter and the server host's frame time
+      const col = v => (v < 80 ? '#7dff9a' : v < 150 ? '#ffd23f' : '#ff6a6a'), ld = net.load;
+      this.T('netPing', `PING ${net.ping} ms  pico ${net.pingMax}`, W - 10 * u, (this.scoreH || 0) + 4 * u, { size: 12 * u, bold: true, color: col(net.pingMax), origin: [1, 0], stroke: 3, depth: 25 });
+      if (ld) this.T('netLoad', `SERVIDOR ${ld[0]} ms  pico ${ld[1]}   JITTER ${net.gapMax ?? 0} ms`, W - 10 * u, (this.scoreH || 0) + 19 * u, { size: 12 * u, bold: true, color: ld[1] < 25 ? '#7dff9a' : ld[1] < 50 ? '#ffd23f' : '#ff6a6a', origin: [1, 0], stroke: 3, depth: 25 });
     }
     if (A.net && (!net.online || A.netLost)) this.T('reconn', 'RECONECTANDO…', W / 2, H / 2 - 120 * u, { size: 30 * u, bold: true, color: '#ffd23f', origin: [0.5, 0.5], stroke: 6, depth: 25 });
     {   // Jorbi's "15 Minutos más": golden glow around every player's screen while it lasts, and an hourglass announcement

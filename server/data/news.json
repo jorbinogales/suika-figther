@@ -1,5 +1,45 @@
 [
   {
+    "id": "0.9.2",
+    "date": "2026-11-02",
+    "version": "0.9.2",
+    "title": "Partidas online alojadas en el servidor: mucho menos lag",
+    "tag": "RED",
+    "items": [
+      "Las partidas online de 2 o más jugadores ya no las simula el navegador de un jugador: ahora el servidor es el anfitrión. Todos los jugadores reciben el mismo trato y nadie depende de la conexión ni del PC de otro.",
+      "Cada acción viaja una sola vez a internet (tú -> servidor -> todos) en lugar de dos (tú -> servidor -> anfitrión -> servidor -> todos): la respuesta a tus movimientos, ataques y habilidades llega antes.",
+      "El estado de la partida se actualiza 30 veces por segundo en todas las salas (antes 12 en salas grandes) y ocupa unas 3 veces menos datos.",
+      "Nuevo: en las partidas online se muestra arriba a la derecha tu ping, su pico reciente, la carga del servidor y el jitter, en verde, amarillo o rojo según su estado.",
+      "Si un jugador se desconecta o recarga la página, la partida sigue igual para los demás y puede volver a entrar; ya no existe el caso de que la partida termine porque el anfitrión cerró su pestaña.",
+      "Yonaiker a bordo de la nave: en partidas online tu mira y tus disparos se envían al servidor (antes los misiles caían sobre el enemigo más cercano).",
+      "Corregido: en partidas online no se veían la marca de tinta de Julio ni la desaparición de Yonaiker al subir a la nave en las pantallas de los demás jugadores.",
+      "Corregido: la partida se congelaba cuando terminaba de pasar una nave de refuerzos sobre un campamento.",
+      "Las partidas de práctica, entrenamiento y las online de un solo jugador no cambian."
+    ]
+  },
+  {
+    "id": "0.9.1",
+    "date": "2026-11-01",
+    "version": "0.9.1",
+    "title": "Vista 3D experimental (#3d=1)",
+    "tag": "EXPERIMENTAL",
+    "items": [
+      "Nuevo modo de vista en 3D, todavía experimental: añade #3d=1 al final de la dirección del juego (por ejemplo #char=xeviche&train=1&3d=1). Sin esa opción el juego se ve exactamente igual que antes.",
+      "Cámara en perspectiva inclinada que sigue a tu campeón con el mismo encuadre y zoom de siempre, incluida la vista aérea del bombardero de Yonaiker (con su mira en el suelo).",
+      "Mapa en 3D: suelo de hierba y tierra que sigue los caminos, plazas de base azul y roja, bosque denso de árboles, arbustos, helechos y rocas, luz de sol con sombras reales y campamentos con su bandera del color del dueño.",
+      "Campeones con modelos 3D animados (reposo, caminar, correr, ataque, habilidad, muerte); súbditos, torres y nexos también en 3D. Anillo de equipo bajo cada unidad, destello rojo al recibir daño y transparencia al ser invisible.",
+      "Las barras de vida, nombres, niveles, números de daño y contadores de refuerzos siguen sobre cada unidad; apuntar, atacar con clic y seleccionar objetivos funcionan sobre el suelo 3D.",
+      "Guías de apuntado y efectos en la vista 3D: las líneas, círculos, conos y rectángulos de cada habilidad, la flecha de alcance, los rangos de torre, la fuente y el progreso de los campamentos se dibujan sobre el suelo 3D; zonas de veneno, fuego, tinta, agujero negro, malware y trampas también. Los proyectiles, golpes, explosiones, curaciones, escudos, auras, cajas, huevos, misiles, naves y demás objetos de habilidades se ven en su sitio sobre el mapa 3D.",
+      "Nuevo estilo de la vista 3D, tipo anime: sombreado por bandas suaves con sombras de tono azulado, contorno fino del color de cada prenda, luz de borde y brillo en el pelo; bosque más vivo que se mece con el viento, mechones de hierba, flores, setas y piedritas junto a los caminos, suelo pintado con más detalle y un acabado de color fresco con un leve brillo y viñeta (se desactiva con #fx=0). Los personajes se inclinan al girar y al correr.",
+      "Efectos 3D de verdad en la vista 3D: llamas con volumen (lanzallamas, rastro de la moto, quemaduras y cráteres), explosiones con onda expansiva y polvo, humo denso de la granada de Yonaiker, nubes y burbujas de veneno, golpes con destello y chispas, curaciones, columnas de luz al subir de nivel, cúpulas holográficas de escudo y aura dorada de Xeviche, estrellas girando sobre los aturdidos, láser de Luis, misiles que caen con estela de humo y proyectiles con brillo y estela. Árboles y unidades los tapan cuando quedan detrás.",
+      "Tono más fresco en 3D: hierba verde azulada, camino de tierra rosada, sombras azuladas, bruma azul hacia el fondo y suaves rayos de sol; contorno más fino en cara y pelo.",
+      "Todavía en 2D dentro de la vista 3D: los objetos de algunas habilidades (billetes, neumáticos, cactus, huevos, cajas, lanzas, cadenas, naves, ayudantes del harem, mira y sprites especiales); se ven de cara a la cámara y por encima de las unidades.",
+      "Los 10 campeones tienen ahora modelo 3D semi-realista creado en Blender a partir de su arte conceptual (complexión, ropa, pelo, lentes, gorras y casco), con esqueleto y animaciones de reposo, caminar, correr, ataque, habilidad, daño y muerte. Primera versión: la ropa y los rostros se irán puliendo.",
+      "Súbditos, torres y nexos tienen ahora modelo 3D propio (soldados, fusileros y tanque del equipo azul; robots del rojo; torreta militar y torre robot; nexo búnker y nexo robot). Los campeones tienen texturas de tela, mezclilla y piel, animaciones nuevas (reposo con respiración, correr, ataques, poderes y definitiva) y la cámara 3D está más cerca.",
+      "Los campeones tienen animaciones 3D propias basadas en sus sprites: cada uno con su reposo, carrera, ataques, poderes y definitiva con los mismos gestos (guardia de boxeo de Junior, bicicleta de Hector, pistola y bengalas de Yonaiker, corazon de Xeviche, huevos y lanza de Eliud, etc.)."
+    ]
+  },
+  {
     "id": "0.9.0",
     "date": "2026-10-27",
     "version": "0.9.0",

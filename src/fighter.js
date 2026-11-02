@@ -993,7 +993,7 @@ export class Fighter {
     reverse ? this.spr.playReverse(cfg) : this.spr.play(cfg);
   }
 
-  flash() { this.spr.setTint(0xff5555); this.w.after(0.08, () => { this.spr.clearTint(); this.tintBot(); }); }
+  flash() { this.flashT = 0.12; this.spr.setTint(0xff5555); this.w.after(0.08, () => { this.spr.clearTint(); this.tintBot(); }); }   // flashT: read by the 3D view (render3d.js)
 
   // team marker: green = champion in use, blue = ally, red = enemy. A ground ring (cheap); the per-sprite WebGL glow filter it replaced
   // cost 2-4x the frame time once a few dozen units were on screen (the main cause of lag in big matches).

@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { hostEnabled, openHost, closeHost, stopAll as stopHosts, stats as hostStats } from './host.js';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const DATA = path.join(DIR, 'data');
@@ -131,6 +132,14 @@ app.get('/api/game/manifest', async (req, res) => {
     res.json(await manifestJob);
   } catch (e) { console.error(e); res.status(500).json({ error: 'No se pudo generar el manifest' }); }
 });
+// diagnostics of the headless hosts (stress tests): only with HOST_STATS_KEY set, and only with that key
+app.get('/api/host/stats', async (req, res) => {
+  const key = process.env.HOST_STATS_KEY;
+  if (!key || req.query.key !== key) return res.status(404).json({ error: 'No encontrado' });
+  res.set('Cache-Control', 'no-store');
+  const s = await hostStats();
+  res.json({ ...s, hostEnabled, matches: [...rooms.values()].filter((r) => r.bot).map((r) => ({ code: r.code, state: r.state, players: r.players.size, hostUp: r.bot.connected })), node: { rssMB: Math.round(process.memoryUsage().rss / 1048576) } });
+});
 app.use('/api', (req, res) => res.status(404).json({ error: 'No encontrado' }));
 // production: the same process serves the built game (npm run build -> dist/); in development Vite does it
 const DIST = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../dist');
@@ -152,16 +161,24 @@ const rooms = new Map();      // code -> room
 const userRoom = new Map();   // userId -> code
 const sockets = new Map();    // userId -> ws
 
-const send = (ws, msg) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(msg)); };
+const sendRaw = (ws, s) => { if (ws && ws.readyState === 1) ws.send(s); };
+const send = (ws, msg) => sendRaw(ws, JSON.stringify(msg));
 const err = (ws, msg) => send(ws, { t: 'error', msg });
 const teamCount = (room, t) => [...room.players.values()].filter((p) => p.team === t).length;
 const playerList = (room) => [...room.players.values()].map((p) => ({
   id: p.id, name: p.name, team: p.team, champ: p.champ, ready: p.ready, host: p.id === room.host, connected: p.connected,
 }));
+// serialised once for the whole room (snapshots go to up to 10 sockets); the room's headless host gets it too
 const toRoom = (room, msg, except) => {
-  for (const p of room.players.values()) if (p.id !== except) send(sockets.get(p.id), msg);
+  const s = JSON.stringify(msg);
+  for (const p of room.players.values()) if (p.id !== except) sendRaw(sockets.get(p.id), s);
+  if (room.bot && room.bot.id !== except) sendRaw(sockets.get(room.bot.id), s);
 };
-const roomMsg = (room) => ({ t: 'room', code: room.code, public: room.public, host: room.host, state: room.state, players: playerList(room) });
+const toRoomRaw = (room, s, except) => {
+  for (const p of room.players.values()) if (p.id !== except) sendRaw(sockets.get(p.id), s);
+};
+const HOST_BCAST = '{"t":"relay","to":null,"data":';   // exactly how net.js serialises a broadcast relay ({ t, to: null, data })
+const roomMsg = (room) => ({ t: 'room', code: room.code, public: room.public, host: room.host, state: room.state, players: playerList(room), ...(room.bot && { hostUp: room.bot.connected }) });
 const pushRoom = (room) => toRoom(room, roomMsg(room));
 
 function newCode() {
@@ -190,7 +207,7 @@ function removePlayer(room, id) {
   room.players.delete(id);
   room.loaded.delete(id);
   userRoom.delete(id);
-  if (!room.players.size) { clearTimeout(room.loadTimer); rooms.delete(room.code); return; }
+  if (!room.players.size) { clearTimeout(room.loadTimer); endBot(room); rooms.delete(room.code); return; }
   if (room.host === id) {
     const all = [...room.players.values()];
     room.host = (all.find((q) => q.connected) || all[0]).id;
@@ -208,10 +225,37 @@ function go(room) {
 function checkLoaded(room) {
   if (room.state !== 'loading') return;
   const need = [...room.players.values()].filter((p) => p.connected);
-  if (need.every((p) => room.loaded.has(p.id))) go(room);
+  if (need.every((p) => room.loaded.has(p.id)) && (!room.bot || room.bot.loaded)) go(room);
+}
+
+// ---- server-hosted matches: a headless Chromium (server/host.js) runs the Arena as host; every player is a client ----
+// The host joins as a bot user that is not a room player: negative id, no champion, authenticated by a one-time secret.
+const HOST_URL = process.env.HOST_URL || null;   // page the host loads (default: this server); dev: http://localhost:5173/
+const bots = new Map();   // secret -> { id, code }
+let botSeq = 0, selfPort = 0;
+async function startBot(room) {
+  const secret = crypto.randomBytes(24).toString('hex'), id = -(++botSeq);
+  room.bot = { id, secret, connected: false, loaded: false };
+  bots.set(secret, { id, code: room.code });
+  userRoom.set(id, room.code);
+  const url = new URL(HOST_URL || `http://127.0.0.1:${selfPort}/`); url.searchParams.set('bot', secret);
+  if (process.env.HEADLESS_HOST === 'fake') return;   // fake: server tests connect as the host themselves
+  const e = await openHost(room.code, url.toString());
+  if (room.bot?.id !== id) closeHost(room.code, e);   // the room ended while Chromium was starting: endBot found no page to close
+}
+function endBot(room) {
+  const b = room.bot; if (!b) return;
+  room.bot = null; bots.delete(b.secret); userRoom.delete(b.id);
+  sockets.get(b.id)?.terminate(); sockets.delete(b.id);
+  closeHost(room.code);
 }
 
 function onDisconnect(user) {
+  if (user.bot) {   // the host page lost its socket (crash, closed): players see "anfitrión desconectado" after a while
+    const room = rooms.get(user.room);
+    if (room?.bot?.id === user.id) { room.bot.connected = false; pushRoom(room); }
+    return;
+  }
   const room = rooms.get(userRoom.get(user.id));
   const p = room?.players.get(user.id);
   if (!p) return;
@@ -233,7 +277,9 @@ const needRoom = (ws, user) => {
   return room;
 };
 
+const BOT_MSGS = new Set(['relay', 'loaded', 'host_over']);   // all a host page may send
 const handlers = {
+  ping(ws, user, m) { send(ws, { t: 'pong', ts: Number(m.ts) || 0 }); },
   quick_join(ws, user) {
     if (userRoom.has(user.id)) return err(ws, 'Ya estás en una sala');
     let room = [...rooms.values()].find((r) => r.public && r.state === 'lobby' && r.players.size < MAX_PLAYERS);
@@ -286,26 +332,41 @@ const handlers = {
     if (room.state !== 'lobby') return err(ws, 'La partida ya ha comenzado');
     room.state = 'loading';
     room.loaded = new Set();
-    room.loadTimer = setTimeout(() => go(room), LOAD_MS);
     room.seed = crypto.randomInt(2 ** 31); room.startPlayers = playerList(room);
-    toRoom(room, { t: 'start', seed: room.seed, players: room.startPlayers });
-    pushRoom(room);
+    const begin = () => {
+      if (room.state !== 'loading' || rooms.get(room.code) !== room) return;
+      room.loadTimer = setTimeout(() => go(room), LOAD_MS);
+      toRoom(room, { t: 'start', seed: room.seed, players: room.startPlayers, host: room.host });
+      pushRoom(room);
+    };
+    // 2+ players: the server hosts the match (headless Chromium) and nobody's browser simulates it; solo games stay local as always
+    if (!hostEnabled || room.players.size < 2) return begin();
+    startBot(room).then(() => { if (room.bot) { room.host = room.bot.id; begin(); } },
+      (e) => { console.error(`[host ${room.code}] could not start, the leader hosts:`, e.message); endBot(room); begin(); });
   },
   loaded(ws, user) {
     const room = needRoom(ws, user); if (!room) return;
     if (room.state !== 'loading') return;
-    room.loaded.add(user.id);
+    if (user.bot) { if (room.bot?.id === user.id) room.bot.loaded = true; } else room.loaded.add(user.id);
     checkLoaded(room);
+  },
+  host_over(ws, user) {   // the host's match ended: let the last events reach everyone, then free the Chromium page
+    const room = rooms.get(user.room);
+    if (!user.bot || room?.bot?.id !== user.id || room.state !== 'playing') return;
+    room.state = 'over'; pushRoom(room);
+    setTimeout(() => { if (room.bot?.id === user.id) endBot(room); }, 5000);
   },
   relay(ws, user, m, raw) {
     const room = rooms.get(userRoom.get(user.id));
     if (!room) return;
     if (raw.length > 65536) return err(ws, 'Mensaje demasiado grande');
-    const now = Date.now();
-    if (now - ws.rateAt >= 1000) { ws.rateAt = now; ws.rateN = 0; }
-    if (++ws.rateN > 120) return; // silently drop above 120 msg/s
+    if (!user.bot) {   // the host sends snapshots + events at ~40 msg/s for the whole room: not limited
+      const now = Date.now();
+      if (now - ws.rateAt >= 1000) { ws.rateAt = now; ws.rateN = 0; }
+      if (++ws.rateN > 120) return; // silently drop above 120 msg/s
+    }
     const out = { t: 'relay', from: user.id, data: m.data };
-    if (m.to != null) { if (room.players.has(m.to) && m.to !== user.id) send(sockets.get(m.to), out); }
+    if (m.to != null) { if (m.to !== user.id && (room.players.has(m.to) || m.to === room.bot?.id)) send(sockets.get(m.to), out); }
     else toRoom(room, out, user.id);
   },
   chat(ws, user, m) {
@@ -318,12 +379,15 @@ const handlers = {
 
 // ---------- WebSocket ----------
 const server = http.createServer(app);
-// snapshots are ~4 KB of repetitive JSON at 15 Hz per player: permessage-deflate cuts that to a third at negligible CPU
-const wss = new WebSocketServer({ noServer: true, maxPayload: 70 * 1024, perMessageDeflate: { threshold: 400, zlibDeflateOptions: { level: 3 }, serverNoContextTakeover: true, clientNoContextTakeover: true, concurrencyLimit: 8 } });
+// snapshots are ~4-8 KB of repetitive JSON at 20 Hz per player. permessage-deflate keeps its window between messages (context takeover):
+// each snapshot is mostly the previous one, so it compresses against it (a cheap delta); ~64 KB of zlib state per socket.
+const wss = new WebSocketServer({ noServer: true, maxPayload: 70 * 1024, perMessageDeflate: { threshold: 400, zlibDeflateOptions: { level: 3, memLevel: 7 }, serverNoContextTakeover: false, serverMaxWindowBits: 15, clientNoContextTakeover: true, concurrencyLimit: 8 } });
 
 server.on('upgrade', (req, socket, head) => {
   const url = new URL(req.url, 'http://x');
-  const user = url.pathname === '/ws' ? userFromToken(url.searchParams.get('token') || '') : null;
+  const token = url.searchParams.get('token') || '', bot = bots.get(token);
+  const local = /^(::1|127\.|::ffff:127\.)/.test(req.socket.remoteAddress || '');   // host pages always connect from this machine
+  const user = url.pathname !== '/ws' ? null : bot ? (local ? { id: bot.id, name: 'Servidor', bot: true, room: bot.code } : null) : userFromToken(token);
   if (!user) { socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n'); return socket.destroy(); }
   wss.handleUpgrade(req, socket, head, (ws) => connect(ws, user));
 });
@@ -337,7 +401,14 @@ function connect(ws, user) {
   send(ws, { t: 'hello', user });
   const room = rooms.get(userRoom.get(user.id));
   const p = room?.players.get(user.id);
-  if (p) {
+  if (user.bot) {   // the match host: it gets the start data (it builds the same roster as every player) and is shown as connected
+    if (room?.bot?.id !== user.id) { ws.close(4001, 'gone'); return; }
+    room.bot.connected = true;
+    send(ws, { t: 'start', seed: room.seed, players: room.startPlayers, host: user.id, state: room.state });
+    pushRoom(room);
+  } else if (p && room.state === 'over') {   // came back after the end of the match: out of the room, to the menu
+    removePlayer(room, user.id); send(ws, { t: 'left' });
+  } else if (p) {
     p.connected = true; clearTimeout(p.timer); pushRoom(room);
     // match in progress: hand the player the start data again so a fresh page (refresh / closed tab / new device) drops straight back into the game
     if (room.seed != null && (room.state === 'loading' || room.state === 'playing')) send(ws, { t: 'start', seed: room.seed, players: room.startPlayers, rejoin: true, state: room.state, host: room.host });
@@ -345,9 +416,11 @@ function connect(ws, user) {
 
   ws.on('message', (buf) => {
     const raw = buf.toString();
+    // host broadcasts (snapshots, ~20 per second per match) are forwarded as they are: no parse + re-serialise of a few KB each time
+    if (user.bot && raw.startsWith(HOST_BCAST) && raw.length <= 65536) { const room = rooms.get(user.room); if (room?.bot?.id === user.id) toRoomRaw(room, `{"t":"relay","from":${user.id},"data":${raw.slice(HOST_BCAST.length)}`, user.id); return; }
     let m;
     try { m = JSON.parse(raw); } catch { return err(ws, 'Mensaje no válido'); }
-    const h = m && typeof m.t === 'string' && Object.hasOwn(handlers, m.t) ? handlers[m.t] : null;
+    const h = m && typeof m.t === 'string' && Object.hasOwn(handlers, m.t) && (!user.bot || BOT_MSGS.has(m.t)) ? handlers[m.t] : null;
     if (!h) return err(ws, 'Mensaje desconocido');
     try { h(ws, user, m, raw); } catch (e) { console.error(e); err(ws, 'Error del servidor'); }
   });
@@ -369,14 +442,18 @@ const beat = setInterval(() => {
 beat.unref();
 
 export function start(port = Number(process.env.PORT) || 3001) {
-  return new Promise((resolve) => server.listen(port, () => resolve(server)));
+  return new Promise((resolve) => server.listen(port, () => { selfPort = server.address().port; resolve(server); }));
 }
-export function stop() {
+export async function stop() {
   clearInterval(beat);
   for (const ws of wss.clients) ws.terminate();
+  await stopHosts();
   return new Promise((resolve) => server.close(resolve));
 }
+export const _bots = bots;   // tests: they connect as the host with its secret (HEADLESS_HOST=fake)
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  start().then((s) => console.log(`SUIKA FIGTHER server en http://localhost:${s.address().port}`));
+  start().then((s) => console.log(`SUIKA FIGTHER server en http://localhost:${s.address().port}${hostEnabled ? ' (partidas online alojadas en el servidor)' : ''}`));
+  // puppeteer hooks SIGTERM to close Chromium, which would keep node alive: close the hosts and exit (Railway redeploys)
+  for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { stopHosts().finally(() => process.exit(0)); setTimeout(() => process.exit(0), 5000).unref(); });
 }

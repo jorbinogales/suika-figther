@@ -1,5 +1,7 @@
 // Client side of the launcher server: REST (accounts, news) + one WebSocket (rooms, lobby, relay).
 const LS = 'devbrawl_session';
+// ?bot=<secret>: this page is the server's headless match host (server/host.js), not a player
+export const BOT = new URLSearchParams(location.search).get('bot');
 const store = { get: () => { try { return JSON.parse(localStorage.getItem(LS) || 'null'); } catch (e) { return null; } }, set: v => { try { v ? localStorage.setItem(LS, JSON.stringify(v)) : localStorage.removeItem(LS); } catch (e) { /* ignore */ } } };
 
 export const net = {
@@ -25,9 +27,9 @@ export const net = {
   connect() {
     if (!this.token || this.ws) return;
     const ws = this.ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws?token=${encodeURIComponent(this.token)}`);
-    ws.onopen = () => { this.online = true; this.emit({ t: '_online' }); };
-    ws.onmessage = e => { let m; try { m = JSON.parse(e.data); } catch (x) { return; } if (m.t === 'room') this.room = m; if (m.t === 'left') this.room = null; this.emit(m); };
-    ws.onclose = () => { this.ws = null; this.online = false; this.emit({ t: '_offline' }); if (this.token) this.retry = setTimeout(() => this.connect(), 2000); };
+    ws.onopen = () => { this.online = true; this.emit({ t: '_online' }); if (!BOT) { clearInterval(this.pinger); const ping = () => this.send('ping', { ts: performance.now() }); ping(); this.pinger = setInterval(ping, 2000); } };
+    ws.onmessage = e => { let m; try { m = JSON.parse(e.data); } catch (x) { return; } if (m.t === 'pong') { const r = performance.now() - m.ts, h = this.pings || (this.pings = []); h.push(r); if (h.length > 8) h.shift(); this.ping = Math.round(h.reduce((a, b) => a + b) / h.length); this.pingMax = Math.round(Math.max(...h)); return; } if (m.t === 'room') this.room = m; if (m.t === 'left') this.room = null; this.emit(m); };
+    ws.onclose = () => { clearInterval(this.pinger); this.ping = null; this.pings = []; this.ws = null; this.online = false; this.emit({ t: '_offline' }); if (this.token) this.retry = setTimeout(() => this.connect(), 2000); };
   },
   send(t, o = {}) { if (this.ws?.readyState === 1) this.ws.send(JSON.stringify({ t, ...o })); },
   on(fn) { this.subs.add(fn); return () => this.subs.delete(fn); },

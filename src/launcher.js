@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import './launcher.css';
-import { net } from './net.js';
+import { net, BOT } from './net.js';
 import { STAT_STYLE, statCss, scaleRows, rowStat, pct } from './stats.js';
 import { CHAMPIONS, CLASSES, CLASS_TABS, classLabel, ABILITY_KEYS } from './data.js';
 import { vol, saveVol } from './audio.js';
@@ -190,14 +190,14 @@ function hideLoading() { const e = loadEl; if (!e) return; loadEl = null; e.styl
 
 function rng(seed) { let a = seed | 0; return () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 // canonical roster (identical on every client: same players, same seed): humans by id, then bots for the empty seats so both sides are even
-function buildCfg(players, seed) {
+function buildCfg(players, seed, host = net.room?.host) {
   const rnd = rng(seed), H = t => players.filter(p => p.team === t).sort((a, b) => a.id - b.id), n = Math.max(H(0).length, H(1).length, 1), roster = [];
   for (const t of [0, 1]) {
     const used = []; H(t).forEach(p => { roster.push({ key: p.champ, team: t, pid: p.id }); used.push(p.champ); });
     for (let i = H(t).length; i < n; i++) { const l = KEYS.filter(c => !used.includes(c)), c = (l.length ? l : KEYS)[Math.floor(rnd() * (l.length || KEYS.length))]; used.push(c); roster.push({ key: c, team: t, pid: null }); }
   }
   const me = players.find(p => p.id === net.user.id) || players[0];
-  return { roster, me: me.id, hostId: net.room?.host, team: me.team, player: me.champ, mode: n, haveSprites: scene.registry.get('sprites') };
+  return { roster, me: me.id, hostId: host, team: me.team, player: me.champ, mode: n, haveSprites: scene.registry.get('sprites') };
 }
 
 function beginGame(m) {
@@ -210,7 +210,22 @@ function beginGame(m) {
   const ready = () => { if (sent) return; sent = true; prog(88, 'ESPERANDO A LOS DEMÁS JUGADORES...'); net.send('loaded'); };
   scene.game.events.once('arena-ready', ready);
   setTimeout(() => prog(30, 'CARGANDO CAMPEONES, MAPA Y OBJETOS...'), 300);
-  setTimeout(() => { prog(55, 'CONSTRUYENDO EL MAPA...'); scene.scene.start('arena', { ...buildCfg(players, m.seed ?? 1), rejoin: !!m.rejoin && m.state === 'playing' }); if (m.rejoin && m.state === 'playing') { done = true; setTimeout(hideLoading, 1800); off(); } }, 900);
+  setTimeout(() => { prog(55, 'CONSTRUYENDO EL MAPA...'); scene.scene.start('arena', { ...buildCfg(players, m.seed ?? 1, m.host ?? net.room?.host), rejoin: !!m.rejoin && m.state === 'playing' }); if (m.rejoin && m.state === 'playing') { done = true; setTimeout(hideLoading, 1800); off(); } }, 900);
+}
+
+// server-side match host (?bot=<secret>, see server/host.js): no launcher UI; it connects with its secret, builds the same roster as
+// every player from the start data and runs the arena as host. It reports when it is loaded and when the match is over.
+export function botStart(s) {
+  scene = s; net.token = BOT; let started = false;
+  net.on(m => {
+    if (m.t === 'hello') net.user = m.user;
+    else if (m.t === 'start' && !started && net.user) {
+      started = true;
+      s.game.events.once('arena-ready', () => net.send('loaded'));
+      s.scene.start('arena', { ...buildCfg(m.players, m.seed ?? 1, m.host), me: net.user.id, bot: true, rejoin: m.state === 'playing' });   // me = the host itself: no champion of its own
+    }
+  });
+  net.connect();
 }
 
 /* ---------- routing & events ---------- */

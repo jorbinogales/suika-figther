@@ -6,7 +6,14 @@ import { Audio } from './audio.js';
 import { runChampAi } from './ai.js';
 import { bootScreen } from './bootscreen.js';
 import { NetGame } from './netgame.js';
+import { BOT } from './net.js';
+import { botStart } from './launcher.js';
 import { isWalk } from './mapdata.js';
+
+// experimental 3D view (#3d=1): three.js is only downloaded in that mode (see render3d.js)
+export const R3D_ON = new URLSearchParams(location.hash.slice(1)).get('3d') === '1';
+let Render3D = null;
+const r3dLoad = R3D_ON ? import('./render3d.js').then(m => { Render3D = m.Render3D; }) : null;
 
 const VIEW_H = 640;   // world units visible vertically at zoom 1 (zoom scales this to the window height)
 const LANE_MID = (LANE_Y0 + LANE_Y1) / 2;
@@ -105,6 +112,7 @@ export class Boot extends Phaser.Scene {
   }
 
   finish(sprites) {
+    if (r3dLoad && !Render3D) { r3dLoad.then(() => this.finish(sprites)); return; }   // 3D mode: wait for three.js
     VFX.forEach(n => this.anims.create({ key: 'vfx_' + n, frames: this.anims.generateFrameNumbers('vfx_' + n), frameRate: 18, repeat: -1 }));
     for (const ch in sprites) for (const a in sprites[ch])
       this.anims.create({ key: `${ch}_${a}`, frames: this.anims.generateFrameNumbers(`${ch}_${a}`), frameRate: ANIM_FPS[a] || 10, repeat: LOOPS.has(a) ? -1 : 0 });
@@ -117,6 +125,7 @@ export class Boot extends Phaser.Scene {
     this.registry.set('sprites', sprites);
     const h = new URLSearchParams(location.hash.slice(1));
     bootScreen.progress(100, 'LISTO');
+    if (BOT) return botStart(this);   // server-side match host: joins its room and starts the arena when the server says so
     if (location.hash) setTimeout(() => bootScreen.hide(), 300);   // test links go straight into the arena
     if (!location.hash) this.scene.start('launcher');   // no test hash: launcher
     else this.scene.start('arena', { allies: h.get('allies') ? h.get('allies').split(',') : (+h.get('mode') > 1 ? ['luis', 'xeviche', 'julio', 'axel'].slice(0, +h.get('mode') - 1) : []), enemies: h.get('enemies') ? h.get('enemies').split(',') : (+h.get('mode') > 1 ? ['hector', 'jorbi', 'eliud', 'leandro', 'luis'].slice(0, +h.get('mode')) : null), player: h.get('char') || 'leandro', enemy: h.get('enemy'), team: +(h.get('team') || 0), training: !!h.get('train'), haveSprites: sprites });
@@ -134,6 +143,7 @@ export class Arena extends Phaser.Scene {
     this.sprites = data.haveSprites || this.registry.get('sprites') || {};
     this.paused = false; this.over = null; this.feed = []; this.cfg = data; this.nidNext = 1000; this.byNid = new Map(); this.net = null;
     this.debugFree = false;
+    this.bot = !!data.bot;   // headless match host on the server (?bot=): simulates for everyone, has no player, draws nothing
   }
 
   get pc() { return this.ctrl && this.ctrl.alive ? this.ctrl : this.player; }
@@ -145,7 +155,9 @@ export class Arena extends Phaser.Scene {
     this.fighters = []; this.projs = []; this.obstacles = []; this.audio = new Audio(this); this.audio.music('music_game'); this.events.once('shutdown', () => { this.audio.stopMusic(); this.audio.clearVoice(); }); this.timers = []; this.zones = []; this.castCtx = null; this.mortars = []; this.chains = []; this.eggs = []; this.spears = []; this.packages = []; this.grenades = []; this.towerRings = new Map(); this.control = null; this.ctrl = null; this.aimObjs = {}; this.rangeObjs = {}; this.gfx = null;
     this.rangeG = this.add.graphics();
     this.buildPlaceholderTextures();
-    this.buildMap();
+    this.r3d = R3D_ON && Render3D ? new Render3D(this) : null;
+    if (this.r3d) this.events.once('shutdown', () => { this.r3d?.destroy(); this.r3d = null; });
+    else if (!this.bot) this.buildMap();   // the 3D view draws its own ground and forest; the headless host needs no scenery (it is pure decoration)
 
     const my = this.myTeam, dflt = CHAMP_ORDER[(CHAMP_ORDER.indexOf(this.playerKey) + 1) % CHAMP_ORDER.length];
     const enemyKeys = this.enemyKeys && this.enemyKeys.length ? this.enemyKeys : [this.enemyKey || dflt], allyKeys = this.training ? [] : this.allyKeys;
@@ -199,7 +211,7 @@ export class Arena extends Phaser.Scene {
     this.setupCamps();
     this.setupNet();
     this.debugScenario();
-    if (!this.scene.isActive('hud')) this.scene.launch('hud');
+    if (!this.bot && !this.scene.isActive('hud')) this.scene.launch('hud');
     this.game.events.emit('arena-ready');   // the launcher's loading screen waits for this
   }
 
@@ -207,7 +219,7 @@ export class Arena extends Phaser.Scene {
      Enemy units are only shown while one of your units sees them (sight radius per unit type). The whole map is known (dimmed outside your sight).
      A 128x60 canvas (25 world units per texel, smoothly scaled) is the overlay; the same texture dims the minimap. Off in the training zone (and with #nofog). */
   setupFog() {
-    this.fogOn = !this.training && !new URLSearchParams(location.hash.slice(1)).has('nofog'); this.fog = null;
+    this.fogOn = !this.training && !this.bot && !new URLSearchParams(location.hash.slice(1)).has('nofog'); this.fog = null;
     if (!this.fogOn) return;
     const FW = 256, FH = 120;   // 12.5 world units per texel
     if (this.textures.exists('fogmask')) this.textures.remove('fogmask');
@@ -283,6 +295,7 @@ export class Arena extends Phaser.Scene {
   buildPlaceholderTextures() {
     const mk = (key, w, h, draw) => {
       if (this.textures.exists(key)) return;
+      if (this.bot) { this.textures.createCanvas(key, w, h); return; }   // headless host: no renderer to draw with; the key just has to exist
       const g = this.make.graphics({ x: 0, y: 0, add: false });
       draw(g); g.generateTexture(key, w, h); g.destroy();
     };
@@ -459,7 +472,7 @@ export class Arena extends Phaser.Scene {
     const k = this.k, p = this.pc, J = Phaser.Input.Keyboard.JustDown, d = (a, b) => (a.isDown || b.isDown ? 1 : 0);
     p.in = { mx: d(k.right, k.right2) - d(k.left, k.left2), my: d(k.down, k.down2) - d(k.up, k.up2), run: k.run.isDown };
     if (this.mouseSeen) {
-      const m = this.input.activePointer.positionToCamera(this.cameras.main);
+      const m = this.cursorWorld();
       const ptr0 = this.input.activePointer, onUi = (this.uiRects || []).some(r => ptr0.x >= r.x && ptr0.x <= r.x + r.w && ptr0.y >= r.y && ptr0.y <= r.y + r.h);
       if (p.state !== 'cast' && !onUi) p.setAim(m.x - p.x, m.y - p.cy);   // keep the last aim while the cursor is over the HUD
     } else if ((p.in.mx || p.in.my) && p.state !== 'cast') p.setAim(p.in.mx, p.in.my);
@@ -468,8 +481,8 @@ export class Arena extends Phaser.Scene {
     this.prevLeft = left; this.prevRight = right;
     if (p.bomber) { p.in = { mx: 0, my: 0, run: false }; ['p3', 'ult'].forEach(a => J(k[a]) && this.beginAim(a)); return; }   // aboard: clicks / Q fire in updateBomber; E and R are cast here
     if (leftClick && !overUi && !this.aimKey) {   // click on a champion selects it (info panel, top-right)
-      const m = ptr.positionToCamera(this.cameras.main);
-      const hit = this.fighters.find(f => f.isChamp && !f.hiddenFor(this.player) && Math.abs(m.x - f.x) < 48 && m.y > f.y - f.def.height - 10 && m.y < f.y + 15);
+      const m = this.cursorWorld(ptr);
+      const hit = this.fighters.find(f => f.isChamp && !f.hiddenFor(this.player) && (this.r3d ? this.r3d.hitTest(f, ptr.x, ptr.y) : Math.abs(m.x - f.x) < 48 && m.y > f.y - f.def.height - 10 && m.y < f.y + 15));
       this.selected = hit || null;
     }
     // powers: 1st press/click shows the preview, 2nd click (or same key) casts, right click / ESC cancels
@@ -487,8 +500,14 @@ export class Arena extends Phaser.Scene {
   }
 
   /* ---------- aiming (preview before casting) ---------- */
+  // cursor in world coordinates, read at the controlled champion's chest height like the 2D view does
+  // (3D: the ground point under the cursor, raised to that same chest-height convention so every caller keeps its math)
+  cursorWorld(ptr = this.input.activePointer) {
+    if (!this.r3d) return ptr.positionToCamera(this.cameras.main);
+    const g = this.r3d.groundAt(ptr.x, ptr.y); return { x: g.x, y: g.y - this.pc.def.height * 0.6 };
+  }
   mouseGround() {   // cursor is read at chest height, so the ground point sits below it
-    const m = this.input.activePointer.positionToCamera(this.cameras.main), p = this.pc;
+    const m = this.cursorWorld(), p = this.pc;
     return { x: m.x, y: m.y + p.def.height * 0.6 };
   }
   beginAim(a) {
@@ -934,7 +953,7 @@ export class Arena extends Phaser.Scene {
       const cx = sh.x, cy = sh.y - 90, under = this.fighters.some(f => f.alive && !f.away && !f.drop && Math.abs(f.x - cx) < 210 && Math.abs((f.y - f.def.height * 0.5) - cy) < 150);
       sh.vis = Phaser.Math.Linear(sh.vis ?? 1, under ? 0.12 : 1, Math.min(1, dt * 8));
       if (sh.img) { const k = 380 / sh.img.width; sh.img.setPosition(sh.x, sh.y - 90).setScale(k).setAlpha(a * sh.vis); }
-      sh.g ||= this.add.graphics().setDepth(99949); const g = sh.g; g.clear();
+      sh.g ||= Object.assign(this.add.graphics().setDepth(99949), { __anchor: sh }); const g = sh.g; g.clear();   // __anchor: upright drawing around that point (3D view)
       const a0 = a; 
       if (!has) { const a = a0 * (sh.vis ?? 1), col = sh.team === 0 ? 0x6a7a68 : 0x2a2224, ac = sh.team === 0 ? 0x66e0ff : 0xff4a3a; g.fillStyle(col, a).fillEllipse(sh.x, sh.y - 90, 380, 190).fillStyle(0x111111, a).fillEllipse(sh.x, sh.y - 60, 170, 60).fillStyle(ac, a * (0.6 + 0.4 * Math.sin(sh.t * 8))).fillCircle(sh.x - 140, sh.y - 80, 14).fillCircle(sh.x + 140, sh.y - 80, 14); }
       this.campShadow ||= this.add.graphics().setDepth(-860);
@@ -960,6 +979,7 @@ export class Arena extends Phaser.Scene {
     const m = (this.tmLabels ||= {}); let t = m[id];
     if (!t?.scene) t = m[id] =this.add.text(0, 0, '', { fontFamily: 'monospace', fontSize: '15px', fontStyle: 'bold', stroke: '#000', strokeThickness: 4 }).setOrigin(0.5).setDepth(100001);
     if (!show || !this.inView(x, y, 120)) return t.setVisible(false);
+    if (this.r3d) { t.__ov = true; t.__w = { x, y }; }
     return t.setVisible(true).setText(text).setColor(color).setPosition(x, y);
   }
   drawTimers() {
@@ -1208,13 +1228,16 @@ export class Arena extends Phaser.Scene {
         }
         if (B.t >= 0.9) { ship.destroy(); B.shadow.destroy(); B.ship = null; B.phase = 'fly'; B.t = 0; o.state = 'idle'; o.stateDur = 0; this.snapZoom = true; if (o === this.pc) this.cameras.main.fadeIn(1100, 0, 0, 0); }   // fade in on the global view
       } else if (B.phase === 'fly') {
-        const human = o === this.pc && !o.ai;
+        const human = o === this.pc && !o.ai && !this.bot;
         let fire = false;
+        const rb = !human && o.pid != null && this.net?.role === 'host' ? this.net.remote.get(o.pid) : null, aim = rb && !rb.off && this.net.clock - rb.at < 1 ? rb.bp : null;   // a remote player aims his own reticle
         if (human) {
           const K = this.k, dn = (a, b) => (a.isDown || b.isDown ? 1 : 0), mx = dn(K.right, K.right2) - dn(K.left, K.left2), my = dn(K.down, K.down2) - dn(K.up, K.up2), sp = 520 * dt / (Math.hypot(mx, my) || 1);   // the reticle is the center of the view; WASD slides the view
           B.pt = { x: Phaser.Math.Clamp(B.pt.x + mx * sp, 60, WORLD_W - 60), y: Phaser.Math.Clamp(B.pt.y + my * sp, WALK_Y0, WALK_Y1) };
           fire = (this.k.p1.isDown || this.input.activePointer.leftButtonDown()) && !(this.uiRects || []).some(r => this.input.activePointer.x >= r.x && this.input.activePointer.x <= r.x + r.w && this.input.activePointer.y >= r.y && this.input.activePointer.y <= r.y + r.h);
-        } else {   // bots and remote players: bomb the nearest enemy champion
+          B.fire = fire;   // online client: sent to the host with the inputs
+        } else if (aim) { B.pt = { x: Phaser.Math.Clamp(aim[0], 60, WORLD_W - 60), y: Phaser.Math.Clamp(aim[1], WALK_Y0, WALK_Y1) }; fire = !!aim[2]; }
+        else {   // bots and remote players: bomb the nearest enemy champion
           const t = this.enemiesOf(o).filter(f => f.isChamp && f.alive && !f.away).sort((p, q) => dist(p, o) - dist(q, o))[0];
           if (t) { B.pt = { x: t.x + (Math.random() - 0.5) * 60, y: t.y + (Math.random() - 0.5) * 40 }; fire = true; if (o.ranks.p3 && o.cds.p3 <= 0) o.tryCast('p3'); if (o.ranks.ult && o.cds.ult <= 0) o.tryCast('ult'); }
         }
@@ -1473,8 +1496,9 @@ export class Arena extends Phaser.Scene {
     if (d > 40) f.setAim(wx, wy);   // keeps its last facing while parked (no flipping)
   }
   laser(f, t, dmg) {
-    const g = this.add.graphics().setDepth(100000), x0 = f.x + f.ax * 18, y0 = f.y - f.def.height * 0.55, x1 = t.x, y1 = t.y - t.def.height * 0.5;
+    const g = Object.assign(this.add.graphics().setDepth(100000), { __anchor: f }), x0 = f.x + f.ax * 18, y0 = f.y - f.def.height * 0.55, x1 = t.x, y1 = t.y - t.def.height * 0.5;
     g.lineStyle(7, 0x33ff88, 0.5).lineBetween(x0, y0, x1, y1).lineStyle(2, 0xffffff, 0.95).lineBetween(x0, y0, x1, y1);
+    if (this.r3d) { g.__hide3d = true; this.r3d.vfx3d.beam(x0, f.def.height * 0.55, f.y + f.ay * 18, x1, t.def.height * 0.5, t.y, 0x33ff88); }   // 3D view: a real beam
     this.tweens.add({ targets: g, alpha: 0, duration: 160, onComplete: () => g.destroy() });
     this.vfx('spark', x1, y1, { scale: 2, tint: 0x66ffaa });
     const pb = this.basicDmg; this.basicDmg = true; this.damage(f, t, dmg, 'magic'); this.basicDmg = pb;
@@ -1487,7 +1511,7 @@ export class Arena extends Phaser.Scene {
   startControl(luis, t, dur) {
     if (this.net?.role === 'client') return;   // online: only the host runs it; clients receive it in the snapshot
    // Luis vanishes; his target fights for him. 'ctrl' = the local player drives it, 'remote' = another human (online) drives it, 'charm' = the AI does
-    const mode = luis === this.player ? 'ctrl' : luis.pid != null && this.net ? 'remote' : 'charm';
+    const mode = luis === this.player && !this.bot ? 'ctrl' : luis.pid != null && this.net ? 'remote' : 'charm';
     this.control = { luis, target: t, t: dur, origin: { x: luis.x, y: luis.y }, mode };
     luis.away = true; luis.pending = null; luis.state = 'idle'; luis.in = { mx: 0, my: 0, run: false };
     t.team = luis.baseTeam; t.pending = null; t.stunT = 0; if (t.state === 'cast') { t.state = 'idle'; t.playAnim('idle'); }
@@ -1506,6 +1530,7 @@ export class Arena extends Phaser.Scene {
   }
   ghost(f) {   // silhouette left behind by an invisible Luis
     const s = f.spr, g = this.add.sprite(s.x, s.y, s.texture.key, s.frame.name).setOrigin(s.originX, s.originY).setScale(s.scaleX, s.scaleY).setFlipX(s.flipX).setDepth(f.y - 2).setTint(0x30ff90).setAlpha(0.55);
+    g.__hide3d = true;   // a copy of the 2D sprite: meaningless in the 3D view
     this.tweens.add({ targets: g, alpha: 0, duration: 1400, onComplete: () => g.destroy() });
   }
   drawTowerRanges() {   // sparse, stationary arcs at the attack limit of nearby towers
@@ -1542,7 +1567,7 @@ export class Arena extends Phaser.Scene {
   /* ---------- Héctor: chains + fire trail ---------- */
   chainShot(o, a, rank) {
     const hook = this.add.image(o.x, o.y, 'chain_hook').setDepth(100000); hook.setScale(60 / Math.max(hook.width, hook.height));
-    this.chains.push({ ctx: this.castCtx, owner: o, hook, g: this.add.graphics().setDepth(99999), ax: o.ax, ay: o.ay, x: o.x, y: o.y - o.def.height * 0.55, ox: o.x, oy: o.y, range: a.range, speed: a.speed, phase: 'out', target: null,
+    this.chains.push({ ctx: this.castCtx, owner: o, hook, g: Object.assign(this.add.graphics().setDepth(99999), { __anchor: o }), ax: o.ax, ay: o.ay, x: o.x, y: o.y - o.def.height * 0.55, ox: o.x, oy: o.y, range: a.range, speed: a.speed, phase: 'out', target: null,
       dmg: rk(a.dmg, rank) + o.atk * a.atkScale, stun: rk(a.stun, rank) });
   }
   firePatch(o, x, y, dmg, life) {
@@ -1856,6 +1881,7 @@ export class Arena extends Phaser.Scene {
   }
   nearPath(pts, x, y, r) { for (let i = 1; i < pts.length; i++) if (segDist(pts[i - 1].x, pts[i - 1].y, pts[i].x, pts[i].y, x, y) <= r) return true; return false; }
   inkTrail(pts, width, life) {   // pixel-art ink stroke on the ground (canvas rendered at 2px per pixel), revealed along the path, then fades
+    if (this.bot) return;   // pure decoration (and the headless host has no renderer to upload the canvas to)
     const K = 2, m = width * 0.9 + 12, r = width / 2;
     let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
     pts.forEach(q => { x0 = Math.min(x0, q.x); y0 = Math.min(y0, q.y); x1 = Math.max(x1, q.x); y1 = Math.max(y1, q.y); });
@@ -1891,17 +1917,19 @@ export class Arena extends Phaser.Scene {
     this.tweens.add({ targets: im, alpha: 0, delay: life * 1000, duration: 500, onComplete: () => { im.destroy(); this.textures.remove(key); } });
   }
 
-  inView(x, y, m = 160) { const v = this.cameras.main.worldView; return x > v.x - m && x < v.right + m && y > v.y - m && y < v.bottom + m; }
+  inView(x, y, m = 160) { if (this.bot) return false; const v = this.cameras.main.worldView; return x > v.x - m && x < v.right + m && y > v.y - m && y < v.bottom + m; }
   float(x, y, text, color = '#fff') {
     if (!this.inView(x, y) || (this.floatN || 0) >= 36) return;   // nobody sees floating text far from the camera; also cap how many exist at once (each is a canvas texture)
     this.floatN = (this.floatN || 0) + 1;
     const t = this.add.text(x, y, text, { fontFamily: 'monospace', fontSize: 16, fontStyle: 'bold', color, stroke: '#000', strokeThickness: 3 })
       .setOrigin(0.5).setDepth(100000);
-    this.tweens.add({ targets: t, y: y - 36, alpha: 0, duration: 900, onComplete: () => { t.destroy(); this.floatN--; } });
+    if (this.r3d) Object.assign(t, { __ov: true, __w: { x, y }, __rise: 0 });   // 3D: anchored on the ground point, rises in screen space
+    this.tweens.add({ targets: t, ...(this.r3d ? { __rise: 36 } : { y: y - 36 }), alpha: 0, duration: 900, onComplete: () => { t.destroy(); this.floatN--; } });
   }
 
   vfx(name, x, y, { scale = 3, alpha = 1, tint = null, below = false } = {}) {
     if (!this.inView(x, y, 260)) return null;   // effects outside the camera are never seen: do not even create them
+    if (this.r3d?.vfx3d.vfx(name, x, y, { scale, alpha, tint, below })) return null;   // 3D view: drawn as a 3D effect instead (vfx3d.js)
     const s = this.add.sprite(x, y, 'vfx_' + name).setScale(scale, name === 'shockwave' ? scale * YR : scale).setDepth(below ? y - 2 : y + 2).setAlpha(alpha);
     if (tint) s.setTint(tint);
     s.play({ key: 'vfx_' + name, repeat: 0 });
@@ -2019,9 +2047,12 @@ export class Arena extends Phaser.Scene {
     this.cameras.main.setZoom(this.zoom);
     if (aboard) { this.camTarget.x = bm.pt.x; this.camTarget.y = bm.pt.y; this.cameras.main.centerOn(bm.pt.x, bm.pt.y); } else { this.camTarget.x = this.pc.x; this.camTarget.y = this.pc.y - 30; }
     if (this.snapZoom) { this.snapZoom = false; this.cameras.main.centerOn(this.camTarget.x, this.camTarget.y); }
+    this.r3d?.camera3d();   // before input (ground picking) and the overlays use it
 
+    if (!this.bot) {   // the headless host has no player of its own: every champion is a remote player or the AI
     if (this.ctrl || this.over) this.player.in = { mx: 0, my: 0, run: false };
     if (this.over) this.player.in = { mx: 0, my: 0, run: false }; else if (this.player.charmT > 0 && this.net?.role !== 'client') this.runAi(this.player, dt); else if (this.net && (this.paused || this.player.charmT > 0 || (this.control?.mode === 'remote' && this.control.target === this.player))) this.player.in = { mx: 0, my: 0, run: false }; else this.handleInput();
+    }
     this.net?.pre(dt);
     const due = []; this.timers = this.timers.filter(t => ((t.t -= dt) > 0) || (due.push(t), false)); due.forEach(t => { this.castCtx = t.ctx || null; t.fn(); this.castCtx = null; });
     if (this.training && this.enemy.alive && this.enemy.hp < this.enemy.maxHp) this.enemy.hp = Math.min(this.enemy.maxHp, this.enemy.hp + this.enemy.maxHp * 0.12 * dt);   // dummy regenerates
@@ -2035,7 +2066,7 @@ export class Arena extends Phaser.Scene {
     this.fighters.forEach(f => f.update(dt));
     this.fighters.forEach(f => f.alive && !f.isTower && !f.def.static && f.def.bot !== 'wall' && this.resolveSolids(f));
     // AI champions spend their skill points (ultimate first when available)
-    this.champs.forEach(e => { if (e === this.player || e.pid != null || this.net?.role === 'client') return; while (e.points > 0) { const open = ABILITY_KEYS.filter(a => e.canSpend(a)); if (!open.length) break; e.spend(open.includes('ult') ? 'ult' : open[Math.random() * open.length | 0]); } });
+    this.champs.forEach(e => { if ((e === this.player && !this.bot) || e.pid != null || this.net?.role === 'client') return; while (e.points > 0) { const open = ABILITY_KEYS.filter(a => e.canSpend(a)); if (!open.length) break; e.spend(open.includes('ult') ? 'ult' : open[Math.random() * open.length | 0]); } });
     if (this.control && this.net?.role !== 'client') { this.control.t -= dt; if (this.control.t <= 0 || !this.control.target.alive || !this.control.luis.alive) this.endControl(); }
     this.updateEliud(dt);
     this.updateMortars(dt);
@@ -2044,20 +2075,23 @@ export class Arena extends Phaser.Scene {
     this.updateProjectiles(dt);
     this.obstacles = this.obstacles.filter(o => { if (o.f && (!o.f.alive || o.f.dispose || !this.fighters.includes(o.f))) return false; /* the panel is gone (destroyed, expired or removed): its collision goes with it */ o.left -= dt; if (o.left <= 0) { o.s.destroy(); return false; } return true; });
     this.fighters = this.fighters.filter(f => { if (f.dispose) { f.destroy(); return false; } return true; });
-    this.fighters.forEach(f => f.render(time));
-    this.drawBars();
-    this.drawFountain();
-    this.drawTowerRanges();
-    this.drawAim();
-    this.drawRangeHint();
-    this.drawRewind(dt);
+    if (!this.bot) {   // drawing only (the headless host skips it; the gameplay below stays)
+      this.fighters.forEach(f => f.render(time));
+      this.drawBars();
+      this.drawFountain();
+      this.drawTowerRanges();
+      this.drawAim();
+      this.drawRangeHint();
+      this.drawRewind(dt);
+    }
     this.drawCamps(dt);
     this.drawYonaiker();
     this.drawJunior(dt); this.updateHarem(dt); this.updateBomber(dt); this.updateSupport(dt);
-    this.drawPassiveFx();
+    if (!this.bot) this.drawPassiveFx();
     if (this.rwGlow) { this.rwGlow.t -= dt; this.rwGlow.hg -= dt; if (this.rwGlow.t <= 0) this.rwGlow = null; }
     this.updateFog(dt);
     this.net?.post(dt);
+    this.r3d?.sync(dt);
   }
 
   updateZones(dt) {
@@ -2192,19 +2226,20 @@ export class Arena extends Phaser.Scene {
 
   /* ---------- bars above heads: HP + mana (champions), HP only (bots) ---------- */
   drawBars() {
-    if (!this.gfx) this.gfx = this.add.graphics().setDepth(99999);
+    if (!this.gfx) this.gfx = Object.assign(this.add.graphics().setDepth(99999), { __ov: !!this.r3d });   // 3D: drawn by the overlay camera
     const g = this.gfx; g.clear();
-    const me = this.player;
+    const me = this.player, ov = !!this.r3d;
     for (const f of this.fighters) {
       const champ = f.isChamp;
       if (f.hiddenFor(me) || this.blindVis(f) <= 0) { f.bt && Object.values(f.bt).forEach(t => t.setVisible(false)); f.invIc?.setVisible(false); f.poisIc?.setVisible(false); continue; }
       if (champ && !f.bt) {
-        const mk = () => { const t = this.add.text(0, 0, '', { fontFamily: 'monospace', fontSize: '10px', fontStyle: 'bold', color: '#fff', stroke: '#000', strokeThickness: 3, resolution: 3 }).setOrigin(0.5).setDepth(100000); t.texture.setFilter(Phaser.Textures.FilterMode.LINEAR); return t; };
+        const mk = () => { const t = this.add.text(0, 0, '', { fontFamily: 'monospace', fontSize: '10px', fontStyle: 'bold', color: '#fff', stroke: '#000', strokeThickness: 3, resolution: 3 }).setOrigin(0.5).setDepth(100000); t.texture.setFilter(Phaser.Textures.FilterMode.LINEAR); t.__ov = ov; return t; };
         f.bt = { hp: mk(), mp: mk(), name: mk(), lvl: mk() };
       }
       if (!f.alive) { f.bt && Object.values(f.bt).forEach(t => t.setVisible(false)); f.invIc?.setVisible(false); f.poisIc?.setVisible(false); continue; }
-      const w = champ ? 96 : f.isNexus ? 160 : f.isTower ? 90 : 36, h = champ ? 12 : f.isNexus ? 14 : f.isTower ? 9 : 6, x = f.x - w / 2, mh = 8, xh = 4;
-      const y = f.y - f.def.height - (champ ? 38 : 14);
+      const hd = this.r3d ? this.r3d.headOv(f) : null, hx = hd ? hd.x : f.x, hy = hd ? hd.y : f.y - f.def.height;   // top of the head (3D: projected to the screen)
+      const w = champ ? 96 : f.isNexus ? 160 : f.isTower ? 90 : 36, h = champ ? 12 : f.isNexus ? 14 : f.isTower ? 9 : 6, x = hx - w / 2, mh = 8, xh = 4;
+      const y = hy - (champ ? 38 : 14);
       g.fillStyle(0x000000, 0.75).fillRect(x - 2, y - 2, w + 4, h + 4 + (champ ? mh + 2 : 0));
       const sh = f.shieldHp > 0 ? f.shieldHp : 0, tot = Math.max(f.maxHp, f.hp + sh);
       g.fillStyle(0x3a1414).fillRect(x, y, w, h).fillStyle(f.team === me.baseTeam ? 0x3ddc84 : 0xff5252).fillRect(x, y, w * f.hp / tot, h);
@@ -2218,17 +2253,17 @@ export class Arena extends Phaser.Scene {
         const gx = x - 17, gy = y + (h + mh + 2) / 2;
         levelGauge(g, gx, gy, 12, f.level >= 12 ? 1 : f.xp / f.xpNeed, 4);
         f.bt.lvl.setVisible(true).setText(`${f.level}`).setPosition(gx, gy).setFontSize(11);
-        f.bt.hp.setVisible(true).setText(`${Math.ceil(f.hp)}/${Math.ceil(f.maxHp)}`).setPosition(f.x, y + h / 2).setFontSize(10);
-        f.bt.mp.setVisible(true).setText(`${f.def.charge ? Math.floor(f.charge) + '%' : f.isRage ? Math.floor(f.hen ? f.henHp : f.rage) : Math.floor(f.mana)}`).setPosition(f.x, y + h + 2 + mh / 2).setFontSize(8);
-        f.bt.name.setVisible(true).setText(`${f.def.name}`).setPosition(f.x, y - 11).setColor(f === me ? '#7dff9a' : f.team === me.baseTeam ? '#8ab4ff' : '#ff8a8a');
+        f.bt.hp.setVisible(true).setText(`${Math.ceil(f.hp)}/${Math.ceil(f.maxHp)}`).setPosition(hx, y + h / 2).setFontSize(10);
+        f.bt.mp.setVisible(true).setText(`${f.def.charge ? Math.floor(f.charge) + '%' : f.isRage ? Math.floor(f.hen ? f.henHp : f.rage) : Math.floor(f.mana)}`).setPosition(hx, y + h + 2 + mh / 2).setFontSize(8);
+        f.bt.name.setVisible(true).setText(`${f.def.name}`).setPosition(hx, y - 11).setColor(f === me ? '#7dff9a' : f.team === me.baseTeam ? '#8ab4ff' : '#ff8a8a');
       }
       if (f.pkBuffs) { let n = 0; const C = { hp: 0x5dff8a, atk: 0xff7a5a, aspd: 0xffd23f, def: 0x7ee0ff }; for (const k in f.pkBuffs) { g.fillStyle(0x000000, 0.8).fillRect(x + n * 14 - 1, y + h + (champ ? 20 : 4) , 12, 6).fillStyle(C[k]).fillRect(x + n * 14, y + h + (champ ? 21 : 5), 10 * Math.max(0, f.pkBuffs[k].t / f.pkBuffs[k].T), 4); n++; } }
       const nb = (f.ride ? 1 : 0) + (f.flame ? 1 : 0), sb = champ && f.shieldHp > 0 && f.shieldMaxT > 0;   // white duration bars stack under the mana bar
       if (sb) { const by = y + h + mh + 3 + nb * 7; g.fillStyle(0x000000, 0.75).fillRect(x - 2, by, w + 4, 6).fillStyle(0xffffff).fillRect(x, by + 1, w * Phaser.Math.Clamp(f.shieldT / f.shieldMaxT, 0, 1), 3); }
-      if (champ && f.poisoned) { const pi = (f.poisIc ||= this.add.image(0, 0, 'icon_poison').setDepth(100001).setDisplaySize(14, 14)); pi.setVisible(true).setPosition(x + 8, y + h + mh + 9 + (nb + (sb ? 1 : 0)) * 7); } else f.poisIc?.setVisible(false);   // poisoned: icon under the mana bar
-      if (champ && f.arepaUp) { const ic = (f.invIc ||= this.add.image(0, 0, 'icon_invul').setDepth(100001).setDisplaySize(22, 22)); ic.setVisible(true).setPosition(x + w + 16, y + h / 2 + 4); } else f.invIc?.setVisible(false);   // invulnerable: yellow aura icon by the bars
+      if (champ && f.poisoned) { const pi = (f.poisIc ||= Object.assign(this.add.image(0, 0, 'icon_poison').setDepth(100001).setDisplaySize(14, 14), { __ov: ov })); pi.setVisible(true).setPosition(x + 8, y + h + mh + 9 + (nb + (sb ? 1 : 0)) * 7); } else f.poisIc?.setVisible(false);   // poisoned: icon under the mana bar
+      if (champ && f.arepaUp) { const ic = (f.invIc ||= Object.assign(this.add.image(0, 0, 'icon_invul').setDepth(100001).setDisplaySize(22, 22), { __ov: ov })); ic.setVisible(true).setPosition(x + w + 16, y + h / 2 + 4); } else f.invIc?.setVisible(false);   // invulnerable: yellow aura icon by the bars
       if (f.stunT > 0) g.fillStyle(0xffd23f).fillRect(x, y - 6, w * Math.min(1, f.stunT / 2), 3);
-      if (f.ink) { g.fillStyle(0x1d0f4a).fillCircle(f.x, y - 14, 7).fillStyle(0x8a5cff).fillCircle(f.x - 2, y - 16, 2.5); }
+      if (f.ink) { g.fillStyle(0x1d0f4a).fillCircle(hx, y - 14, 7).fillStyle(0x8a5cff).fillCircle(hx - 2, y - 16, 2.5); }
       const ly = y + h + (champ ? mh + 4 : 2);
       if (f.slows.length) g.fillStyle(0x6ec6ff).fillRect(x, ly, w * 0.3, 2);
       if (f.poisons.length) g.fillStyle(0x9be37a).fillRect(x + w * 0.35, ly, w * 0.3, 2);
