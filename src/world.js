@@ -1157,8 +1157,7 @@ export class Arena extends Phaser.Scene {
     for (const f of this.fighters) if (f.fist && (f.fist.t -= dt) <= 0) f.fist = null;
   }
   /* ---------- Xeviche: Karis Harem ---------- */
-  startHarem(o, a, rank, T) {
-    if (this.net?.role === 'client') return;
+  startHarem(o, a, rank, T) {   // online clients run it too, for the helpers / beam / banner: the beam damage is host-only (updateHarem)
     const H = { o, t: T, T, ax: o.ax, ay: o.ay, L: a.length, W: a.width, dps: rk(a.dps, rank) + o.ap * a.apScale, tick: 0, age: 0, helpers: [], beam: null };
     const px = -H.ay, py = H.ax;
     [-1, 0, 1].forEach((k, i) => {
@@ -1185,7 +1184,7 @@ export class Arena extends Phaser.Scene {
         const b = H.beam.setPosition(ox, oy).setRotation(Math.atan2(H.ay * YR, H.ax)).setDepth(99000).setAlpha(0.85 + 0.15 * Math.sin(this.time.now / 50));
         b.setDisplaySize(H.L, H.W * 0.8); if (b.setFrame) b.setFrame(Math.floor(this.time.now / 60) % (this.textures.get('st_beam_harem').frameTotal - 1));
         if (Math.random() < 0.5 && this.inView(ox, o.y, 500)) this.vfx('spark', ox + H.ax * Math.random() * H.L, o.y + H.ay * Math.random() * H.L * YR - 30, { scale: 2, tint: 0xffe27a });
-        if ((H.tick -= dt) <= 0) {
+        if (this.net?.role !== 'client' && (H.tick -= dt) <= 0) {
           H.tick = 0.25;
           this.enemiesOf(o).forEach(t => { const dx = t.x - o.x, dy = t.y - o.y, along = dx * H.ax + dy * H.ay, side = Math.abs(dx * -H.ay + dy * H.ax); if (along > 40 && along < H.L + 40 && side < H.W / 2 + t.br) { this.damage(o, t, H.dps * 0.25, 'magic'); t.slow(0.45, 0.4); } });
         }
@@ -1363,8 +1362,7 @@ export class Arena extends Phaser.Scene {
       this.damage(o, t, dps * 0.25, 'physical', true); t.burn(dps * 0.6, burn, o);
     });
   }
-  startBombardment(o, x, y, r, time, dmg, a) {
-    if (this.net?.role === 'client') return;
+  startBombardment(o, x, y, r, time, dmg, a) {   // online clients run it too, for the zone / missiles / craters / banner: the damage is host-only (drawJunior)
     (this.bombs ||= []).push({ owner: o, x, y, r, t: time, T: time, dmg, a, acc: 0, ctx: this.castCtx }); this.showBanner({ title: '¡BOMBARDEO!', sub: `${o.def.name} ordena fuego sobre la zona`, team: o.baseTeam, face: this.faceOf(o) }, 2200);
   }
   drawJunior(dt) {

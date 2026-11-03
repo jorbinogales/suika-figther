@@ -1,5 +1,15 @@
 [
   {
+    "id": "0.9.6",
+    "date": "2026-11-02",
+    "version": "0.9.6",
+    "title": "Corrección: las definitivas de Xeviche y Junior vuelven a verse online",
+    "tag": "CORRECCIÓN",
+    "items": [
+      "Corregido: en partidas online no se veían los efectos de la definitiva de Xeviche (Karis Harem: las tres empleadas y el rayo) ni de la de Junior (Bombardeo: la zona marcada, los misiles y los cráteres), ni para quien la lanzaba ni para los demás jugadores; el daño ya se aplicaba bien y no cambia."
+    ]
+  },
+  {
     "id": "0.9.5",
     "date": "2026-11-02",
     "version": "0.9.5",
