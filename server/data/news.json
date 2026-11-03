@@ -1,5 +1,15 @@
 [
   {
+    "id": "0.9.5",
+    "date": "2026-11-02",
+    "version": "0.9.5",
+    "title": "Corrección: el control mental de Luis vuelve a funcionar online",
+    "tag": "CORRECCIÓN",
+    "items": [
+      "Corregido: en partidas online, Luis no podía mover al campeón enemigo que controla con su definitiva (Control total); ahora lo mueve al instante, lanza sus habilidades y ataques básicos, y el jugador controlado ya no puede interferir aunque sea humano."
+    ]
+  },
+  {
     "id": "0.9.4",
     "date": "2026-11-02",
     "version": "0.9.4",

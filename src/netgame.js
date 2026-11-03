@@ -74,10 +74,11 @@ export class NetGame {
       }
       r.in = { mx: v.mx, my: v.my, run: !!v.run }; r.ax = d.ax; r.ay = d.ay; r.at = this.clock; r.atk = atk ? this.clock + 0.12 : 0; r.bp = Array.isArray(d.bp) ? d.bp : null;
     }
-    else if (d.k === 'cast') { const c = w.control; if (c?.mode === 'remote' && c.target === f) return; const a = this.actor(r); if (!a.alive) return; a.setAim(d.ax, d.ay); a.castPoint = d.cp ? { x: d.cp[0], y: d.cp[1] } : null; if (!a.tryCast(d.c)) a.castPoint = null; }
+    else if (d.k === 'cast') { if (w.control?.target === f) return; const a = this.actor(r); if (!a.alive) return; a.setAim(d.ax, d.ay); a.castPoint = d.cp ? { x: d.cp[0], y: d.cp[1] } : null; if (!a.tryCast(d.c)) a.castPoint = null; }   // a mind-controlled champion ignores its own player
     else if (d.k === 'op') {
       if (['buy', 'sell', 'perm'].includes(d.op) && !w.canShop(f)) return;   // the shop only works in the base
-      if (d.op === 'perm') f.buyPerm(d.a); else if (d.op === 'buy') f.buyItem(d.a); else if (d.op === 'sell') f.sellItem(d.a); else if (d.op === 'use') f.useItem(d.a); else if (d.op === 'spend') f.spend(d.a);
+      if (d.op === 'use') { if (w.control?.target !== f) this.actor(r).useItem(d.a); return; }   // items: those of the champion being driven (like offline)
+      if (d.op === 'perm') f.buyPerm(d.a); else if (d.op === 'buy') f.buyItem(d.a); else if (d.op === 'sell') f.sellItem(d.a); else if (d.op === 'spend') f.spend(d.a);
     }
   }
   // the unit a remote player is driving: his own champion, or the enemy he is mind-controlling with Luis' ultimate
@@ -88,8 +89,9 @@ export class NetGame {
     if (this.role === 'client' && this.hostGone && performance.now() - this.hostGone > 45000) this.hostLost();   // the host has been gone for 45 s: give up
     if (this.role !== 'host') return;
     const ctl = this.w.control;
+    if (ctl?.mode === 'remote') ctl.target.in = { mx: 0, my: 0, run: false };   // stands still unless Luis' entry below drives it (in any Map order)
     for (const r of this.remote.values()) {
-      if (ctl?.mode === 'remote' && ctl.target === r.f) { r.f.in = { mx: 0, my: 0, run: false }; continue; }   // being mind-controlled: its own player cannot move it
+      if (ctl?.target === r.f) continue;   // being mind-controlled: its own player cannot move it
       if (ctl?.mode === 'remote' && ctl.luis === r.f) r.f.in = { mx: 0, my: 0, run: false };
       if (r.off) continue;
       const f = this.actor(r); if (!f.alive || f.charmT > 0) continue;
@@ -179,7 +181,8 @@ export class NetGame {
   /* ======================= CLIENT ======================= */
   // client-side prediction: play our own basic / cast at once; the host's echo of it (same key, shortly after) is dropped in applyEvent
   predict(f, key, fn) {
-    this.replaying = true; let ok = false; try { ok = fn(); } finally { this.replaying = false; }
+    const ch = f.charmT; if (f === this.w.ctrl) f.charmT = 0;   // the 'controlled' mark of the champion we mind-control does not stop us
+    this.replaying = true; let ok = false; try { ok = fn(); } finally { this.replaying = false; f.charmT = ch; }
     if (ok) this.pred.push({ key, t: this.clock });
     return ok;
   }
@@ -230,8 +233,9 @@ export class NetGame {
     this.sn = s.n;
     return { ...this.top, ts: s.ts, f: [...this.base.values()], dm: s.kf ? null : new Map(s.f.map(d => [d.i, d])) };
   }
-  // charmed / mind-controlled: the host moves our unit, we only show it (like a remote one)
-  forced(p) { return p.charmT > 0; }
+  // charmed / mind-controlled: the host moves our unit, we only show it (like a remote one). The enemy WE mind-control carries
+  // that mark too (o.ch), but we drive it: predicted and reconciled like our own champion
+  forced(p) { return p.charmT > 0 && p !== this.w.ctrl; }
   // our own unit vs the host, at the same input: the difference is how far our prediction is off. It is absorbed over the next
   // frames (smooth) and applied to the inputs still in flight too, which is the same as replaying them from the host's state.
   reconcile(s) {
@@ -316,7 +320,7 @@ export class NetGame {
     if (s.sn) { w.sentinels = s.sn.map((q, i) => Object.assign(w.sentinels?.[i] || { owner: { alive: true } }, { x: q[0], y: q[1], team: q[2], r: q[3], t: q[4] })); }
     // Luis' mind control: the controller's camera and HUD follow the controlled champion
     if (s.ctl) { const L = w.byNid.get(s.ctl[0]), T = w.byNid.get(s.ctl[1]); if (L && T) { const mine = L === w.player; w.control = { luis: L, target: T, t: s.ctl[2], mode: mine ? 'ctrl' : 'view' }; w.ctrl = mine ? T : null; } }
-    else if (w.control) { w.control = null; w.ctrl = null; w.cancelAim(); }
+    else if (w.control) { const T = w.ctrl; if (T) { T.nx = 1; T.rx = T.x; T.ry = T.y; } w.control = null; w.ctrl = null; w.cancelAim(); }   // released: back to interpolation, the gap fades out (smooth)
     this.reconcile(s);
     // mortars (item): the host owns them, we only draw them
     s.m.forEach((m, i) => { let im = this.mortarImgs[i]; if (!im) { im = this.mortarImgs[i] = w.add.image(0, 0, 'item_mortero_portatil').setOrigin(0.5, 0.9); im.setScale(70 / Math.max(im.width, im.height)); } im.setPosition(m[0], m[1]).setDepth(m[1]); });
