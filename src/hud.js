@@ -126,7 +126,7 @@ export class Hud extends Phaser.Scene {
 
     // ---- worm: darkness, only a small circle around the champion stays visible ----
     if (p.alive && p.blindT > 0) {   // darkened map with an irregular, blurred vision area (not a perfect circle, not pitch black)
-      const cam = A.cameras.main, v = cam.worldView, z = cam.zoom, sp = A.r3d?.toScreen(p.x, 40, p.y), cx = sp ? sp.x : (p.x - v.x) * z, cy = sp ? sp.y : (p.y - 40 - v.y) * z, S = 560 * z;
+      const cam = A.cameras.main, v = cam.worldView, z = cam.zoom, cx = (p.x - v.x) * z, cy = (p.y - 40 - v.y) * z, S = 560 * z;
       if (!this.blindTex) { this.blindTex = this.textures.createCanvas('blindmask', 256, 256); this.blindImg = this.add.image(0, 0, 'blindmask').setDepth(0.45); this.blindTex.setFilter(Phaser.Textures.FilterMode.LINEAR); }
       if (!this.blindWas) {   // new random blob each time the blindness starts
         const ctx = this.blindTex.getContext(), id = ctx.createImageData(256, 256), ph = [0, 1, 2, 3, 4].map(() => Math.random() * 6.283), am = [0.1, 0.07, 0.05, 0.03, 0.02];

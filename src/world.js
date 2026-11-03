@@ -10,10 +10,6 @@ import { BOT } from './net.js';
 import { botStart } from './launcher.js';
 import { isWalk } from './mapdata.js';
 
-// experimental 3D view (#3d=1): three.js is only downloaded in that mode (see render3d.js)
-export const R3D_ON = new URLSearchParams(location.hash.slice(1)).get('3d') === '1';
-let Render3D = null;
-const r3dLoad = R3D_ON ? import('./render3d.js').then(m => { Render3D = m.Render3D; }) : null;
 
 const VIEW_H = 640;   // world units visible vertically at zoom 1 (zoom scales this to the window height)
 const LANE_MID = (LANE_Y0 + LANE_Y1) / 2;
@@ -112,7 +108,6 @@ export class Boot extends Phaser.Scene {
   }
 
   finish(sprites) {
-    if (r3dLoad && !Render3D) { r3dLoad.then(() => this.finish(sprites)); return; }   // 3D mode: wait for three.js
     VFX.forEach(n => this.anims.create({ key: 'vfx_' + n, frames: this.anims.generateFrameNumbers('vfx_' + n), frameRate: 18, repeat: -1 }));
     for (const ch in sprites) for (const a in sprites[ch])
       this.anims.create({ key: `${ch}_${a}`, frames: this.anims.generateFrameNumbers(`${ch}_${a}`), frameRate: ANIM_FPS[a] || 10, repeat: LOOPS.has(a) ? -1 : 0 });
@@ -155,9 +150,7 @@ export class Arena extends Phaser.Scene {
     this.fighters = []; this.projs = []; this.obstacles = []; this.audio = new Audio(this); this.audio.music('music_game'); this.events.once('shutdown', () => { this.audio.stopMusic(); this.audio.clearVoice(); }); this.timers = []; this.zones = []; this.castCtx = null; this.mortars = []; this.chains = []; this.eggs = []; this.spears = []; this.packages = []; this.grenades = []; this.towerRings = new Map(); this.control = null; this.ctrl = null; this.aimObjs = {}; this.rangeObjs = {}; this.gfx = null;
     this.rangeG = this.add.graphics();
     this.buildPlaceholderTextures();
-    this.r3d = R3D_ON && Render3D ? new Render3D(this) : null;
-    if (this.r3d) this.events.once('shutdown', () => { this.r3d?.destroy(); this.r3d = null; });
-    else if (!this.bot) this.buildMap();   // the 3D view draws its own ground and forest; the headless host needs no scenery (it is pure decoration)
+    if (!this.bot) this.buildMap();   // the headless host needs no scenery (it is pure decoration)
 
     const my = this.myTeam, dflt = CHAMP_ORDER[(CHAMP_ORDER.indexOf(this.playerKey) + 1) % CHAMP_ORDER.length];
     const enemyKeys = this.enemyKeys && this.enemyKeys.length ? this.enemyKeys : [this.enemyKey || dflt], allyKeys = this.training ? [] : this.allyKeys;
@@ -482,7 +475,7 @@ export class Arena extends Phaser.Scene {
     if (p.bomber) { p.in = { mx: 0, my: 0, run: false }; ['p3', 'ult'].forEach(a => J(k[a]) && this.beginAim(a)); return; }   // aboard: clicks / Q fire in updateBomber; E and R are cast here
     if (leftClick && !overUi && !this.aimKey) {   // click on a champion selects it (info panel, top-right)
       const m = this.cursorWorld(ptr);
-      const hit = this.fighters.find(f => f.isChamp && !f.hiddenFor(this.player) && (this.r3d ? this.r3d.hitTest(f, ptr.x, ptr.y) : Math.abs(m.x - f.x) < 48 && m.y > f.y - f.def.height - 10 && m.y < f.y + 15));
+      const hit = this.fighters.find(f => f.isChamp && !f.hiddenFor(this.player) && Math.abs(m.x - f.x) < 48 && m.y > f.y - f.def.height - 10 && m.y < f.y + 15);
       this.selected = hit || null;
     }
     // powers: 1st press/click shows the preview, 2nd click (or same key) casts, right click / ESC cancels
@@ -501,10 +494,8 @@ export class Arena extends Phaser.Scene {
 
   /* ---------- aiming (preview before casting) ---------- */
   // cursor in world coordinates, read at the controlled champion's chest height like the 2D view does
-  // (3D: the ground point under the cursor, raised to that same chest-height convention so every caller keeps its math)
   cursorWorld(ptr = this.input.activePointer) {
-    if (!this.r3d) return ptr.positionToCamera(this.cameras.main);
-    const g = this.r3d.groundAt(ptr.x, ptr.y); return { x: g.x, y: g.y - this.pc.def.height * 0.6 };
+    return ptr.positionToCamera(this.cameras.main);
   }
   mouseGround() {   // cursor is read at chest height, so the ground point sits below it
     const m = this.cursorWorld(), p = this.pc;
@@ -953,7 +944,7 @@ export class Arena extends Phaser.Scene {
       const cx = sh.x, cy = sh.y - 90, under = this.fighters.some(f => f.alive && !f.away && !f.drop && Math.abs(f.x - cx) < 210 && Math.abs((f.y - f.def.height * 0.5) - cy) < 150);
       sh.vis = Phaser.Math.Linear(sh.vis ?? 1, under ? 0.12 : 1, Math.min(1, dt * 8));
       if (sh.img) { const k = 380 / sh.img.width; sh.img.setPosition(sh.x, sh.y - 90).setScale(k).setAlpha(a * sh.vis); }
-      sh.g ||= Object.assign(this.add.graphics().setDepth(99949), { __anchor: sh }); const g = sh.g; g.clear();   // __anchor: upright drawing around that point (3D view)
+      sh.g ||= Object.assign(this.add.graphics().setDepth(99949)); const g = sh.g; g.clear();
       const a0 = a; 
       if (!has) { const a = a0 * (sh.vis ?? 1), col = sh.team === 0 ? 0x6a7a68 : 0x2a2224, ac = sh.team === 0 ? 0x66e0ff : 0xff4a3a; g.fillStyle(col, a).fillEllipse(sh.x, sh.y - 90, 380, 190).fillStyle(0x111111, a).fillEllipse(sh.x, sh.y - 60, 170, 60).fillStyle(ac, a * (0.6 + 0.4 * Math.sin(sh.t * 8))).fillCircle(sh.x - 140, sh.y - 80, 14).fillCircle(sh.x + 140, sh.y - 80, 14); }
       this.campShadow ||= this.add.graphics().setDepth(-860);
@@ -979,7 +970,6 @@ export class Arena extends Phaser.Scene {
     const m = (this.tmLabels ||= {}); let t = m[id];
     if (!t?.scene) t = m[id] =this.add.text(0, 0, '', { fontFamily: 'monospace', fontSize: '15px', fontStyle: 'bold', stroke: '#000', strokeThickness: 4 }).setOrigin(0.5).setDepth(100001);
     if (!show || !this.inView(x, y, 120)) return t.setVisible(false);
-    if (this.r3d) { t.__ov = true; t.__w = { x, y }; }
     return t.setVisible(true).setText(text).setColor(color).setPosition(x, y);
   }
   drawTimers() {
@@ -1494,9 +1484,8 @@ export class Arena extends Phaser.Scene {
     if (d > 40) f.setAim(wx, wy);   // keeps its last facing while parked (no flipping)
   }
   laser(f, t, dmg) {
-    const g = Object.assign(this.add.graphics().setDepth(100000), { __anchor: f }), x0 = f.x + f.ax * 18, y0 = f.y - f.def.height * 0.55, x1 = t.x, y1 = t.y - t.def.height * 0.5;
+    const g = this.add.graphics().setDepth(100000), x0 = f.x + f.ax * 18, y0 = f.y - f.def.height * 0.55, x1 = t.x, y1 = t.y - t.def.height * 0.5;
     g.lineStyle(7, 0x33ff88, 0.5).lineBetween(x0, y0, x1, y1).lineStyle(2, 0xffffff, 0.95).lineBetween(x0, y0, x1, y1);
-    if (this.r3d) { g.__hide3d = true; this.r3d.vfx3d.beam(x0, f.def.height * 0.55, f.y + f.ay * 18, x1, t.def.height * 0.5, t.y, 0x33ff88); }   // 3D view: a real beam
     this.tweens.add({ targets: g, alpha: 0, duration: 160, onComplete: () => g.destroy() });
     this.vfx('spark', x1, y1, { scale: 2, tint: 0x66ffaa });
     const pb = this.basicDmg; this.basicDmg = true; this.damage(f, t, dmg, 'magic'); this.basicDmg = pb;
@@ -1528,7 +1517,6 @@ export class Arena extends Phaser.Scene {
   }
   ghost(f) {   // silhouette left behind by an invisible Luis
     const s = f.spr, g = this.add.sprite(s.x, s.y, s.texture.key, s.frame.name).setOrigin(s.originX, s.originY).setScale(s.scaleX, s.scaleY).setFlipX(s.flipX).setDepth(f.y - 2).setTint(0x30ff90).setAlpha(0.55);
-    g.__hide3d = true;   // a copy of the 2D sprite: meaningless in the 3D view
     this.tweens.add({ targets: g, alpha: 0, duration: 1400, onComplete: () => g.destroy() });
   }
   drawTowerRanges() {   // sparse, stationary arcs at the attack limit of nearby towers
@@ -1565,7 +1553,7 @@ export class Arena extends Phaser.Scene {
   /* ---------- Héctor: chains + fire trail ---------- */
   chainShot(o, a, rank) {
     const hook = this.add.image(o.x, o.y, 'chain_hook').setDepth(100000); hook.setScale(60 / Math.max(hook.width, hook.height));
-    this.chains.push({ ctx: this.castCtx, owner: o, hook, g: Object.assign(this.add.graphics().setDepth(99999), { __anchor: o }), ax: o.ax, ay: o.ay, x: o.x, y: o.y - o.def.height * 0.55, ox: o.x, oy: o.y, range: a.range, speed: a.speed, phase: 'out', target: null,
+    this.chains.push({ ctx: this.castCtx, owner: o, hook, g: this.add.graphics().setDepth(99999), ax: o.ax, ay: o.ay, x: o.x, y: o.y - o.def.height * 0.55, ox: o.x, oy: o.y, range: a.range, speed: a.speed, phase: 'out', target: null,
       dmg: rk(a.dmg, rank) + o.atk * a.atkScale, stun: rk(a.stun, rank) });
   }
   firePatch(o, x, y, dmg, life) {
@@ -1921,13 +1909,11 @@ export class Arena extends Phaser.Scene {
     this.floatN = (this.floatN || 0) + 1;
     const t = this.add.text(x, y, text, { fontFamily: 'monospace', fontSize: 16, fontStyle: 'bold', color, stroke: '#000', strokeThickness: 3 })
       .setOrigin(0.5).setDepth(100000);
-    if (this.r3d) Object.assign(t, { __ov: true, __w: { x, y }, __rise: 0 });   // 3D: anchored on the ground point, rises in screen space
-    this.tweens.add({ targets: t, ...(this.r3d ? { __rise: 36 } : { y: y - 36 }), alpha: 0, duration: 900, onComplete: () => { t.destroy(); this.floatN--; } });
+    this.tweens.add({ targets: t, y: y - 36, alpha: 0, duration: 900, onComplete: () => { t.destroy(); this.floatN--; } });
   }
 
   vfx(name, x, y, { scale = 3, alpha = 1, tint = null, below = false } = {}) {
     if (!this.inView(x, y, 260)) return null;   // effects outside the camera are never seen: do not even create them
-    if (this.r3d?.vfx3d.vfx(name, x, y, { scale, alpha, tint, below })) return null;   // 3D view: drawn as a 3D effect instead (vfx3d.js)
     const s = this.add.sprite(x, y, 'vfx_' + name).setScale(scale, name === 'shockwave' ? scale * YR : scale).setDepth(below ? y - 2 : y + 2).setAlpha(alpha);
     if (tint) s.setTint(tint);
     s.play({ key: 'vfx_' + name, repeat: 0 });
@@ -2045,7 +2031,6 @@ export class Arena extends Phaser.Scene {
     this.cameras.main.setZoom(this.zoom);
     if (aboard) { this.camTarget.x = bm.pt.x; this.camTarget.y = bm.pt.y; this.cameras.main.centerOn(bm.pt.x, bm.pt.y); } else { this.camTarget.x = this.pc.x; this.camTarget.y = this.pc.y - 30; }
     if (this.snapZoom) { this.snapZoom = false; this.cameras.main.centerOn(this.camTarget.x, this.camTarget.y); }
-    this.r3d?.camera3d();   // before input (ground picking) and the overlays use it
 
     if (!this.bot) {   // the headless host has no player of its own: every champion is a remote player or the AI
     if (this.ctrl || this.over) this.player.in = { mx: 0, my: 0, run: false };
@@ -2090,7 +2075,6 @@ export class Arena extends Phaser.Scene {
     if (this.rwGlow) { this.rwGlow.t -= dt; this.rwGlow.hg -= dt; if (this.rwGlow.t <= 0) this.rwGlow = null; }
     this.updateFog(dt);
     this.net?.post(dt);
-    this.r3d?.sync(dt);
   }
 
   updateZones(dt) {
@@ -2225,18 +2209,18 @@ export class Arena extends Phaser.Scene {
 
   /* ---------- bars above heads: HP + mana (champions), HP only (bots) ---------- */
   drawBars() {
-    if (!this.gfx) this.gfx = Object.assign(this.add.graphics().setDepth(99999), { __ov: !!this.r3d });   // 3D: drawn by the overlay camera
+    if (!this.gfx) this.gfx = Object.assign(this.add.graphics().setDepth(99999));
     const g = this.gfx; g.clear();
-    const me = this.player, ov = !!this.r3d;
+    const me = this.player;
     for (const f of this.fighters) {
       const champ = f.isChamp;
       if (f.hiddenFor(me) || this.blindVis(f) <= 0) { f.bt && Object.values(f.bt).forEach(t => t.setVisible(false)); f.invIc?.setVisible(false); f.poisIc?.setVisible(false); continue; }
       if (champ && !f.bt) {
-        const mk = () => { const t = this.add.text(0, 0, '', { fontFamily: 'monospace', fontSize: '10px', fontStyle: 'bold', color: '#fff', stroke: '#000', strokeThickness: 3, resolution: 3 }).setOrigin(0.5).setDepth(100000); t.texture.setFilter(Phaser.Textures.FilterMode.LINEAR); t.__ov = ov; return t; };
+        const mk = () => { const t = this.add.text(0, 0, '', { fontFamily: 'monospace', fontSize: '10px', fontStyle: 'bold', color: '#fff', stroke: '#000', strokeThickness: 3, resolution: 3 }).setOrigin(0.5).setDepth(100000); t.texture.setFilter(Phaser.Textures.FilterMode.LINEAR); return t; };
         f.bt = { hp: mk(), mp: mk(), name: mk(), lvl: mk() };
       }
       if (!f.alive) { f.bt && Object.values(f.bt).forEach(t => t.setVisible(false)); f.invIc?.setVisible(false); f.poisIc?.setVisible(false); continue; }
-      const hd = this.r3d ? this.r3d.headOv(f) : null, hx = hd ? hd.x : f.x, hy = hd ? hd.y : f.y - f.def.height;   // top of the head (3D: projected to the screen)
+      const hx = f.x, hy = f.y - f.def.height;
       const w = champ ? 96 : f.isNexus ? 160 : f.isTower ? 90 : 36, h = champ ? 12 : f.isNexus ? 14 : f.isTower ? 9 : 6, x = hx - w / 2, mh = 8, xh = 4;
       const y = hy - (champ ? 38 : 14);
       g.fillStyle(0x000000, 0.75).fillRect(x - 2, y - 2, w + 4, h + 4 + (champ ? mh + 2 : 0));
@@ -2259,8 +2243,8 @@ export class Arena extends Phaser.Scene {
       if (f.pkBuffs) { let n = 0; const C = { hp: 0x5dff8a, atk: 0xff7a5a, aspd: 0xffd23f, def: 0x7ee0ff }; for (const k in f.pkBuffs) { g.fillStyle(0x000000, 0.8).fillRect(x + n * 14 - 1, y + h + (champ ? 20 : 4) , 12, 6).fillStyle(C[k]).fillRect(x + n * 14, y + h + (champ ? 21 : 5), 10 * Math.max(0, f.pkBuffs[k].t / f.pkBuffs[k].T), 4); n++; } }
       const nb = (f.ride ? 1 : 0) + (f.flame ? 1 : 0), sb = champ && f.shieldHp > 0 && f.shieldMaxT > 0;   // white duration bars stack under the mana bar
       if (sb) { const by = y + h + mh + 3 + nb * 7; g.fillStyle(0x000000, 0.75).fillRect(x - 2, by, w + 4, 6).fillStyle(0xffffff).fillRect(x, by + 1, w * Phaser.Math.Clamp(f.shieldT / f.shieldMaxT, 0, 1), 3); }
-      if (champ && f.poisoned) { const pi = (f.poisIc ||= Object.assign(this.add.image(0, 0, 'icon_poison').setDepth(100001).setDisplaySize(14, 14), { __ov: ov })); pi.setVisible(true).setPosition(x + 8, y + h + mh + 9 + (nb + (sb ? 1 : 0)) * 7); } else f.poisIc?.setVisible(false);   // poisoned: icon under the mana bar
-      if (champ && f.arepaUp) { const ic = (f.invIc ||= Object.assign(this.add.image(0, 0, 'icon_invul').setDepth(100001).setDisplaySize(22, 22), { __ov: ov })); ic.setVisible(true).setPosition(x + w + 16, y + h / 2 + 4); } else f.invIc?.setVisible(false);   // invulnerable: yellow aura icon by the bars
+      if (champ && f.poisoned) { const pi = (f.poisIc ||= this.add.image(0, 0, 'icon_poison').setDepth(100001).setDisplaySize(14, 14)); pi.setVisible(true).setPosition(x + 8, y + h + mh + 9 + (nb + (sb ? 1 : 0)) * 7); } else f.poisIc?.setVisible(false);   // poisoned: icon under the mana bar
+      if (champ && f.arepaUp) { const ic = (f.invIc ||= this.add.image(0, 0, 'icon_invul').setDepth(100001).setDisplaySize(22, 22)); ic.setVisible(true).setPosition(x + w + 16, y + h / 2 + 4); } else f.invIc?.setVisible(false);   // invulnerable: yellow aura icon by the bars
       if (f.stunT > 0) g.fillStyle(0xffd23f).fillRect(x, y - 6, w * Math.min(1, f.stunT / 2), 3);
       if (f.ink) { g.fillStyle(0x1d0f4a).fillCircle(hx, y - 14, 7).fillStyle(0x8a5cff).fillCircle(hx - 2, y - 16, 2.5); }
       const ly = y + h + (champ ? mh + 4 : 2);
