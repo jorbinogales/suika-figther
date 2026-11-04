@@ -30,6 +30,11 @@ export function scaleRows(ab, rank, v) {
     rows.push({ label, base, parts, total: base + parts.reduce((s, p) => s + p.val, 0) });
   };
   row('Daño', 'dmg'); row('Daño por segundo', 'dps');
+  if (ab.poisonRatio && Array.isArray(ab.dmg)) {   // poison = a fraction of the impact: same scaling as the impact, times the ratio
+    const base = rk(ab.dmg, r) * ab.poisonRatio, parts = [];
+    if (ab.apScale) parts.push({ stat: 'ap', k: ab.apScale * ab.poisonRatio, val: v.ap * ab.apScale * ab.poisonRatio });
+    rows.push({ label: 'Veneno (mitad del impacto)', base, parts, total: base + parts.reduce((s2, p) => s2 + p.val, 0) });
+  }
   if (Array.isArray(ab.heal)) {
     const pct = Array.isArray(ab.healHpPct) ? rk(ab.healHpPct, r) : 0, hp = pct ? [{ stat: 'hp', k: pct, val: v.maxHp * pct }] : [];
     const base = rk(ab.heal, r), parts = (ab.apScale ? [{ stat: 'ap', k: ab.apScale, val: v.ap * ab.apScale }] : []).concat(hp);

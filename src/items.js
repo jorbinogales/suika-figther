@@ -80,13 +80,25 @@ C('botas_hipersonicas', 'Botas hipersónicas', 'util', ['botas_turbo', 'botas_re
 C('dron_combate', 'Dron de combate', 'util', ['bot_prompts', 'cable_fibra'], 'Activo: un dron te acompaña y dispara.', { active: { type: 'drone', cd: 50, life: 18 } });
 C('elixir_mixto', 'Elixir mixto', 'rec', ['pocion_vida_gde', 'pocion_mana_gde'], 'Consumible: vida y maná en 4 s.', { consumable: { hp: 190, mana: 150, time: 4, charges: 3 } });
 
+// ---- level 3 (added so that EVERY green item is the material of a purple one) ----
+C('exoesqueleto', 'Exoesqueleto', 'ad', ['mancuerna_codigo', 'anillo_vitalidad'], 'Fuerza, vida y resistencia: una armadura que te hace más fuerte al sufrir.');
+C('moto_electrica', 'Moto eléctrica', 'ad', ['cadena_bici', 'capa_cifrado'], 'Ataque, velocidad y resistencia a la IA.');
+C('botiquin_maestro', 'Botiquín maestro', 'rec', ['antidoto', 'barra_energetica'], 'Consumible: vida y maná al instante y quita aturdimientos, silencios, ralentizaciones y veneno.', { consumable: { hp: 260, mana: 140, time: 3, charges: 3, cleanse: true } });
+C('centro_mando', 'Centro de mando', 'util', ['maletin_soldados', 'escudo_emergencia'], 'Activo: invoca soldados reforzados y te da un escudo.', { active: { type: 'multi', cd: 75, m: 1.6, parts: [{ type: 'soldiers', life: 18 }, { type: 'shield', time: 6 }] } });
+C('arsenal_artillero', 'Arsenal artillero', 'util', ['mortero_portatil', 'bomba_humo'], 'Activo: despliega un mortero y lanza una cortina de humo que ralentiza.', { active: { type: 'multi', cd: 60, m: 1.5, parts: [{ type: 'mortar', life: 14 }, { type: 'smoke', time: 3 }] } });
+C('propulsor_cohete', 'Propulsor cohete', 'util', ['sprint_energia', 'teleport_base'], 'Activo: te lanzas hacia delante y ganas gran velocidad unos segundos.', { active: { type: 'blink', cd: 28, dist: 340, time: 3 } });
+C('consola_overclock', 'Consola de overclock', 'ap', ['termo_cafe', 'memoria_ram'], 'Poder de IA, maná, regeneración y recarga de poderes.');
+
 export const PASSIVES = {
+  exoesqueleto:        { name: 'Adrenalina de acero', desc: 'Con menos del 50 % de vida ganas un 20 % de ataque físico.' },
+  moto_electrica:      { name: 'Carga estática',      desc: 'Tras moverte 2 s seguidos, tu siguiente ataque básico causa 40 de daño de IA extra.' },
+  consola_overclock:   { name: 'Overclock',           desc: 'Cada vez que usas un poder recuperas el 8 % de tu maná máximo.' },
   punio_acero:         { name: 'Golpe demoledor',     desc: 'Cada 4º ataque básico causa un 50 % de daño extra con una onda de choque.' },
   bate_servidor:       { name: 'Sobrecarga',          desc: 'Tus ataques básicos ralentizan al objetivo un 20 % durante 1.5 s.' },
   garras_vampiricas:   { name: 'Sed de sangre',       desc: 'Con menos del 40 % de vida tu robo de vida se duplica (aura roja).' },
-  tarjeta_grafica:     { name: 'Sobrecalentamiento',  desc: 'Los enemigos cerca de ti sufren quemadura continua que escala con tu poder de IA (anillo naranja).' },
+  tarjeta_grafica:     { name: 'Sobrecalentamiento',  desc: 'Tus ataques y habilidades dejan quemaduras a tus enemigos durante varios segundos (daño de IA que escala con tu poder de IA).' },
   procesador_cuantico: { name: 'Cálculo paralelo',    desc: 'Al usar un poder ganas +25 % de velocidad durante 2 s.' },
-  nucleo_ia:           { name: 'Escudo de núcleo',    desc: 'En combate, cada 12 s generas un escudo temporal (barra blanca) del 12 % de tu vida máxima.' },
+  nucleo_ia:           { name: 'Escudo de núcleo',    desc: 'En combate, cada 12 s generas un escudo temporal (barra blanca) que escala con tu poder de IA: 25 + el 50 % de tu poder de IA.' },
   chaleco_antibalas:   { name: 'Blindaje reactivo',   desc: 'Reduces un 15 % el daño físico que recibes.' },
   armadura_rack:       { name: 'Disipador de calor',  desc: 'Devuelves el 20 % del daño físico de los ataques básicos que recibes al atacante.' },
   filtro_spam:         { name: 'Bloqueo de spam',     desc: 'Los enemigos cercanos atacan un 25 % más lento (anillo gris).' },
@@ -96,6 +108,7 @@ export const PASSIVES = {
   botas_hipersonicas:  { name: 'Hipervelocidad',      desc: 'Tras correr 2 s seguidos ganas +15 % de velocidad extra (estela cian).' },
 };
 // level-2 (green) items carry a reduced version (50 %) of one level-3 passive
+// (the new level-3 items have no level-2 mini passive: their greens keep their stats / actives)
 export const MINI_OF = { teclado_mecanico: 'punio_acero', guantes_tacticos: 'bate_servidor', navaja_suiza: 'garras_vampiricas', pantalla_holo: 'tarjeta_grafica', libro_algoritmos: 'procesador_cuantico',
   memoria_ram: 'nucleo_ia', casco_seguridad: 'chaleco_antibalas', rodilleras_pro: 'armadura_rack', antivirus_portatil: 'filtro_spam', amuleto_logico: 'firewall_magico',
   bateria_extendida: 'servidor_redundante', proteina_extra: 'corazon_silicio', botas_turbo: 'botas_hipersonicas' };

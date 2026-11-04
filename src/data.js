@@ -31,22 +31,22 @@ export const CHAMPIONS = {
             desc: 'Cactus aparecen en una zona a tu elección (dentro de su alcance), causan daño de IA (escala fuerte con tu poder IA) y stunean a los enemigos.',
             stun: [0.8, 1.0, 1.2], radius: 130, range: 360, dmg: [30, 50, 70], apScale: 0.7 },
       p2: { name: 'Lanzamiento de contrato', icon: 'leandro_p2', cd: [8, 7, 6], mana: [35, 40, 45], windup: 0.35, dur: 0.6,
-            desc: 'Lanza varios contratos hacia el frente en abanico: se van alejando y separando más. Al impactar a un enemigo infectan el área a su alrededor (zona verde) y envenenan a todos los que estén dentro. El daño y el veneno escalan con tu poder de IA.',
-            speed: 480, count: [3, 4, 5], spread: 0.75, areaRadius: [95, 110, 125], areaLife: [3, 3.5, 4], poisonTime: 4, poisonApScale: [0.9, 1.2, 1.5], dmg: [20, 35, 50], apScale: 0.6 },
+            desc: 'Lanza varios contratos hacia el frente en abanico: se van alejando y separando más. Al impactar a un enemigo infectan el área a su alrededor (zona verde) y envenenan a todos los que estén dentro. El veneno causa la mitad del daño del impacto. El daño escala con tu poder de IA.',
+            speed: 480, count: [3, 4, 5], spread: 0.75, areaRadius: [95, 110, 125], areaLife: [3, 3.5, 4], poisonRatio: 0.5, dmg: [20, 35, 50], apScale: 0.6 },
       p3: { name: '4 Cauchos', icon: 'leandro_p3', cd: [14, 13, 12], mana: [50, 50, 50], windup: 0.3, dur: 0.55,
             desc: 'Muro de 4 cauchos al frente: bloquea cualquier proyectil.',
             life: [4, 5, 6], offset: 110 },
       ult: { name: 'IA voy', icon: 'leandro_ult', cd: [70, 60, 50], mana: [100, 100, 100], windup: 0.6, dur: 1.0,
-             desc: 'Invoca bots (2 melee + 2 distancia) que pelean a su lado. Mejorar agrega mas bots.',
-             life: 14, melee: [2, 3, 4], ranged: [2, 3, 4], botApScale: 0.45 },
+             desc: 'Invoca bots (2 melee + 2 distancia) que pelean a su lado. Mejorar agrega mas bots. Los bots se hacen más fuertes con tu poder de IA: cuanto más tengas, más vida y más daño tienen.',
+             life: 14, melee: [2, 3, 4], ranged: [2, 3, 4], botApScale: 0.45, botHpScale: 1.2 },
     },
   },
   xeviche: {
     name: 'Xeviche', cls: 'ai', ref: 'ref_xeviche', height: 128,
     stats: { hp: 620, mana: 340, atk: 18, ap: 55, armor: 20, mr: 22, speed: 140, run: 235, range: 400, atkCd: 0.8 },
     grow: { hp: 0.07, atk: 0.03, ap: 0.08 },
-    basic: { kind: 'projectile', apScale: 0.5, base: 12, type: 'magic', speed: 620, vfx: 'magic_missile',
-             every3: { mult: 1.5, scale: 1.2 }, windup: 0.2, dur: 0.45 },
+    basic: { kind: 'projectile', apScale: 0.5, base: 12, type: 'magic', speed: 620, obj: 'lego_1', scale: 0.11,   // every click throws a lego (a different colour each hit of the combo)
+             windup: 0.2, dur: 0.45 },
     abilities: {
       p1: { name: 'Lluvia de lego', icon: 'xeviche_p1', cd: [8, 7, 6], mana: [40, 45, 50], windup: 0.2, dur: 0.75,
             desc: 'Lanza rápidamente una ráfaga de piezas de lego hacia donde apuntas. Cada pieza que impacta causa daño de IA. Cuanto más alto el nivel de la habilidad, más piezas lanza y más daño causa. Escala con tu poder de IA.',
@@ -78,7 +78,7 @@ CHAMPIONS.jorbi = {
           desc: 'Se desplaza al instante hacia donde apunta. Tiene 3 cargas de dash: cada carga se recarga por separado después de usarla (el enfriamiento corre por dash).',
           dashes: 3, dashDist: [260, 290, 320] },
     p3: { name: 'Hora de ponerse mamado', icon: 'jorbi_p3', passive: true,
-          desc: 'Pasiva: cada tercer ataque básico es un golpe fuerte que causa daño crítico.',
+          desc: 'Pasiva: el tercer golpe de tu combo de ataques básicos es un golpe fuerte que causa daño crítico.',
           critMult: [1.8, 2.3, 2.8] },
     ult: { name: '15 Minutos más', icon: 'jorbi_ult', cd: [80, 70, 60], mana: [100, 100, 100], windup: 0.9, dur: 1.4,
            desc: 'Retrocede la partida 5 segundos (10 en rango 2 y 15 en rango 3) y avisa a todos los jugadores: los súbditos vivos y los campeones vivos, aliados y enemigos, regresan a donde estaban (se muestra el camino que recorrieron). Al terminar, los aliados ganan un escudo y velocidad de movimiento y los enemigos quedan ralentizados durante unos segundos.',
@@ -234,11 +234,11 @@ CHAMPIONS.junior = {
   stats: { hp: 780, mana: 260, atk: 44, ap: 18, armor: 34, mr: 22, speed: 135, run: 215, range: 90, atkCd: 0.8 },
   grow: { hp: 0.085, atk: 0.05, ap: 0.03 },
   basic: { kind: 'melee', base: 15, atkScale: 1.0, type: 'physical', reach: 92, windup: 0.22, dur: 0.45, vfx: 'punch' },
-  fist: { hits: 4, stun: 1.0, dmg: 0.9, reset: 6 },
+  fist: { hits: 3, stun: 1.0, dmg: 0.9, reset: 6 },   // the 3rd punch of the combo stuns
   abilities: {
     p1: { name: 'Ancla de abordaje', icon: 'junior_p1', cd: [14, 13, 12], mana: [55, 60, 65], windup: 0.35, dur: 0.7,
-          desc: 'Se lanza como un ancla hacia donde apuntas y arrastra consigo a todo campeón enemigo que alcance. Quedan aturdidos mientras los arrastra y, si chocan con una pared, se aturden de nuevo al impactar y la rompen. Causa daño físico.',
-          range: 440, width: 110, speed: 1100, dmg: [40, 65, 90], atkScale: 0.7, stun: [0.8, 1.0, 1.2], wallStun: [1.6, 2.0, 2.4], wallDmg: [30, 45, 60] },
+          desc: 'Se lanza como un ancla hacia donde apuntas y arrastra consigo a todo campeón enemigo que alcance. Los arrastra sin que puedan actuar, pero no los aturde: solo si chocan con una pared quedan aturdidos al impactar y la rompen. Causa daño físico.',
+          range: 440, width: 110, speed: 1100, dmg: [40, 65, 90], atkScale: 0.7, wallStun: [1.6, 2.0, 2.4], wallDmg: [30, 45, 60] },
     p2: { name: 'Voltereta', icon: 'junior_p2', cd: [10, 9, 8], mana: [40, 40, 40], windup: 0, dur: 0.38,
           desc: 'Realiza una voltereta rápida hacia donde apuntas. Al terminar obtiene un escudo temporal.',
           dist: [170, 190, 210], shield: [70, 110, 150], shieldHpPct: 0.06, time: [3, 3.5, 4] },
@@ -293,3 +293,53 @@ export function aimSpec(champ, key, rank, f) {
   }
   return { type: 'circle', radius: 80, color: 0xffffff };
 }
+
+
+/* ---------- basic attack combos ----------
+   Click up to 3 times in a row (each next click within COMBO_WINDOW seconds of the previous swing ending): 3 chained hits, each with its own animation
+   (attack, attack2, attack3). Every champion's combo keeps his style: melee champions chain strikes; ranged champions chain shots.
+   Step fields: anim, dmg (damage multiplier of EACH hit/shot), w / t / cd (windup, animation and cooldown multipliers), lunge (forward impulse in px when you attack
+   while moving toward your aim), melee: reachAdd; ranged: shots, gap (s between shots), spread (rad between shots), scale (projectile size), speed, fin (finisher).
+   The three hits average to the champion's old basic attack damage per second. */
+export const COMBO_WINDOW = 0.7;   // seconds you can pause between clicks without losing the combo
+// cd = fraction of the champion's basic-attack cooldown until the next click can start the next hit (the swing is cancelled into it once the hit has landed).
+// Chaining hits is therefore faster than the old single attack, so the damage of each hit is lower: a full combo keeps about the old damage per second (+10 %).
+// After the 3rd hit (finisher) there is a LONG recovery before the 1st hit of the next combo can start (cd 1.3 x the basic cooldown): no endless bursts.
+// Hits 1-2 chain quickly; the damage of the three hits keeps the combo at about the old damage per second (+5 %) over the whole 2.0 x cooldown cycle.
+const MELEE = [
+  { anim: 'attack',  dmg: 0.55, w: 0.9, t: 0.9,  cd: 0.35 },
+  { anim: 'attack2', dmg: 0.6,  w: 0.9, t: 0.9,  cd: 0.35 },
+  { anim: 'attack3', dmg: 0.95, w: 1.5, t: 1.3,  cd: 1.3,  reachAdd: 20, fin: true },
+];
+const RANGED = [
+  { anim: 'attack',  dmg: 0.55, w: 0.95, t: 0.95, cd: 0.35 },
+  { anim: 'attack2', dmg: 0.28, w: 0.8,  t: 0.9,  cd: 0.35, shots: 2, gap: 0.07, spread: 0.12 },
+  { anim: 'attack3', dmg: 0.95, w: 1.4,  t: 1.3,  cd: 1.3,  scale: 1.5, speed: 1.1, fin: true },
+];
+export const COMBOS = {
+  // melee
+  jorbi:    MELEE,   // jab, cross, critical finisher (with his passive the finisher is the critical hit)
+  luis:     MELEE,   // jab, hook, finisher (the backstab bonus still applies to every hit)
+  hector:   MELEE,   // jab, cross, kick finisher
+  junior:   MELEE,   // jab, cross, fist finisher: the 3rd punch fills his fist counter and stuns
+  // ranged
+  leandro:  [RANGED[0], RANGED[1], { ...RANGED[2], finMult: 0.75 }],                       // missile, double missile, big missile
+  xeviche:  [{ ...RANGED[0], obj: 'lego_1' }, { ...RANGED[0], anim: 'attack2', dmg: 0.6, w: 0.85, obj: 'lego_2' }, { ...RANGED[2], shots: 1, dmg: 0.95, scale: 1.35, obj: 'lego_3' }],   // red, blue and a bigger yellow lego: one lego per click, no volleys
+  axel:     [RANGED[0], RANGED[1], RANGED[2]],                             // laptop, quick double laptop, big laptop
+  julio:    [RANGED[0], { ...RANGED[1], dmg: 0.6, shots: 1, spread: 0 }, RANGED[2]],                    // slow drawing, fast scribble, big ink blot (his alternating slow/fast style)
+  eliud:    [RANGED[0], RANGED[1], RANGED[2]],                                       // egg, two eggs, giant egg
+  yonaiker: [RANGED[0], RANGED[1], { ...RANGED[2], shots: 3, dmg: 0.32, gap: 0.06, spread: 0.1, scale: 1.1, speed: 1 }],   // shot, double tap, 3-round burst
+};
+
+
+/* ---------- attack with a forward impulse ----------
+   Basic attack while moving toward your aim = ONE single attack (not a combo hit) with its own animation ('lunge'): the champion launches himself forward and attacks.
+   It uses the normal cooldown, does the normal damage of a basic attack and never touches the combo. Each champion can define his own (distance, timing, projectile).
+   dist: px travelled; w / t: windup and animation multipliers of his basic; cd: multiplier of the basic cooldown; dmg: damage multiplier; reachAdd (melee), obj / scale / speed (ranged). */
+const LUNGE_MELEE = { dist: 95, w: 0.8, t: 0.95, cd: 1.0, dmg: 1.0, reachAdd: 15 };
+const LUNGE_RANGED = { dist: 70, w: 0.8, t: 0.95, cd: 1.0, dmg: 1.0, speed: 1.1 };
+export const LUNGES = {
+  jorbi: LUNGE_MELEE, luis: LUNGE_MELEE, hector: { ...LUNGE_MELEE, dist: 110 }, junior: { ...LUNGE_MELEE, dist: 100 },   // lunging strikes
+  xeviche: { ...LUNGE_RANGED, dist: 105, obj: 'lego_4', scale: 1.1 },   // he propels himself forward throwing a (green) lego
+  leandro: LUNGE_RANGED, axel: LUNGE_RANGED, julio: LUNGE_RANGED, eliud: LUNGE_RANGED, yonaiker: LUNGE_RANGED,
+};

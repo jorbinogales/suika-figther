@@ -2,9 +2,11 @@
 Run: python tools/process_sprites.py   (needs Pillow)"""
 import json, pathlib
 from PIL import Image
+from atlas import pack as pack_atlas
 
-FRAMES = dict(idle=4, walk=6, run=6, attack=5, power1=6, power2=6, power3=6, ult=8, death=6, aim=8, destroy=6, rubble=1, attack3=6, dash=4, power1_virus=6, power1_trojan=6, power1_worm=6, attack2=4, transform=8)
+FRAMES = dict(idle=4, walk=6, run=6, attack=5, power1=6, power2=6, power3=6, ult=8, death=6, aim=8, destroy=6, rubble=1, attack3=6, dash=4, power1_virus=6, power1_trojan=6, power1_worm=6, attack2=4, transform=8, lunge=6)
 CELL = 256
+DIRS = ('s', 'se', 'e', 'ne', 'n')   # drawn directions of the 8-direction sprites (sw/w/nw are mirrored by the engine)
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 RAW, OUT = ROOT / "art/raw", ROOT / "public/assets/sprites"
 
@@ -21,23 +23,30 @@ def key(img, tol=110):
     return px
 
 def main():
-    manifest = {}
+    manifest = {}; atlas_frames = {}
     for cdir in sorted(p for p in RAW.iterdir() if p.is_dir() and p.name not in ("icons", "objects", "aim")):
-        for anim, n in FRAMES.items():
+        for anim, n in [*FRAMES.items(), *[(f"{a}_{d}", 0) for a in FRAMES for d in DIRS]]:
             src = cdir / f"{anim}.png"
             if not src.exists():
                 continue
             img = Image.open(src).convert("RGB")
             n = max(1, round(img.width / img.height))  # cells are square: frame count comes from the strip itself (per-character counts differ)
             w = img.width // n
-            sheet = Image.new("RGBA", (CELL * n, CELL))
-            for i in range(n):
-                cell = key(img.crop((i * w, 0, (i + 1) * w, img.height)))
-                sheet.paste(cell.resize((CELL, CELL), Image.NEAREST), (i * CELL, 0))
-            (OUT / cdir.name).mkdir(parents=True, exist_ok=True)
-            sheet.save(OUT / cdir.name / f"{anim}.png")
+            cells = [key(img.crop((i * w, 0, (i + 1) * w, img.height))).resize((CELL, CELL), Image.NEAREST) for i in range(n)]
+            atlas_frames.setdefault(cdir.name, {})[anim] = cells
             manifest.setdefault(cdir.name, {})[anim] = n
             print(cdir.name, anim, n, "frames")
+    # combo chain: attack -> attack2 -> attack3 must continue each other, so the first frame of a hit is the last frame of the previous hit (pixel identical, no pop between hits)
+    for ch, anims in atlas_frames.items():
+        for d in DIRS:
+            for a, b in (("attack", "attack2"), ("attack2", "attack3")):
+                if f"{a}_{d}" in anims and f"{b}_{d}" in anims: anims[f"{b}_{d}"][0] = anims[f"{a}_{d}"][-1].copy()
+    # one texture atlas per character (trimmed, de-duplicated, packed) replaces the old one-sheet-per-animation files
+    for ch, anims in atlas_frames.items():
+        d = OUT / ch; d.mkdir(parents=True, exist_ok=True)
+        for old in d.glob("*.png"): old.unlink()
+        info = pack_atlas(ch, anims, d)
+        print(f"atlas {ch}: {info['frames']} frames ({info['unique']} unique) in {info['pages']} page(s) {info['sizes']}")
     import shutil
     pub = ROOT / "public/assets"
     extra = {}
@@ -145,6 +154,17 @@ def main():
         sh = Image.open(fpx).convert("RGB"); cw = sh.width // 4; out = Image.new("RGBA", (512, 128))
         for i in range(4): out.paste(key(sh.crop((i * cw, 0, (i + 1) * cw, sh.height))).resize((128, 128), Image.LANCZOS), (i * 128, 0))
         out.save(pub / "objects" / "fist_progress_sheet.png")
+    # ready-made icons (transparent, 64 px): art/raw/items_extra/<id>.png
+    for fp in sorted((RAW / "items_extra").glob("*.png")) if (RAW / "items_extra").exists() else []:
+        shutil.copy(fp, pub / "items" / fp.name); got.append(fp.stem)
+    # new item icons drawn by Codex: art/raw/items_new/<id>.png (magenta, 256 px) -> keyed, tight-cropped, 64 px (replace the placeholder composites)
+    nsrc = RAW / "items_new"
+    for fp in sorted(nsrc.glob("*.png")) if nsrc.exists() else []:
+        cell = key(Image.open(fp).convert("RGB")); bb = cell.getbbox()
+        if not bb: continue
+        cell = cell.crop(bb); k = min(56 / cell.width, 56 / cell.height); icon = Image.new("RGBA", (64, 64)); r = cell.resize((max(1, round(cell.width * k)), max(1, round(cell.height * k))), Image.NEAREST)
+        icon.paste(r, ((64 - r.width) // 2, (64 - r.height) // 2), r); icon.save(pub / "items" / f"{fp.stem}.png")
+        if fp.stem not in got: got.append(fp.stem)
     extra["items"] = got
     # class icons: art/raw/classes/sheet.png (3x2 cells) -> public/assets/classes/<id>.png
     cls_ids = ["todos", "ai", "hacker", "cyber", "soporte", "programador"]; cgot = []

@@ -1,6 +1,16 @@
+// Opens the shop (RECOMENDADO tab) in a match and screenshots it: node tools/shopshot.mjs <char> <enemies csv> [gold] [buyId]
 import puppeteer from 'puppeteer-core';
-const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader', '--mute-audio'], defaultViewport: { width: 1280, height: 720 } });
-const p = await b.newPage(); p.on('pageerror', e => console.log('[pageerror]', e.message));
-await p.goto('http://localhost:5173/#mode=3&keep=1&noai=1', { waitUntil: 'load' }); await new Promise(r => setTimeout(r, 14000));
-await p.evaluate(`(() => { const a = window.__arena, f = a.player; a.handleInput = () => {}; f.x = f.spawn.x; f.gold = 900; f.inv.fill(null); ['b_chip', 'b_reloj', 'b_cargador'].forEach(i => f.buyItem(i)); f.buyItem('libro_algoritmos'); const h = a.scene.get('hud'); h.toggleShop(); h.shopStat = null; h.shopCat = 'ad'; h.shopSel = 'garras_vampiricas'; })()`);
-await new Promise(r => setTimeout(r, 800)); await p.screenshot({ path: 'D:/mycowork/game/shot_shop.png' }); await b.close();
+const char = process.argv[2] || 'hector', enemies = process.argv[3] || 'leandro,xeviche,julio', gold = +(process.argv[4] || 900), buy = process.argv[5];
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--enable-unsafe-swiftshader', '--use-gl=angle', '--mute-audio'], defaultViewport: { width: 1280, height: 720 } });
+const p = await b.newPage(); const errs = []; p.on('pageerror', e => errs.push(e.message));
+await p.goto(`http://localhost:5173/#char=${char}&mode=4&enemies=${enemies}&noai=1&nofog=1`, { waitUntil: 'load' });
+await p.waitForFunction(() => window.__arena?.player && window.__arena.fighters?.length, { timeout: 90000 });
+const sleep = t => new Promise(r => setTimeout(r, t));
+await sleep(3000);
+await p.evaluate(g => { const a = window.__arena; a.player.gold = g; a.scene.get('hud').toggleShop(); }, gold);
+await sleep(800);
+if (buy) { await p.evaluate(id => { const a = window.__arena, h = a.scene.get('hud'); h.shopSel = id; h.recIds = h.recIds || []; const rec = h.recIds.includes(id); a.player.buyItem(id); a.player.recChain = rec ? { from: id } : null; }, buy); await sleep(800); }
+await p.screenshot({ path: `shot_shop_${char}${buy ? '_after' : ''}.png` });
+console.log(await p.evaluate(() => { const h = window.__arena.scene.get('hud'); return JSON.stringify({ open: h.shopOpen, cat: h.shopCat, recs: h.recIds }); }));
+console.log('errors:', errs.length ? errs.join(' | ') : 'none');
+await b.close();

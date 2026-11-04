@@ -1,4 +1,4 @@
-import { CHAMPIONS, ABILITY_KEYS, MAX_LEVEL, MAX_RANK, ULT_LEVELS, rk } from './data.js';
+import { COMBOS, LUNGES, COMBO_WINDOW, CHAMPIONS, ABILITY_KEYS, MAX_LEVEL, MAX_RANK, ULT_LEVELS, rk } from './data.js';
 import { ITEM_BY_ID, MINI_OF, SLOTS, sellValue, buyPlan, PERM_KEYS, PERM_BY_ID, PERM_COST, STAT_CAP } from './items.js';
 
 // World geometry: top-down map, one horizontal lane.
@@ -24,6 +24,12 @@ const mkMinion = (tex, name, height, stats, attack, reward) => ({ kind: 'minion'
 const mkTower = (tex, name, proj) => ({ kind: 'tower', name, ref: tex, tex, height: 205, radius: 42,
   stats: { hp: 1800, mana: 0, atk: 0, ap: 0, armor: 50, mr: 50, speed: 0, run: 0, range: 320, atkCd: 1.1 },
   attack: { type: 'ranged', dmg: 160, dmgType: 'physical', proj }, reward: { gold: 150, xp: 120 } });
+// 8-direction sprites: screen directions in clockwise order from east (y points down). Only s/se/e/ne/n are drawn; the left side mirrors se/e/ne.
+const DIR8 = ['e', 'se', 's', 'sw', 'w', 'nw', 'n', 'ne'];
+const DIR_SRC = { e: ['e', false], se: ['se', false], s: ['s', false], ne: ['ne', false], n: ['n', false], w: ['e', true], sw: ['se', true], nw: ['ne', true] };
+
+const w2g = f => f.w.gameT || 0;
+
 export const UNIT_DEFS = {
   minion_blue_melee:  mkMinion('minion_blue_melee', 'Soldado', 110, { hp: 320, armor: 15, speed: 105, range: 70, atkCd: 1.0 }, { type: 'melee', dmg: 4.8, dmgType: 'physical', reach: 80 }, { gold: 20, xp: 28 }),
   minion_blue_ranged: mkMinion('minion_blue_ranged', 'Fusilero', 110, { hp: 220, armor: 8, speed: 105, range: 300, atkCd: 1.1 }, { type: 'ranged', dmg: 4.2, dmgType: 'physical', proj: { vfx: 'bullet_tracer', speed: 560, scale: 1.3, r: 10 } }, { gold: 16, xp: 22 }),
@@ -42,6 +48,7 @@ export const UNIT_DEFS = {
 export const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
+const LUNGE_RUN_T = 0.45;   // seconds of running needed to gain the impulse for the forward attack
 export class Fighter {
   constructor(world, key, team, x, y, opts = {}) {
     this.w = world;
@@ -59,7 +66,7 @@ export class Fighter {
     this.owner = opts.owner || null;       // bots: the champion that summoned them
     this.ai = !!opts.ai; this.antivirus = !!opts.antivirus; this.lastTarget = null; this.invis = null; this.away = false;
     this.life = opts.life ?? Infinity;
-    this.botAp = opts.botAp || 0;
+    this.botAp = opts.botAp || 0; this.hpMult = opts.hpMult || 1;   // summoned bots: health multiplier (Leandro's ult scales it with his AI power)
     this.slot = opts.slot || { x: 0, y: 0 };
     this.ax = team === 0 ? 1 : -1; this.ay = 0;   // aim (unit vector on the ground)
     this.level = 1;
@@ -142,12 +149,17 @@ export class Fighter {
   itemPassives(dt) {
     const w = this.w, P = this.pas, ft = this.in && (this.in.mx || this.in.my);
     this.moveT = ft ? (this.moveT || 0) + dt : 0;
+    this.runT = ft ? Math.min(2, (this.runT || 0) + dt) : 0;
+    if (this.isChamp && this.alive && this.runT >= LUNGE_RUN_T) {   // impulse ready: a flash when it is gained, then a speed trail while it lasts
+      if (!this.impulse) { this.impulse = true; w.vfx('shockwave', this.x, this.y - 6, { scale: 1.4, below: true, tint: 0xffe27a, alpha: 0.9 }); w.vfx('buff', this.x, this.cy, { scale: 2.2, tint: 0xffe27a, alpha: 0.8 }); }
+      if ((this.impT = (this.impT || 0) - dt) <= 0) { this.impT = 0.07; w.vfx('spark', this.x - this.ax * 16, this.y - 10 - Math.random() * 20, { scale: 1.3, tint: 0xffe27a, alpha: 0.85, below: true }); }
+    } else this.impulse = false;
     if (P.has('botas_hipersonicas') && this.moveT > 2 && (this.trailT = (this.trailT || 0) - dt) <= 0) { this.trailT = 0.12; w.vfx('spark', this.x - this.ax * 18, this.y - 8, { scale: 1.6, tint: 0x66e0ff, alpha: 0.8, below: true }); }
-    if (P.has('tarjeta_grafica') && (this.burnT = (this.burnT || 0) - dt) <= 0) {
-      this.burnT = 0.5; w.enemiesNear(this.team, this.x, this.y, 210).forEach(t => { if (!t.isTower) { w.damage(this, t, (5 + this.ap * 0.12) * P.get('tarjeta_grafica'), 'magic', true); w.vfx('burning_ground', t.x, t.y - 6, { scale: 1.6, alpha: 0.7, below: true }); } });
-    }
     if (P.has('filtro_spam') && (this.spamT = (this.spamT || 0) - dt) <= 0) { this.spamT = 0.25; w.enemiesNear(this.team, this.x, this.y, 260).forEach(t => { if (!t.isTower) { t.atkSlow = 0.25 * P.get('filtro_spam'); t.atkSlowT = 0.4; } }); }
-    if (P.has('nucleo_ia') && this.combatT > 0 && (this.coreT = (this.coreT ?? 12) - dt) <= 0) { this.coreT = 12; this.shieldHp = Math.max(this.shieldHp, this.maxHp * 0.12 * P.get('nucleo_ia')); this.shieldT = 4; w.vfx('shield', this.x, this.cy, { scale: 2.6 }); w.float(this.x, this.y - this.def.height - 34, '¡Escudo de núcleo!', '#ffffff'); }
+    if (P.has('nucleo_ia')) {   // AI core: the shield stays until it is broken; once lost, the 12 s counter starts again from zero
+      if (this.coreOn && this.shieldHp <= 0) { this.coreOn = false; this.coreT = 12; }
+      if (!this.coreOn && (this.coreT = (this.coreT ?? 12) - dt) <= 0) { this.coreT = 12; this.coreOn = true; this.shieldHp = Math.max(this.shieldHp, (25 + this.ap * 0.5) * P.get('nucleo_ia')); this.shieldT = Infinity; w.vfx('shield', this.x, this.cy, { scale: 2.6 }); w.float(this.x, this.y - this.def.height - 34, '¡Escudo de núcleo!', '#ffffff'); }
+    } else if (this.coreOn) { this.coreOn = false; this.coreT = 12; }
     if (P.has('firewall_magico')) { if (this.mshieldCd > 0) this.mshieldCd -= dt; else if (!this.mshield) { this.mshield = (120 + this.mr * 2) * P.get('firewall_magico'); w.vfx('shield', this.x, this.cy, { scale: 2.2, tint: 0x66e0ff }); } }
     if (P.has('corazon_silicio') && !(this.combatT > 0) && this.hp < this.maxHp) { this.hp = Math.min(this.maxHp, this.hp + this.maxHp * 0.03 * P.get('corazon_silicio') * dt); if (Math.random() < dt * 3) w.vfx('heal', this.x + (Math.random() - 0.5) * 40, this.cy + (Math.random() - 0.5) * 30, { scale: 1.6, alpha: 0.8, tint: 0x66ff99 }); }
     if (this.backupCd > 0) this.backupCd -= dt;
@@ -174,9 +186,9 @@ export class Fighter {
     return this.def.stats[stat] * (1 + g * (this.level - 1));
   }
   pk(type) { return this.pkBuffs?.[type]?.m || 0; }   // temporary package buffs (Eliud's R): hp / atk / aspd / def
-  get maxHp() { return (this.grow('hp') + this.it.hp) * (this.buff?.hpMult || 1) * (1 + this.pk('hp')); }
+  get maxHp() { return (this.grow('hp') + this.it.hp) * (this.buff?.hpMult || 1) * (1 + this.pk('hp')) * (this.hpMult || 1); }
   get maxMana() { return this.def.rage ? 0 : this.def.stats.mana ? this.def.stats.mana + this.it.mana : 0; }
-  get atk() { return (this.grow('atk') + this.it.atk) * (this.buff?.atkMult || 1) * (1 + this.pk('atk')); }
+  get atk() { return (this.grow('atk') + this.it.atk) * (this.buff?.atkMult || 1) * (1 + this.pk('atk')) * (this.pas?.has('exoesqueleto') && this.hp < this.maxHp * 0.5 ? 1 + 0.2 * this.pas.get('exoesqueleto') : 1); }
   get ap() { return this.isBot ? this.botAp : (this.grow('ap') + this.it.ap) * (1 + this.pk('atk')); }
   get armor() { return (this.def.stats.armor + this.it.armor) * (1 + this.pk('def')) + this.pk('def') * 30 + this.setupBonus('armorPer') + (this.hen ? this.def.hen.armor : 0); }
   get mr() { return (this.def.stats.mr + this.it.mr) * (1 + this.pk('def')) + this.pk('def') * 30 + this.setupBonus('mrPer') + (this.hen ? this.def.hen.mr : 0); }
@@ -266,7 +278,7 @@ export class Fighter {
   }
 
   get respawnTime() { return 4 + this.level * 1.2; }
-  get xpNeed() { return Math.round(80 * Math.pow(1.28, this.level - 1)); }   // each level needs ~28% more XP than the last
+  get xpNeed() { return Math.round(110 * Math.pow(1.3, this.level - 1)); }   // each level needs ~30% more XP than the last (about 55 % more XP in total than before: levelling is slower)
   gainXp(n) {
     if (!this.isChamp || this.level >= MAX_LEVEL) return;
     this.xp += n;
@@ -300,12 +312,12 @@ export class Fighter {
   }
 
   /* ---------- actions ---------- */
-  get free() { return this.alive && this.stunT <= 0 && this.state !== 'cast' && !this.rw; }
+  get free() { return this.alive && this.stunT <= 0 && !(this.carriedT > 0) && this.state !== 'cast' && !this.rw; }
 
   startAction(anim, windup, dur, fn) {
     this.state = 'cast'; this.anim = anim;
     this.stateT = 0; this.stateDur = dur; this.windup = windup;
-    this.pending = fn; this.fired = false;
+    this.pending = fn; this.fired = false; this.lunge = null;
     this.playAnim(anim, dur);
   }
 
@@ -320,25 +332,56 @@ export class Fighter {
   tryCast(k) {
     const n = this.w.net;
     if (n?.role === 'client' && !n.replaying) return n.clientCast(this, k);
-    const ok = this._tryCast(k); if (ok) { this.setupHit(); if (this.pas.has('procesador_cuantico')) { this.speedBoost = Math.max(this.speedT > 0 ? this.speedBoost : 0, 0.25 * this.pas.get('procesador_cuantico')); this.speedT = Math.max(this.speedT, 2); this.w.vfx('run_dust', this.x, this.y - 6, { scale: 2.2, alpha: 0.8, below: true }); } if (n?.role === 'host') n.sendCast(this, k); } return ok;
+    const ok = this._tryCast(k); if (ok) { this.setupHit(); if (this.pas.has('consola_overclock') && this.maxMana) { this.mana = Math.min(this.maxMana, this.mana + this.maxMana * 0.08 * this.pas.get('consola_overclock')); this.w.vfx('buff', this.x, this.cy, { scale: 2, tint: 0x3b8cff, alpha: 0.7 }); } if (this.pas.has('procesador_cuantico')) { this.speedBoost = Math.max(this.speedT > 0 ? this.speedBoost : 0, 0.25 * this.pas.get('procesador_cuantico')); this.speedT = Math.max(this.speedT, 2); this.w.vfx('run_dust', this.x, this.y - 6, { scale: 2.2, alpha: 0.8, below: true }); } if (n?.role === 'host') n.sendCast(this, k); } return ok;
+  }
+  // basic attack combo: up to 3 chained hits (see COMBOS in data.js). Bots/minions/towers keep the single swing.
+  // a basic attack may be started in the middle of the previous swing once that hit has landed (animation cancel): every click throws the next hit
+  chaining() { return this.alive && this.stunT <= 0 && !this.rw && this.state === 'cast' && /^attack/.test(this.anim || '') && this.fired && !this.dashV; }
+  comboCfg() { const b = this.def.basic, c = COMBOS[this.key] || (b.kind === 'melee' ? COMBOS.jorbi : COMBOS.axel); return c; }
+  // damage the NEXT basic attack (the next hit of the combo) would deal to `t`, after armour / magic resistance (used by the last-hit indicator)
+  nextBasicDmg(t) {
+    const b = this.hen ? { ...this.def.basic, ...this.def.basic.hen } : this.def.basic, C = this.comboCfg(), w = this.w;
+    const inWin = this.comboStep > 0 && this.comboStep < C.length && (w.gameT || 0) - (this.comboEnd || 0) <= COMBO_WINDOW, cs = C[inWin ? this.comboStep : 0];
+    let raw;
+    if (b.kind === 'melee') raw = (b.base + this.atk * b.atkScale) * cs.dmg * (this.key === 'jorbi' && cs.fin && this.ranks.p3 > 0 ? rk(this.def.abilities.p3.critMult, this.ranks.p3) : 1);
+    else if (b.obj || !b.every3) raw = ((b.alt || (b.apScale != null && b.atkScale == null) ? b.base + this.ap * b.apScale : b.base + this.atk * b.atkScale) * cs.dmg) * (cs.shots || 1);
+    else raw = (b.base + this.ap * b.apScale) * (cs.fin ? b.every3.mult * (cs.finMult || 1) : cs.dmg) * (cs.shots || 1);
+    const res = b.type === 'physical' ? t.armor : b.type === 'magic' ? t.mr : 0;
+    return Math.max(1, raw * 100 / (100 + res));
   }
   _tryBasic() {
-    if (!this.free || this.cds.basic > 0 || this.flame || this.ride || this.lure || this.bomber) return false;   // no basic attacks while the flamethrower is active
+    const w = this.w;
+    if (!(this.free || this.chaining()) || this.cds.basic > 0 || this.flame || this.ride || this.lure || this.bomber) {   // no basic attacks while the flamethrower is active
+      return false;
+    }
+    this.bufferT = 0;
     this.cds.basic = this.def.stats.atkCd / (1 + this.pk('aspd') + this.it.aspd) / (this.atkSlowT > 0 ? 1 - this.atkSlow : 1);
     if (this.invis) this.breakInvis();
     if (this.isBot) { this.startAction('attack', 0.2, 0.4, () => this.basicDo(() => this.botAttack())); return true; }
     if (this.isMinion || this.isTower) { this.startAction('attack', 0.15, 0.35, () => this.basicDo(() => this.unitAttack())); return true; }
-    const b = this.hen ? { ...this.def.basic, ...this.def.basic.hen } : this.def.basic;
+    const b = this.hen ? { ...this.def.basic, ...this.def.basic.hen } : this.def.basic, C = this.comboCfg();
     this.basicCount++;
-    // jorbi's passive: every 3rd basic attack is a heavy critical hit (own animation)
-    const heavy = (this.key === 'jorbi' && this.ranks.p3 > 0 && this.basicCount % 3 === 0) || (this.key === 'junior' && this.basicCount % 4 === 0);
-    if (b.alt) {   // julio: odd = slow drawing, even = fast scribble
-      const fast = this.basicCount % 2 === 0, m = fast ? b.fast : b.slow;
-      this.cds.basic = m.cd; this.basicSpeed = m.speed;
-      this.startAction(fast ? 'attack2' : 'attack', m.windup, m.dur, () => this.basicDo(() => this.fireBasic()));
+    const t = w.gameT || 0, baseCd = this.cds.basic, fs = this.forceStep; this.forceStep = 0;
+    // attack + move toward the aim = a single attack with a forward impulse and its own animation (not a combo hit)
+    const mv = Math.hypot(this.in?.mx || 0, this.in?.my || 0), LG = LUNGES[this.key] || (b.kind === 'melee' ? LUNGES.jorbi : LUNGES.axel);
+    if (fs === -1 || (!fs && mv > 0 && this.rootT <= 0 && (this.runT || 0) >= LUNGE_RUN_T && (this.in.mx * this.ax + this.in.my * this.ay) / mv > 0.35)) {
+      let wind = (b.windup || 0.2) * LG.w, dur = (b.dur || 0.45) * LG.t; if (b.alt) { this.basicSpeed = b.slow.speed; wind = b.slow.windup * LG.w; dur = b.slow.dur * LG.t; }
+      const cd = Math.max(baseCd * LG.cd, wind + 0.06), td = Math.max(0.14, wind + 0.04), cs = { anim: 'lunge', dmg: LG.dmg, reachAdd: LG.reachAdd || 0, obj: LG.obj, scale: LG.scale || 1, speed: LG.speed || 1, lungeAtk: true };
+      this.runT = 0; this.cds.basic = cd; this.comboStep = 0; this.cstepN = -1; this.comboEnd = t; this.holdPose = false; this.cstep = cs;
+      this.startAction('lunge', wind, dur, () => this.basicDo(() => this.fireBasic(false, cs)));
+      this.lunge = { vx: this.ax * LG.dist / td, vy: this.ay * LG.dist / td, t: td };
       return true;
     }
-    this.startAction(heavy ? 'attack3' : 'attack', heavy ? 0.4 : b.windup, heavy ? 0.7 : b.dur, () => this.basicDo(() => this.fireBasic(heavy)));
+    // which hit of the combo: the next one if the previous swing ended less than COMBO_WINDOW ago, otherwise back to the first
+    let step = fs || ((this.comboStep > 0 && this.comboStep < C.length && t - (this.comboEnd || 0) <= COMBO_WINDOW) ? this.comboStep + 1 : 1);
+    const cs = C[step - 1]; this.comboStep = step >= C.length ? 0 : step; this.cstep = cs; this.cstepN = step;
+    let wind = b.windup * cs.w, dur = b.dur * cs.t, cd = this.cds.basic * cs.cd;   // cd = time until the next click can act
+    if (b.alt) {   // julio: slow drawing, fast scribble, slow big blot
+      const m = step === 2 ? b.fast : b.slow; this.basicSpeed = m.speed; wind = m.windup * cs.w; dur = m.dur * cs.t; cd = m.cd * cs.cd;
+    }
+    { const k = Math.min(1, cd * 1.05 / dur); wind *= k; dur *= k; }   // faster playback instead of a cut swing: the hit still lands at the same frame
+    cd = Math.max(cd, wind + 0.06); this.cds.basic = cd; this.comboEnd = t + cd;   // the hit has to land before the next one can cancel the swing; the click window starts when the next hit becomes possible
+    this.startAction(cs.anim, wind, dur, () => this.basicDo(() => this.fireBasic(!!cs.fin, cs)));
     return true;
   }
 
@@ -368,31 +411,40 @@ export class Fighter {
   }
 
   /* ---------- effects (champion specific) ---------- */
-  fireBasic(heavy = false) {
-    const b = this.hen ? { ...this.def.basic, ...this.def.basic.hen } : this.def.basic, w = this.w;
+  fireBasic(heavy = false, cs = null) {
+    const b = this.hen ? { ...this.def.basic, ...this.def.basic.hen } : this.def.basic, w = this.w; cs ||= { dmg: 1 };
     w.audio.basic(this, heavy);
     if (b.kind === 'melee') {
-      let dmg = b.base + this.atk * b.atkScale;
-      if (heavy && this.key === 'jorbi') dmg *= rk(this.def.abilities.p3.critMult, this.ranks.p3);   // junior's 4th punch gets its damage + stun from the fist counter
-      w.meleeHits(this, b.reach + (heavy ? 15 : 0)).forEach(t => {
+      let dmg = (b.base + this.atk * b.atkScale) * cs.dmg;
+      const crit = heavy && this.key === 'jorbi' && this.ranks.p3 > 0;
+      if (crit) dmg *= rk(this.def.abilities.p3.critMult, this.ranks.p3);   // jorbi's passive turns the finisher into a critical hit; junior's 3rd punch gets its stun from the fist counter
+      w.meleeHits(this, b.reach + (cs.reachAdd || 0)).forEach(t => {
         w.damage(this, t, dmg, b.type); this.addRage(this.def.hen?.rageHit || 0);
         if (this.key === 'luis' && this.stab > 0 && t.isChamp && (t.ax * (this.x - t.x) + t.ay * (this.y - t.y)) < 0) {   // backstab after leaving invisibility: critical AI damage
           this.stab = 0; w.damage(this, t, 60 + this.ap * 2.2, 'magic'); w.float(t.x, t.y - t.def.height - 46, '¡APUÑALADA!', '#33ff88');  w.vfx('spark', t.x, t.cy, { scale: 5, tint: 0x33ff88 });
         }
-        w.vfx(b.vfx, t.x, t.cy, { scale: heavy ? 5.5 : 3 });
-        if (heavy && this.key === 'jorbi') w.float(t.x, t.y - t.def.height - 28, '¡CRÍTICO!', '#ff9a2e');
+        w.vfx(b.vfx, t.x, t.cy, { scale: heavy ? 5.5 : cs.anim === 'attack2' ? 3.5 : 3 });
+        if (crit) w.float(t.x, t.y - t.def.height - 28, '¡CRÍTICO!', '#ff9a2e');
       });
       return;
     }
-    if (b.obj || !b.every3) {   // generic ranged physical attack (axel's laptop, yonaiker's bolts)
-      w.projectile(this, { range: this.def.stats.range, onHit: this.key === 'eliud' ? () => this.addRage(this.def.hen.rageHit) : null, speed: this.basicSpeed || b.speed, dmg: b.alt ? b.base + this.ap * b.apScale : b.base + this.atk * b.atkScale, type: b.type, obj: b.obj, vfx: b.vfx, spin: !!b.obj && !b.alt, scale: b.scale ? b.scale : b.alt ? 0.2 : this.key === 'eliud' ? 0.12 : 0.17, r: 14 });
-      return;
+    // ranged: a volley of 1-3 shots per combo hit, same projectile style as the champion's basic attack
+    const n = cs.shots || 1, spread = cs.spread ?? 0.1, gap = cs.gap ?? 0.09;
+    const shoot = (ang) => {
+      if (b.obj || !b.every3) {   // generic ranged physical attack (axel's laptop, yonaiker's bolts, julio's drawings, eliud's eggs)
+        w.projectile(this, { ang, range: this.def.stats.range, onHit: this.key === 'eliud' ? () => this.addRage(this.def.hen.rageHit) : null, speed: (this.basicSpeed || b.speed) * (cs.speed || 1), dmg: (b.alt || (b.apScale != null && b.atkScale == null) ? b.base + this.ap * b.apScale : b.base + this.atk * b.atkScale) * cs.dmg, type: b.type, obj: cs.obj || b.obj, vfx: b.vfx, spin: !!b.obj && !b.alt, scale: (b.scale ? b.scale : b.alt ? 0.2 : this.key === 'eliud' ? 0.12 : 0.17) * (cs.scale || 1), r: 14 * (cs.scale > 1 ? 1.3 : 1) });
+        return;
+      }
+      const big = !!cs.fin;   // leandro / xeviche: the finisher is their big magic missile
+      let dmg = b.base + this.ap * b.apScale;
+      dmg = big ? dmg * b.every3.mult * (cs.finMult || 1) : dmg * cs.dmg;
+      w.projectile(this, { ang, range: this.def.stats.range, speed: b.speed, dmg, type: b.type, vfx: b.vfx, scale: big ? b.every3.scale * 2.4 : 2.2 * (n > 1 ? 0.85 : 1),
+        tint: big ? 0x9ad7ff : null, big, r: big ? 22 : 14 });
+    };
+    for (let i = 0; i < n; i++) {
+      const ang = n > 1 ? (i - (n - 1) / 2) * spread : 0;
+      if (i === 0) shoot(ang); else w.after(i * gap, () => { if (this.alive && !this.stunT) shoot(ang); });
     }
-    const big = this.basicCount % 3 === 0;
-    let dmg = b.base + this.ap * b.apScale;
-    if (big) dmg *= b.every3.mult;
-    w.projectile(this, { range: this.def.stats.range, speed: b.speed, dmg, type: b.type, vfx: b.vfx, scale: big ? b.every3.scale * 2.4 : 2.2,
-      tint: big ? 0x9ad7ff : null, big, r: big ? 22 : 14 });
   }
 
   fireAbility(k, a, rank) {
@@ -408,13 +460,12 @@ export class Fighter {
         break;
       }
       case 'leandro:p2': {   // contracts fan out toward the front; each one that hits an enemy infects the area around it
-        const n = rk(a.count, rank), total = rk(a.poisonApScale, rank) * this.ap, rad = rk(a.areaRadius, rank), life = rk(a.areaLife, rank), dmg = rk(a.dmg, rank) + this.ap * a.apScale;
+        const n = rk(a.count, rank), rad = rk(a.areaRadius, rank), life = rk(a.areaLife, rank), dmg = rk(a.dmg, rank) + this.ap * a.apScale, total = dmg * a.poisonRatio;   // the poison of each contract is half of that contract's impact damage
         for (let i = 0; i < n; i++) {
           const ang = n > 1 ? (i / (n - 1) - 0.5) * a.spread : 0;
           w.projectile(this, {
             ang, speed: a.speed, dmg, type: 'magic', obj: 'contract', spin: true, scale: 0.13, r: 18,
-            onHit: t => { t.poison(total / a.poisonTime, a.poisonTime, this); },
-            onImpact: (x, y) => w.infectZone(this, x, y, rad, life, total, a.poisonTime),
+            onImpact: (x, y) => w.infectZone(this, x, y, rad, life, total),
           });
         }
         break;
@@ -428,7 +479,7 @@ export class Fighter {
         break;
       case 'leandro:ult': {
         w.vfx('summon', this.x, this.y - 10, { scale: 4 });
-        w.summonBots(this, { melee: rk(a.melee, rank), ranged: rk(a.ranged, rank) }, a.life, a.botApScale * this.ap);
+        w.summonBots(this, { melee: rk(a.melee, rank), ranged: rk(a.ranged, rank) }, a.life, a.botApScale * this.ap, 1 + this.ap / 100 * a.botHpScale);   // the more AI power Leandro has, the more damage AND health his bots have
         break;
       }
       case 'julio:p1': {   // S-shaped ink laser: pierces everyone on the stroke
@@ -673,6 +724,8 @@ export class Fighter {
     tx.setVisible(true).setPosition(cx + 36, cy - 6).setDepth(this.y + 6);
   }
   get poisoned() { return this.poisons.some(p => !p.burn); }
+  get burning() { return this.poisons.some(p => p.burn); }
+  get slowed() { return this.slows.length > 0; }
   drawPoison() {   // poisoned champion: toxic puddle aura on the ground around the feet, with bubbles rising
     const w = this.w, on = this.isChamp && this.alive && this.poisoned && !this.hiddenFor(w.player);
     if (!on) { this.poisonG?.setVisible(false); return; }
@@ -725,9 +778,9 @@ export class Fighter {
     if (this.isTower) return;
     const q = key && this.poisons.find(p => p.key === key && p.src === src); if (q) { q.t = Math.max(q.t, t); q.dps = Math.max(q.dps, dps); return; }
     this.poisons.push({ dps, t, src, tick: 0, type, key }); this.w.markSrc(this, 'poison'); }
-  burn(dps, t, src) {   // fire: physical damage over time, refreshed (not stacked) by the same source
-    if (this.isTower || this.arepaBlocks()) return; const b = this.poisons.find(p => p.burn && p.src === src); if (b) { b.t = Math.max(b.t, t); b.dps = Math.max(b.dps, dps); return; }
-    this.poisons.push({ dps, t, src, tick: 0, type: 'physical', burn: true }); this.burnT = t; }
+  burn(dps, t, src, type = 'physical', key = null) {   // fire: damage over time (physical unless told otherwise), refreshed (not stacked) by the same source and kind
+    if (this.isTower || this.arepaBlocks()) return; const b = this.poisons.find(p => p.burn && p.src === src && p.key === key); if (b) { b.t = Math.max(b.t, t); b.dps = Math.max(b.dps, dps); return; }
+    this.poisons.push({ dps, t, src, tick: 0, type, burn: true, key }); }
   // active effects for the HUD status bar: [{id, name, sub, icon, t (seconds, null = no timer), bad, desc}]
   statusList() {
     const L = [], me = this, add = (id, label, t, bad, desc, extra = {}) => {
@@ -741,11 +794,11 @@ export class Fighter {
     if (this.blindT > 0) add('blind', 'Cegado', this.blindT, true, 'Tu visión se reduce a una zona pequeña a tu alrededor.');
     if (this.lure) add('lure', 'Hechizado', this.lure.t, true, 'Caminas hacia Xeviche y no puedes atacar ni usar poderes.');
     if (this.charmT > 0) add('charm', 'Controlado', this.charmT, true, 'Luchas para el enemigo y no puedes usar poderes.');
-    if (this.slows.length) add('slow', 'Ralentizado', Math.max(...this.slows.map(s => s.t)), true, 'Te mueves más lento.');
-    if (this.poisons.some(p => p.burn)) add('burn', 'Quemado', Math.max(...this.poisons.filter(p => p.burn).map(p => p.t)), true, 'Recibes daño de fuego cada medio segundo.', { icon: 'icon_junior_p3', name: 'Lanzallamas', by: 'Junior' });
+    if (this.slows.length) add('slow', 'Ralentizado', Math.max(...this.slows.map(s => s.t)), true, 'Te mueves más lento.', { icon: 'icon_slow', name: 'Ralentización', tint: 0x7ee0ff });
+    if (this.poisons.some(p => p.burn)) add('burn', 'Quemado', Math.max(...this.poisons.filter(p => p.burn).map(p => p.t)), true, 'Recibes daño de fuego cada medio segundo.', { icon: 'icon_burn', name: 'Quemadura', by: (() => { const s = this.poisons.find(p => p.burn)?.src; return (s?.owner || s)?.def?.name || ''; })(), tint: 0xff5a2a });
     if (this.poisons.some(p => !p.burn)) add('poison', 'Envenenado', Math.max(...this.poisons.filter(p => !p.burn).map(p => p.t)), true, 'Recibes daño cada medio segundo.', { icon: 'icon_poison', name: 'Envenenado', tint: 0x7be05a });
     if (this.ink && this.ink.t > 0) add('ink', 'Marcado con tinta', this.ink.t, true, 'Tu siguiente daño de Julio hace explotar la tinta.');
-    if (this.shieldHp > 0) add('shield', `Escudo ${Math.round(this.shieldHp)}`, this.shieldT, false, 'Absorbe daño.');
+    if (this.shieldHp > 0) add('shield', `Escudo ${Math.round(this.shieldHp)}`, this.shieldT < 1e6 ? this.shieldT : null, false, this.coreOn ? 'Escudo de núcleo: dura hasta que se rompe.' : 'Absorbe daño.');
     if (this.speedT > 0) add('speed', 'Velocidad extra', this.speedT, false, 'Te mueves más rápido.');
     if (this.recall) add('recall', 'Teletransporte', this.recall.t, false, 'Volverás a tu base. Se cancela si recibes daño.', { icon: 'item_teleport_base', name: 'Teleport a la base' });
     if (this.potions.length) add('potion', 'Poción', Math.max(...this.potions.map(p => p.t)), false, 'Recuperas vida y maná con el tiempo.', { icon: 'item_pocion_vida_peq', name: 'Poción' });
@@ -785,15 +838,32 @@ export class Fighter {
 
   // tower: play the collapse once, then leave a permanent rubble pile of its base
   destroyTower() {
-    const k = `${this.key}_destroy`, showRubble = () => { if (this.w.textures.exists(`${this.key}_rubble`)) this.spr.stop().setTexture(`${this.key}_rubble`, 0); else this.spr.setTint(0x333333); };
+    const k = `${this.key}_destroy`, showRubble = () => { if (this.w.sprites[this.key]?.rubble) this.spr.stop().setTexture('atl_' + this.key, 'rubble/0'); else this.spr.setTint(0x333333); };
     try { this.spr.renderFilters = false; } catch (e) { /* no filters */ }   // drop the team glow
     this.shadow.setVisible(false);
     if (this.w.anims.exists(k)) { this.spr.play({ key: k, repeat: 0 }); this.spr.once('animationcomplete', showRubble); } else showRubble();
   }
 
   /* ---------- per-frame ---------- */
+  // cooldown of an item PASSIVE (for the item slot counter): { cd, max } or null when it is ready / active
+  passiveCd(id) {
+    if (!this.pas?.has(id)) return null;
+    if (id === 'nucleo_ia') return !this.coreOn ? { cd: Math.max(0, this.coreT ?? 12), max: 12 } : null;
+    if (id === 'firewall_magico') return !this.mshield && this.mshieldCd > 0 ? { cd: this.mshieldCd, max: 10 } : null;
+    if (id === 'servidor_redundante') return this.backupCd > 0 ? { cd: this.backupCd, max: 60 } : null;
+    return null;
+  }
+  // health bar animation state: _hs = what the solid bar shows, _gh = the "ghost" of the health lost (fades out slowly), heal = animated fill towards the real health
+  tickHp(dt) {
+    const hp = Math.max(0, this.hp), mh = Math.max(1, this.maxHp);
+    if (this._hs === undefined || !this.alive) { this._hs = this._gh = hp; this._gd = 0; return; }
+    if (hp < this._hs - 0.01) { this._gh = Math.max(this._gh, this._hs); this._gd = 0.45; this._hs = hp; }   // damage: the bar drops at once, a reddish ghost keeps the old value
+    else if (hp > this._hs + 0.01) this._hs = Math.min(hp, this._hs + (mh * 0.5 + (hp - this._hs) * 1.2) * dt);   // healing: the bar climbs smoothly, a dark green strip shows where it will end
+    if (this._gh > this._hs) { if ((this._gd -= dt) <= 0) this._gh = Math.max(this._hs, this._gh - (mh * 0.28 + (this._gh - this._hs) * 0.9) * dt); } else this._gh = this._hs;
+  }
   update(dt) {
     const w = this.w;
+    this.tickHp(dt);
     if (!this.alive) {
       this.deadT += dt; this.stateT += dt;
       if (this.isBot || this.isMinion) { if (this.deadT > 2.6) this.dispose = true; }   // corpse stays ~2s, then fades
@@ -856,7 +926,7 @@ export class Fighter {
     if (this.blindT > 0) this.blindT -= dt;
     if (this.speedT > 0 && (this.speedT -= dt) <= 0) this.speedBoost = 0;
     if (this.shieldT > 0 && (this.shieldT -= dt) <= 0) this.shieldHp = 0;
-    this.shieldMaxT = this.shieldT > 0 && this.shieldHp > 0 ? Math.max(this.shieldMaxT || 0, this.shieldT) : 0;   // for the white duration bar
+    this.shieldMaxT = this.shieldT > 0 && this.shieldT < 1e6 && this.shieldHp > 0 ? Math.max(this.shieldMaxT || 0, this.shieldT) : 0;   // for the white duration bar
     if (this.charmT > 0 && (this.charmT -= dt) <= 0) { this.team = this.baseTeam; this.w.float(this.x, this.y - this.def.height - 28, 'libre', '#ffffff'); }
     if (this.key === 'jorbi' && this.dashTimers.length) {   // per-charge recharge (faster while transformed)
       const sp = this.buff ? this.buff.cdSpeed : 1;
@@ -905,8 +975,13 @@ export class Fighter {
         if (Math.random() < 0.5 && !this.dashShield) w.vfx('run_dust', this.x, this.y - 6, { scale: 1.6, alpha: 0.6, below: true });
         if (this.stateT >= this.stateDur) { if (this.dashV && this.dashShield) { const d = this.dashShield; this.dashShield = null; this.shieldHp = Math.max(this.shieldHp, d.sh); this.shieldT = d.t; this.w.markSrc(this, 'shield'); } this.dashV = null; if (this.inkDash) this.inkDash = null; if (this.bike) { this.bike = null; this.setSkin(this.key); } }
       }
+      if (this.lunge) { const L = this.lunge; L.t -= dt; if (this.rootT <= 0) this.tryMove(clamp(this.x + L.vx * dt, 60, WORLD_W - 60), clamp(this.y + L.vy * dt, WALK_Y0, WALK_Y1)); if (Math.random() < 0.6) w.vfx('run_dust', this.x - this.ax * 14, this.y - 6, { scale: 1.2, alpha: 0.5, below: true }); if (L.t <= 0) this.lunge = null; }
       if (!this.fired && this.stateT >= this.windup) { this.fired = true; this.pending?.(); }
-      if (this.stateT >= this.stateDur) { this.state = 'idle'; this.playAnim('idle'); }
+      if (this.stateT >= this.stateDur) {
+        this.state = 'idle';
+        if (this.isChamp && /^attack/.test(this.anim || '') && this.comboStep > 0) this.holdPose = true;   // combo in progress: stay in the final pose of this hit (it is the first pose of the next one)
+        else this.playAnim('idle');
+      }
       return;
     }
 
@@ -914,7 +989,10 @@ export class Fighter {
       const a = this.def.abilities.p1; this.charge = Math.min(100, this.charge + dt * 100 / rk(a.chargeTime, this.ranks.p1));
       if (this.charge >= 100 && this.free) this.w.startBomber(this, a, this.ranks.p1);
     }
+    if (this.holdPose && (this.state !== 'idle' || (w2g(this) - (this.comboEnd || 0) > COMBO_WINDOW))) { this.holdPose = false; if (this.state === 'idle' && this.alive) this.playAnim('idle'); }
+    if (this.bufferT > 0) { this.bufferT -= dt; if ((this.free || this.chaining()) && this.cds.basic <= 0) { this.bufferT = 0; this.tryBasic(); } }
     if (this.arepaGrace > 0) this.arepaGrace -= dt;
+    if (this.carriedT > 0) this.carriedT -= dt;
     if (this.lure) { const L = this.lure; L.t -= dt; const dx = L.src.x - this.x, dy = L.src.y - this.y, d = Math.hypot(dx, dy); if (L.t <= 0 || !L.src.alive) this.lure = null; else this.in = d > 70 ? { mx: dx / d, my: dy / d, run: false } : { mx: 0, my: 0, run: false }; }
     if (this.ride) {   // bike: auto-forward, accelerating, free steering
       const R = this.ride, w2 = this.w; R.t -= dt; R.age += dt;
@@ -957,11 +1035,11 @@ export class Fighter {
   /* ---------- sprite ---------- */
   buildSprite() {
     const s = this.w;
-    this.dirFrames = this.isTower && s.textures.exists(`${this.key}_aim`);       // tower: 8 aim directions (E,SE,S,SW,W,NW,N,NE)
+    this.dirFrames = this.isTower && !!s.sprites[this.key]?.aim;       // tower: 8 aim directions (E,SE,S,SW,W,NW,N,NE)
     this.hasAnims = !this.dirFrames && s.hasAnims(this.key);
-    const tex = this.dirFrames ? `${this.key}_aim` : this.hasAnims ? (s.textures.exists(`${this.key}_idle`) ? `${this.key}_idle` : `${this.key}_walk`) : (this.def.ref || this.key);
+    const sp = s.sprites[this.key], tex = this.dirFrames || this.hasAnims ? 'atl_' + this.key : (this.def.ref || this.key), fr = this.dirFrames ? 'aim/0' : this.hasAnims ? (sp.idle ? 'idle/0' : 'walk/0') : undefined;   // atlas frame for towers / animated units
     this.shadow = s.add.image(this.x, this.y, 'shadow').setAlpha(0.45).setScale(this.def.height / 32 * 0.8, this.def.height / 32 * 0.4);
-    this.spr = s.add.sprite(this.x, this.y, tex);
+    this.spr = s.add.sprite(this.x, this.y, tex, fr);
     if (this.dirFrames) {
       this.spr.setOrigin(0.5, 0.89).setScale(this.def.height / 190);
     } else if (this.hasAnims) {
@@ -980,16 +1058,36 @@ export class Fighter {
 
   tintBot() { if (this.antivirus && this.hasAnims) return; if (this.antivirus) { this.spr.setTint(0xa0ffc0); return; } if (this.isBot && !this.hasAnims) this.spr.setTint(this.team === 0 ? 0xb8fff0 : 0xffb8a8); }
 
-  playAnim(name, dur, reverse = false) {
+  // direction the sprite faces: where it walks while moving, else where it aims. Sector changes need to pass the sector edge by a margin (no flicker on the diagonals).
+  curDir() {
+    const moving = (this.state === 'walk' || this.state === 'run') && this.mvLen > 0, dx = moving ? this.mvx : this.ax, dy = moving ? this.mvy : this.ay;
+    if (dx === 0 && dy === 0) return DIR8[this.d8i || 0];
+    const a = Math.atan2(dy, dx), step = Math.PI / 4;
+    if (this.d8i === undefined) this.d8i = (Math.round(a / step) + 8) % 8;
+    else { let df = a - this.d8i * step; df = Math.atan2(Math.sin(df), Math.cos(df)); if (Math.abs(df) > step / 2 + 0.14) this.d8i = (Math.round(a / step) + 8) % 8; }
+    return DIR8[this.d8i];
+  }
+
+  playAnim(name, dur, reverse = false, keep = false) {
     if (!this.hasAnims) return;
     const held = this.flame && (name === 'idle' || name === 'walk' || name === 'run');   // flamethrower stays in his hands while it is active
     if (held) name = 'power3';
-    let key = `${this.skin}_${name}`;
-    if (!this.w.anims.exists(key)) key = `${this.key}_${name}`;
-    if (!this.w.anims.exists(key)) return;
+    const d = this.curDir(), [sfx, mir] = DIR_SRC[d];
+    let key = null;
+    for (const b of [this.skin, this.key]) { const k = `${b}_${name}_${sfx}`; if (this.w.anims.exists(k)) { key = k; break; } }
+    this.dirArt = !!key; this.dirMirror = mir;
+    if (!key) {   // no directional art for this animation yet: the single east-facing sheet (mirrored by facing, as before)
+      key = `${this.skin}_${name}`;
+      if (!this.w.anims.exists(key)) key = `${this.key}_${name}`;
+      if (!this.w.anims.exists(key)) { if (/^attack\d$/.test(name) || name === 'lunge') return this.playAnim('attack', dur, reverse, keep); return; }   // combo hits without their own art yet reuse the basic attack
+    }
     const anim = this.w.anims.get(key);
     const cfg = { key, repeat: held ? -1 : anim.repeat };
     if (dur) cfg.frameRate = anim.getTotalFrames() / dur;
+    if (!/^attack/.test(name)) this.holdPose = false;
+    if (keep === 'last') cfg.startFrame = anim.getTotalFrames() - 1;
+    else if (keep) { const tot = anim.getTotalFrames(); cfg.startFrame = Math.min(tot - 1, Math.floor((this.spr.anims.getProgress() || 0) * tot)); }   // direction change mid-cycle: same phase of the step
+    this.curName = name; this.curDur = dur; this.curD = d;
     reverse ? this.spr.playReverse(cfg) : this.spr.play(cfg);
   }
 
@@ -1021,8 +1119,13 @@ export class Fighter {
     const spr = this.spr;
     if (this.key === 'xeviche') this.drawArepa();
     this.outline();
+    // movement vector from the real displacement (works for local, bot and remote champions alike)
+    { const ddx = this.x - (this.lx ?? this.x), ddy = this.y - (this.ly ?? this.y), dl = Math.hypot(ddx, ddy); this.lx = this.x; this.ly = this.y;
+      if (dl > 0.3) { this.mvx = (this.mvx ?? 0) * 0.55 + ddx / dl * 0.45; this.mvy = (this.mvy ?? 0) * 0.55 + ddy / dl * 0.45; const m = Math.hypot(this.mvx, this.mvy) || 1; this.mvx /= m; this.mvy /= m; this.mvLen = dl; } else this.mvLen = 0; }
+    if (this.hasAnims && this.alive && this.curName && spr.anims.currentAnim?.repeat === -1 && this.curDir() !== this.curD) this.playAnim(this.curName, this.curDur, false, true);
+    else if (this.holdPose && this.alive && this.curName && this.curDir() !== this.curD) this.playAnim(this.curName, this.curDur, false, 'last');
     const face = this.turn && (this.state === 'walk' || this.state === 'run') ? this.turn : this.facing;   // while walking away from the aim the sprite faces its walking direction
-    spr.setFlipX(this.isTower ? false : face < 0);
+    spr.setFlipX(this.isTower ? false : this.hasAnims && this.dirArt ? this.dirMirror : face < 0);
     if (this.key === 'junior' && this.dashV && this.dashShield && this.state === 'cast') spr.setAngle((this.stateT / (this.stateDur || 0.38)) * 360 * (face < 0 ? -1 : 1)); else if (this.key === 'junior' && spr.angle) spr.setAngle(0);
     if (this.isChamp && this.alive && this.state !== 'dead') { if (this.charmT > 0) spr.setTint(0xffe9a0); else if (this.silenceT > 0) spr.setTint(0xd9b0ff); else if (this.poisoned) spr.setTint(0x9dffa0); else if (!this.flashing) spr.clearTint(); }   // poisoned: green filter
     this.drawPoison(); this.drawShield(); this.drawStun();
@@ -1038,7 +1141,7 @@ export class Fighter {
     if (this.isTower && !this.alive) { spr.setPosition(this.x, this.y).setAlpha(1).setDepth(this.y - 4); return; }   // wreck/rubble stays on the ground
     if (this.dirFrames) {   // tower: pick the sprite that points where it shoots
       if (!this.alive) { spr.setPosition(this.x, this.y).setAlpha(1).setDepth(this.y - 4); return; }   // wreck/rubble stays on the ground
-      spr.setFrame(((Math.round(Math.atan2(this.ay, this.ax) / (Math.PI / 4)) % 8) + 8) % 8).setPosition(this.x, this.y);
+      spr.setFrame(`aim/${((Math.round(Math.atan2(this.ay, this.ax) / (Math.PI / 4)) % 8) + 8) % 8}`).setPosition(this.x, this.y);
       return;
     }
     if (this.hasAnims && this.def.fly && this.alive) { if (this.owner?.invis) { const hid = this.hiddenFor(this.w.player); spr.setAlpha(hid ? 0 : 0.4); } else spr.setAlpha(1); const bob = Math.sin(time / 260 + this.nid * 1.7) * 5; spr.setPosition(this.x, this.y - 50 + bob); this.shadow.setPosition(this.x, this.y).setScale(this.def.height / 32 * 0.4, this.def.height / 32 * 0.2).setAlpha(0.3); return; }

@@ -109,7 +109,7 @@ export class NetGame {
     else this.sendInput(dt);
   }
   sendCast(f, k) { this.ev.push(['c', f.nid, k, r2(f.ax), r2(f.ay), f.castPoint ? r1(f.castPoint.x) : null, f.castPoint ? r1(f.castPoint.y) : null]); }
-  sendBasic(f) { this.ev.push(['b', f.nid, r2(f.ax), r2(f.ay)]); }
+  sendBasic(f) { this.ev.push(['b', f.nid, r2(f.ax), r2(f.ay), f.cstepN || 1]); }
   onDmg(src, t, dmg, type, dot) { if (this.role === 'host' && !dot) this.ev.push(['d', t.nid, r1(dmg), Math.max(0, TYPES.indexOf(type)), t.isNexus ? 2 : t.isTower ? 1 : 0]); }
   onDie(v, killer) { if (this.role === 'host') this.ev.push(['k', v.nid, killer?.nid ?? -1]); }
   onRecap(v, rc) { if (this.role === 'host') this.ev.push(['rc', v.nid, rc]); }
@@ -122,12 +122,12 @@ export class NetGame {
   packF(f) {
     const o = { i: f.nid, x: r1(f.x), y: r1(f.y), h: r1(f.hp), ax: r2(f.ax), ay: r2(f.ay) };
     if (!f.alive) o.a = 0;
-    if (f.nid >= 1000) { o.k = f.key; o.t = f.baseTeam; if (f.owner) o.o = f.owner.nid; if (f.antivirus) o.av = 1; }
+    if (f.nid >= 1000) { o.k = f.key; o.t = f.baseTeam; if (f.owner) o.o = f.owner.nid; if (f.hpMult && f.hpMult !== 1) o.hm = r2(f.hpMult); if (f.antivirus) o.av = 1; }
     const v = f.in; if (v && (v.mx || v.my)) o.v = [r2(v.mx), r2(v.my), v.run ? 1 : 0];
     if (f.pid != null) { const r = this.remote.get(f.pid); if (r?.q) o.q = r.q; }   // ack: the last input of that player already applied
     if (f.team !== f.baseTeam) o.tm = f.team;
     if (f.rootT > 0) o.rt = r2(f.rootT); if (f.stunT > 0) o.st = r2(f.stunT); if (f.silenceT > 0) o.sl = r2(f.silenceT); if (f.blindT > 0) o.bl = r2(f.blindT); if (f.charmT > 0) o.ch = r2(f.charmT);
-    if (f.shieldHp > 0) o.sd = [r1(f.shieldHp), r2(f.shieldT)]; if (f.speedT > 0) o.sp = [r2(f.speedBoost), r2(f.speedT)];
+    if (f.shieldHp > 0) o.sd = [r1(f.shieldHp), f.shieldT > 1e6 ? 1e7 : r2(f.shieldT)]; if (f.speedT > 0) o.sp = [r2(f.speedBoost), r2(f.speedT)];
     if (f.slows.length) o.sw = f.slows.map(s => [r2(s.pct), r2(s.t)]);
     if (f.poisons.length) o.pn = r2(Math.max(...f.poisons.map(p => p.t)));
     if (f.invis) o.iv = f.invis.t === Infinity ? -1 : r2(f.invis.t); if (f.ink) o.ik = r2(f.ink.t); if (f.away) o.aw = 1;
@@ -296,7 +296,7 @@ export class NetGame {
 
   spawnFor(o) {
     if (o.k == null) return null; const w = this.w;
-    const f = new Fighter(w, o.k, o.t, o.x, o.y, { nid: o.i, owner: o.o != null ? w.byNid.get(o.o) : null, life: Infinity, antivirus: !!o.av });
+    const f = new Fighter(w, o.k, o.t, o.x, o.y, { nid: o.i, owner: o.o != null ? w.byNid.get(o.o) : null, life: Infinity, antivirus: !!o.av, hpMult: o.hm || 1 });
     w.fighters.push(f); if (f.isBot) w.vfx('summon', f.x, f.y - 10, { scale: 2.2, below: true });
     return f;
   }
@@ -384,7 +384,7 @@ export class NetGame {
       const f = this.fighter(e[1]); if (!f || !f.alive) return;
       if (this.echoed(f, 'b')) return;
       if (f !== w.pc && !w.inView(f.x, f.y, 450)) return;   // basic attacks far from the camera are not replayed (nobody sees them)
-      f.ax = e[2]; f.ay = e[3]; f.cds.basic = 0; this.replay(f, () => f._tryBasic());
+      f.ax = e[2]; f.ay = e[3]; f.cds.basic = 0; f.forceStep = e[4] || 0; this.replay(f, () => f._tryBasic());
     } else if (e[0] === 'd') {
       const t = this.fighter(e[1]); if (!t) return; const dmg = e[2], type = TYPES[e[3]];
       if (!w.inView(t.x, t.y, 200)) return;

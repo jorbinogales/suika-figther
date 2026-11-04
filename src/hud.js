@@ -6,6 +6,7 @@ import { levelGauge } from './world.js';
 import { vol, saveVol } from './audio.js';
 import { net } from './net.js';
 import { STAT_STYLE, statCss, scaleRows, rowStat, pct } from './stats.js';
+import { recommend, presetOf } from './recommend.js';
 import { ITEMS, ITEM_BY_ID, CATS, CAT_COL, STAT_LABEL, fmtStat, sellValue, buyPlan, recipeTree, PERMS, PERM_BY_ID, PERM_COST } from './items.js';
 
 // HUD = separate floating modules built on Codex art (art/raw/ui -> tools/process_ui.py -> public/assets/ui).
@@ -53,6 +54,8 @@ const fmt = (k, v) => (FIELD[k][1] === '%' ? `${Math.round(v * 100)}%` : `${v}${
 
 const LV_COL = { 1: 0x9aa0ab, 2: 0x3fbf5f, 3: 0xa45cff, perm: 0xff4a4a }, LV_HEX = { 1: '#c4c9d3', 2: '#6dff93', 3: '#c9a0ff', perm: '#ff8a8a' };
 
+const CLASS_LABEL = c => ({ ai: 'Poder de IA', programador: 'Programador', soporte: 'Soporte', hacker: 'Hacker', cyber: 'Ciber' }[c.def.cls] || c.def.cls || '');
+
 export class Hud extends Phaser.Scene {
   constructor() { super('hud'); }
 
@@ -72,7 +75,7 @@ export class Hud extends Phaser.Scene {
       if (this.textures.exists('ui_' + n)) this.panels[n] = this.add.image(0, 0, 'ui_' + n).setOrigin(0, 0).setDepth(2.5);
     });
     let sv = {}; try { sv = JSON.parse(localStorage.getItem('suika_shop') || '{}'); } catch (e) { /* ignore */ }   // shop tab / filter survive closing the shop, new matches and reloads
-    this.shopOpen = false; this.shopStat = sv.stat || null; this.shopCat = sv.cat || 'all'; this.shopSel = null; this.shopScroll = 0; this.shopBtns = []; this.slotBtns = [];
+    this.shopOpen = false; this.shopStat = sv.stat || null; this.shopCat = sv.cat === 'all' ? 'all' : 'rec'; this.shopSel = null; this.shopScroll = 0; this.shopBtns = []; this.slotBtns = [];
     this.shopG = this.add.graphics().setDepth(30); this.shopTipG = this.add.graphics().setDepth(40);
     this.input.on('wheel', (ptr, over, dx, dy) => { if (this.shopOpen) this.shopScroll += dy > 0 ? 1 : -1; });
     this.input.on('pointerdown', ptr => {
@@ -248,6 +251,7 @@ export class Hud extends Phaser.Scene {
     const mmw = this.layout.hud_minimap.w * u, mmh = this.layout.hud_minimap.h * u;
     const Rm = this.place('hud_minimap', W - mmw - m, H - mmh - m, u);
     this.drawMinimap(A, g, o, Rm('minimap'));
+    this.drawAllies(A, g, o, Rm('minimap'), u);
 
     // ---- middle-left: 6 item slots (crafted items), gold and shop prompt ----
     const iy = H / 2 - this.layout.hud_items.h * u / 2, Ri = this.place('hud_items', m * 0.6, iy, u);
@@ -258,6 +262,8 @@ export class Hud extends Phaser.Scene {
       if (!sl) continue;
       const it = ITEM_BY_ID[sl.id], usable = !!(it.active || it.consumable);
       this.tile(g, 'slot' + i, sl.id, q, 3, sl.cd > 0 || (it.consumable && p.potionCd > 0) ? 0.45 : 1);
+      const pc = p.passiveCd?.(sl.id);   // passive with a cooldown (AI core, firewall, redundant server): same dark sweep + seconds as an active item
+      if (pc) { this.tile(g, 'slotp' + i, sl.id, q, 3, 0.45); this.tipG.fillStyle(0x000000, 0.6).fillPoints(sweep(q.x + q.w / 2, q.y + q.h / 2, q.w / 2, Phaser.Math.Clamp(pc.cd / pc.max, 0, 1)), true); this.T('cdp' + i, `${Math.ceil(pc.cd)}`, q.x + q.w / 2, q.y + q.h / 2, { size: q.h * 0.4, bold: true, origin: [0.5, 0.5], depth: 7 }); }
       if (sl.cd > 0) {   // clock sweep + seconds
         const f = sl.cd / it.active.cd; this.tipG.fillStyle(0x000000, 0.6).fillPoints(sweep(q.x + q.w / 2, q.y + q.h / 2, q.w / 2, f), true);
         this.T('cd' + i, `${Math.ceil(sl.cd)}`, q.x + q.w / 2, q.y + q.h / 2, { size: q.h * 0.4, bold: true, origin: [0.5, 0.5], depth: 7 });
@@ -279,6 +285,7 @@ export class Hud extends Phaser.Scene {
       this.T('shopPrompt', 'TIENDA (B)', sp.x + sp.w / 2, sp.y + sp.h / 2, { size: 13 * u, bold: true, origin: [0.5, 0.5], stroke: 2, depth: 5 });
     }
     this.drawShop(A, p, u, W, H);
+    this.drawScoreboard(A, p, u, W, H, !!A.k?.tab?.isDown && !this.shopOpen && !A.paused);
 
     // ---- top-right: clicked champion as a thin LINEAR strip (name + items); hold its ? for the stats box ----
     const sel = A.selected;
@@ -286,14 +293,30 @@ export class Hud extends Phaser.Scene {
     if (sel) {
       const eL = this.layout.hud_enemy, E = this.place('hud_enemy', W - eL.w * u - m, m + (this.scoreH || 0), u), n = E('name');
       const who = sel === p ? 'TU' : sel.team === A.player.baseTeam ? 'ALIADO' : 'ENEMIGO';
-      this.T('tName', `${sel.def.name.toUpperCase()} Nv${sel.level} · ${who}`, n.x + 6 * u, n.y + n.h / 2,
-        { size: n.h * 0.5, bold: true, origin: [0, 0.5], stroke: 2, color: sel === p ? '#7dff9a' : sel.team === A.player.baseTeam ? '#8ab4ff' : '#ff8a8a' });
+      // the champion's picture replaces the name: face with a team-coloured frame, level and relation beside it
+      const tcol = sel === p ? 0x7dff9a : sel.team === A.player.baseTeam ? 0x3b82f6 : 0xff4a4a, tcss = sel === p ? '#7dff9a' : sel.team === A.player.baseTeam ? '#8ab4ff' : '#ff8a8a';
+      const fs = n.h, fx = n.x, fy = n.y;   // the picture only fills the name slot of the strip (small), the rest of the panel stays visible
+      g.fillStyle(0x000000, 1).fillRect(fx, fy, fs, fs).lineStyle(2, tcol, 1).strokeRect(fx, fy, fs, fs);
+      if (this.textures.exists('face_' + sel.key)) this.iconImg('selFace', 'face_' + sel.key, fx + fs / 2, fy + fs / 2, fs - 2, 3.2).setAlpha(sel.alive ? 1 : 0.4);
       for (let i = 0; i < 6; i++) { const q = E('item' + i), sl = sel.inv?.[i]; if (q && sl) this.tile(g, 'eit' + i, sl.id, q, 3, 1); }
+      const ex = W - eL.w * u - m, ey = m + (this.scoreH || 0) + eL.h * u + 4 * u, bw = eL.w * u, hh = 18 * u, mh = 14 * u, cb = !!sel.def.charge, rb = !!sel.isRage;
+      const shd = sel.shieldHp > 0 ? sel.shieldHp : 0, tot = Math.max(sel.maxHp, sel.hp + shd), hf = Phaser.Math.Clamp(sel.hp / tot, 0, 1), mf = cb ? sel.charge / 100 : rb ? (sel.hen ? sel.henHp / sel.henMax : sel.rage / 100) : sel.maxMana ? sel.mana / sel.maxMana : 0;
+      g.fillStyle(0x000000, 0.85).fillRect(ex - 2, ey - 2, bw + 4, hh + mh + 8);
+      const hs2 = Math.min((sel._hs ?? sel.hp) / tot, 1), gh2 = Math.min((sel._gh ?? sel.hp) / tot, 1);
+      g.fillStyle(0x3a1414, 1).fillRect(ex, ey, bw, hh).fillStyle(sel === p || sel.team === A.player.baseTeam ? 0x3ddc84 : 0xff5252, 1).fillRect(ex, ey, bw * hs2, hh);
+      if (gh2 > hs2) g.fillStyle(0xff3b3b, 0.5).fillRect(ex + bw * hs2, ey, bw * (gh2 - hs2), hh);
+      if (hf > hs2) g.fillStyle(0x0b6b2e, 0.7).fillRect(ex + bw * hs2, ey, bw * (hf - hs2), hh);
+      if (shd > 0) g.fillStyle(0xffffff, 1).fillRect(ex + bw * hf, ey, bw * Math.min(1 - hf, shd / tot), hh);
+      for (let t = 100; t < tot - 1; t += 100) { const big = t % 1000 === 0; if (!big && bw * 100 / tot < 4.5) continue; g.fillStyle(0x000000, big ? 1 : 0.6).fillRect(ex + bw * t / tot - (big ? 1.5 : 0.5), ey, big ? 3 : 1, hh); }
+      g.fillStyle(cb ? 0x0a2a24 : rb ? 0x3a1a0a : 0x12264a, 1).fillRect(ex, ey + hh + 4, bw, mh).fillStyle(cb ? 0x4fe0c0 : rb ? (sel.hen ? 0xffd23f : 0xff7a2a) : 0x3b8cff, 1).fillRect(ex, ey + hh + 4, bw * Phaser.Math.Clamp(mf, 0, 1), mh);
+      this.T('tHp', `${Math.ceil(sel.hp)} / ${Math.ceil(sel.maxHp)}${shd > 0 ? '  +' + Math.ceil(shd) : ''}`, ex + bw / 2, ey + hh / 2, { size: hh * 0.68, bold: true, origin: [0.5, 0.5], stroke: 3, color: '#ffffff', depth: 4 });
+      this.T('tMp', cb ? `${Math.floor(sel.charge)}%` : rb ? `${Math.floor(sel.hen ? sel.henHp : sel.rage)}` : `${Math.floor(sel.mana)} / ${Math.floor(sel.maxMana)}`, ex + bw / 2, ey + hh + 4 + mh / 2, { size: mh * 0.7, bold: true, origin: [0.5, 0.5], stroke: 3, color: '#ffffff', depth: 4 });
+      this.boxes.push({ x: ex - 2, y: ey - 2, w: bw + 4, h: hh + mh + 8 });
       const hb = this.enemyHelpRect = E('help');
       g.fillStyle(this.helpHold === 'sel' ? 0x1d6f8f : 0x0f2038).fillRect(hb.x, hb.y, hb.w, hb.h);
       this.T('help2?', '?', hb.x + hb.w / 2, hb.y + hb.h / 2, { size: hb.h * 0.8, bold: true, origin: [0.5, 0.5], color: '#7ee0ff' });
       if (this.helpHold === 'sel') {
-        const hs = this.layout.hud_stats, T = this.place('hud_stats', W - hs.w * u - m, m + (this.scoreH || 0) + eL.h * u + 6 * u, u);
+        const hs = this.layout.hud_stats, T = this.place('hud_stats', W - hs.w * u - m, m + (this.scoreH || 0) + eL.h * u + 6 * u + 52 * u, u);
         this.statsBlock('sel', T('stats'), sel, false, 1);
       }
     }
@@ -377,8 +400,9 @@ export class Hud extends Phaser.Scene {
     const col = LV_COL[it.lvl];   // crafting level colour: basic = grey, level 2 = green, level 3 = purple
     g.fillStyle(col, 0.34 * alpha).fillRect(q.x, q.y, q.w, q.h).fillStyle(col, 0.2 * alpha).fillRect(q.x, q.y, q.w, q.h * 0.45).lineStyle(2, col, alpha).strokeRect(q.x, q.y, q.w, q.h);
     const tex = 'item_' + id, sz = Math.min(q.w, q.h) * 0.86;
-    if (this.textures.exists(tex)) this.iconImg(key, tex, q.x + q.w / 2, q.y + q.h / 2, sz, depth + 0.2).setAlpha(alpha);
+    if (this.textures.exists(tex)) { const im = this.iconImg(key, tex, q.x + q.w / 2, q.y + q.h / 2, sz, depth + 0.2).setAlpha(alpha < 1 ? 0.85 : 1); alpha < 1 ? im.setTint(0x4c5260) : im.clearTint(); }   // can't buy it: dark icon
     else this.T(key + 'f', it.name.slice(0, 2).toUpperCase(), q.x + q.w / 2, q.y + q.h / 2, { size: q.h * 0.4, bold: true, origin: [0.5, 0.5], depth: depth + 0.5 });
+    if (alpha < 1) g.fillStyle(0x000000, 0.35).fillRect(q.x, q.y, q.w, q.h);
     const ps = Math.max(3, q.w * 0.08); for (let i = 0; i < it.lvl; i++) g.fillStyle(col, alpha).fillRect(q.x + 3 + i * (ps + 2), q.y + q.h - ps - 3, ps, ps);
   }
   statStr(it) {
@@ -432,8 +456,59 @@ export class Hud extends Phaser.Scene {
   toggleShop() {
     const A = this.scene.get('arena');
     if (this.shopOpen) { this.shopOpen = false; return; }
-    if (A?.pc && A.canShop(A.pc) && !A.paused) { this.shopOpen = true; A.audio.play('ui_open', { gap: 0 }); if (!this.shopSel) this.shopSel = ITEMS[0].id; }
+    if (A?.pc && A.canShop(A.pc) && !A.paused) { this.shopOpen = true; A.audio.play('ui_open', { gap: 0 }); this.shopAuto = true; if (!this.shopSel) this.shopSel = ITEMS[0].id; }
   }
+  // ---- shop tab RECOMENDADO: 3 picks for your champion vs the enemy team (each says who it is effective against) + the champion's 6-item preset build ----
+  recPanel(g, p, A, u, gx, gy, gw, gh, D, bev, head, over) {
+    const enemies = A.champs.filter(c => c.baseTeam !== p.baseTeam), R = recommend(p, enemies, p.inv, p.gold, p.recChain);
+    this.recIds = R.recs.map(r => r.id);
+    if (this.shopAuto) { this.shopAuto = false; if (R.recs[0]) { this.shopSel = R.recs[0].id; this.shopSlot = null; } }   // opening the shop selects the first recommendation
+    const th = R.threat, nA = th.list.filter(e => e.apShare >= 0.5).length, nP = th.list.length - nA;
+    head('rcH', 'RECOMENDADOS PARA TI', gx, gy);
+    this.T('rcS', th.n ? `Rivales: ${nA} de poder de IA · ${nP} físicos` : 'Sin rivales todavía', gx + gw, gy + 1 * u, { size: 11 * u, color: '#9fe8ff', origin: [1, 0], depth: D + 1, stroke: 2 });
+    const TAG = { counter: ['CONTRA RIVALES', 0x7ee0ff], build: ['TU BUILD', 0xffd23f], next: ['SIGUIENTE', 0x5dff8a], complement: ['COMPLEMENTO', 0xc77dff], flex: ['RECOMENDADO', 0xaab8d0] };
+    const gap = 12 * u, cw = (gw - gap * 2) / 3, ch = 262 * u, cy = gy + 26 * u;
+    if (!R.recs.length) {   // nothing to recommend right now
+      const q = { x: gx, y: cy, w: gw, h: ch };
+      bev(q.x, q.y, q.w, q.h, 8 * u, 0x0d1830, 1, 0x2a3650, 1, 1.5);
+      this.T('rcNone', 'No hay objetos recomendados por ahora', q.x + q.w / 2, q.y + q.h / 2 - 14 * u, { size: 17 * u, bold: true, color: '#ffe27a', origin: [0.5, 0.5], depth: D + 1, stroke: 3 });
+      this.T('rcNone2', 'Ya tienes lo mejor para esta partida o no hay hueco en el inventario. Mira la pestaña TODOS o tu build de abajo.', q.x + q.w / 2, q.y + q.h / 2 + 14 * u, { size: 12 * u, color: '#9fb4d8', origin: [0.5, 0.5], depth: D + 1, stroke: 2 }).setWordWrapWidth(q.w - 40 * u, true).setAlign('center');
+    }
+    R.recs.forEach((r, i) => {
+      const it = ITEM_BY_ID[r.id], q = { x: gx + i * (cw + gap), y: cy, w: cw, h: ch }, tg = TAG[r.tag] || TAG.flex, pl = buyPlan(p.inv, r.id), afford = pl.ok && p.gold >= pl.gold, sel = this.shopSel === r.id;   // vertical card
+      bev(q.x, q.y, q.w, q.h, 8 * u, 0x0d1830, 1, tg[1], sel ? 1 : 0.65, sel ? 3 : 1.5);
+      g.fillStyle(tg[1], 0.92).fillRect(q.x + 3 * u, q.y + 3 * u, q.w - 6 * u, 17 * u);
+      this.T('rcT' + i, r.of && ITEM_BY_ID[r.of] ? `${tg[0]} · ${ITEM_BY_ID[r.of].name}` : tg[0], q.x + q.w / 2, q.y + 5 * u, { size: 9.5 * u, bold: true, color: '#04101c', origin: [0.5, 0], depth: D + 1, stroke: 0 }).setWordWrapWidth(q.w - 8 * u, true);
+      const ts = Math.min(76 * u, q.w - 28 * u), tq = { x: q.x + (q.w - ts) / 2, y: q.y + 30 * u, w: ts, h: ts };
+      this.tile(g, 'rc' + i, r.id, tq, D, afford ? 1 : 0.55);
+      this.T('rcN' + i, it.name.toUpperCase(), q.x + q.w / 2, tq.y + ts + 8 * u, { size: 12 * u, bold: true, color: '#ffffff', origin: [0.5, 0], depth: D + 1, stroke: 2 }).setWordWrapWidth(q.w - 12 * u, true).setAlign('center');
+      this.T('rcP' + i, pl.gold === 0 && !pl.ok ? pl.reason : `${pl.gold} oro`, q.x + q.w / 2, tq.y + ts + 40 * u, { size: 13 * u, bold: true, color: afford ? '#ffd23f' : '#ff6a6a', origin: [0.5, 0], depth: D + 1, stroke: 2 });
+      const sy = q.y + q.h - 78 * u;
+      g.fillStyle(tg[1], 0.3).fillRect(q.x + 8 * u, sy, q.w - 16 * u, 1);
+      this.T('rcV' + i, 'EFECTIVO CONTRA', q.x + q.w / 2, sy + 6 * u, { size: 9 * u, bold: true, color: '#7a8db3', origin: [0.5, 0], depth: D + 1, stroke: 2 });
+      // only the faces of the ENEMY champions in this match
+      const fz = Math.min(38 * u, (q.w - 16 * u - (r.vs.length - 1) * 5 * u) / Math.max(1, r.vs.length)), fw = r.vs.length * fz + (r.vs.length - 1) * 5 * u, fy = sy + 24 * u;
+      r.vs.forEach((k, j) => {
+        const fx = q.x + (q.w - fw) / 2 + j * (fz + 5 * u);
+        g.fillStyle(0x000000, 1).fillRect(fx - 2, fy - 2, fz + 4, fz + 4).lineStyle(2, 0xff5a5a, 1).strokeRect(fx - 2, fy - 2, fz + 4, fz + 4);
+        if (this.textures.exists('face_' + k)) this.iconImg('rcF' + i + '_' + j, 'face_' + k, fx + fz / 2, fy + fz / 2, fz, D + 0.5);
+      });
+      this.shopBtns.push({ ...q, tip: r.id, fn: () => { this.shopSel = r.id; this.shopSlot = null; } });
+    });
+    // the champion's preset build: 6 items in purchase order; the next one to get is outlined in gold
+    const py = cy + ch + 16 * u, ids = presetOf(p.key), nextI = ids.findIndex(id => p.slotOf(id) < 0), sz = Math.min(60 * u, (gw - 5 * 6 * u) / 6), sg = 6 * u, bx0 = gx + (gw - (sz * 6 + sg * 5)) / 2;   // tight row, centred
+    head('rcB', `BUILD DE ${p.def.name.toUpperCase()} · 6 OBJETOS`, gx, py);
+    this.T('rcBs', 'orden de compra 1 → 6', gx + gw, py + 1 * u, { size: 11 * u, color: '#9fe8ff', origin: [1, 0], depth: D + 1, stroke: 2 });
+    ids.forEach((id, i) => {
+      const q = { x: bx0 + i * (sz + sg), y: py + 24 * u, w: sz, h: sz }, si = p.slotOf(id), pl = buyPlan(p.inv, id), afford = pl.ok && p.gold >= pl.gold;
+      this.tile(g, 'rb' + i, id, q, D, afford || si >= 0 ? 1 : 0.55);
+      if (this.shopSel === id) g.lineStyle(3, 0xffffff, 1).strokeRect(q.x - 2, q.y - 2, q.w + 4, q.h + 4); else if (i === nextI) g.lineStyle(3, 0xffd23f, 1).strokeRect(q.x - 2, q.y - 2, q.w + 4, q.h + 4);
+      this.T('rbI' + i, `${i + 1}`, q.x + 4 * u, q.y + 2 * u, { size: 11 * u, bold: true, color: '#ffe27a', depth: D + 1, stroke: 3 });
+      this.T('rbP' + i, si >= 0 ? 'TIENES' : `${pl.gold}`, q.x + q.w / 2, q.y + q.h + 2 * u, { size: 11 * u, bold: true, origin: [0.5, 0], color: si >= 0 ? '#7dff9a' : afford ? '#ffd23f' : '#ff6a6a', stroke: 2, depth: D + 1 });
+      this.shopBtns.push({ x: q.x, y: q.y, w: q.w, h: q.h + 16 * u, tip: id, fn: () => { this.shopSel = id; this.shopSlot = null; } });
+    });
+  }
+
   drawShop(A, p, u, W, H) {
     this.shopBtns = []; const g = this.shopG; g.clear(); this.shopTipG.clear(); this.shopHover = null;
     if (this.shopOpen && (!A.canShop(p) || A.paused || (A.over && A.over.t > 2.4))) this.shopOpen = false;
@@ -458,13 +533,13 @@ export class Hud extends Phaser.Scene {
     sbtn('x', 'X', { x: x0 + pw - pad - 34 * u, y: y0 + 10 * u, w: 34 * u, h: 30 * u }, true, () => { this.shopOpen = false; }, 0x5c1d1d);
 
     // ---- left column: category tabs + items grouped by level ----
-    const fcw = 50 * u, gw = pw * 0.56 - pad - fcw - 8 * u, gx = x0 + pad * 1.4 + fcw + 8 * u, gx0 = x0 + pad * 1.4, ty = y0 + 52 * u, SH = { all: 'TODOS', basic: 'BÁSICOS', ad: 'ATAQUE', ap: 'PODER IA', arm: 'ARMADURA', mr: 'RESIST. IA', hp: 'VIDA', util: 'UTILIDAD', rec: 'RECUP.', perm: 'MEJORAS' };
+    const recTab = this.shopCat === 'rec', fcw = recTab ? 0 : 50 * u, gw = pw * 0.56 - pad - fcw - 8 * u, gx = x0 + pad * 1.4 + fcw + 8 * u, gx0 = x0 + pad * 1.4, ty = y0 + 52 * u, SH = { rec: 'RECOMENDADO', all: 'TODOS' };
     const cats = Object.keys(SH), tw = gw / cats.length;
-    cats.forEach((c, i) => sbtn('tab' + c, SH[c], { x: gx + i * tw, y: ty, w: tw - 3 * u, h: 28 * u }, true, () => { this.shopCat = c; this.shopScroll = 0; this.saveShop(); }, this.shopCat === c ? 0x2e6aa8 : 0x10213a, c === 'all' ? '#fff' : c === 'basic' ? '#dfe8ff' : c === 'perm' ? '#ff8a8a' : CAT_COL[c]));
+    cats.forEach((c, i) => sbtn('tab' + c, SH[c], { x: gx + i * tw, y: ty, w: tw - 3 * u, h: 28 * u }, true, () => { this.shopCat = c; this.shopScroll = 0; this.saveShop(); }, this.shopCat === c ? 0x2e6aa8 : 0x10213a, c === 'rec' ? '#ffd23f' : '#fff'));
     const cs = 60 * u, gap = 8 * u, cellH = cs + 17 * u, gy = ty + 38 * u, invH = 110 * u, gh = ph - (gy - y0) - invH - pad * 1.3, cols = Math.max(1, Math.floor((gw + gap) / (cs + gap)));
     bev(gx - 6 * u, gy - 6 * u, gw + 12 * u, gh + 12 * u, 8 * u, 0x0a1224, 1, 0x2a3650, 1, 1);
     const STAT_KEYS = ['atk', 'ap', 'armor', 'mr', 'hp', 'mana', 'speed', 'aspd', 'lifesteal', 'cdr', 'hpRegen', 'manaRegen'], fl = this.shopStat;
-    {   // filter by advantage: vertical column on the left; the first entry (TODOS) clears the filter
+    if (!recTab) {   // filter by advantage: vertical column on the left; the first entry (TODOS) clears the filter
       const colTop = ty, colH = (y0 + ph - pad * 1.3 - 62 * u - 30 * u) - colTop, n13 = STAT_KEYS.length + 1, cg = 4 * u, cc = Math.min(fcw - 8 * u, (colH - 20 * u - (n13 - 1) * cg) / n13);
       bev(gx0 - 4 * u, colTop, fcw + 4 * u, colH, 8 * u, 0x0a1224, 1, 0x2a3650, 1, 1);
       let hov = null;
@@ -479,15 +554,15 @@ export class Hud extends Phaser.Scene {
       }
       this.fltHover = hov;
     }
-    const list = ITEMS.filter(i => this.shopCat !== 'perm' && (this.shopCat === 'all' || (this.shopCat === 'basic' ? i.lvl === 1 : i.cat === this.shopCat)) && (!fl || i.stats[fl] > 0 || (fl === 'hp' && i.consumable?.hp) || (fl === 'mana' && i.consumable?.mana)));
+    const list = recTab ? [] : ITEMS.filter(i => this.shopCat !== 'perm' && (this.shopCat === 'all' || (this.shopCat === 'basic' ? i.lvl === 1 : i.cat === this.shopCat)) && (!fl || i.stats[fl] > 0 || (fl === 'hp' && i.consumable?.hp) || (fl === 'mana' && i.consumable?.mana)));
     const LVT = { 1: 'NIVEL 1 · COMPONENTES BÁSICOS', 2: 'NIVEL 2 · OBJETOS COMBINADOS', 3: 'NIVEL 3 · OBJETOS AVANZADOS' }, rows = [];
     for (const lv of [1, 2, 3]) { const its = list.filter(i => i.lvl === lv); if (!its.length) continue; rows.push({ hdr: LVT[lv], lv, h: 26 * u }); for (let k = 0; k < its.length; k += cols) rows.push({ its: its.slice(k, k + cols), h: cellH + gap }); }
-    const pl2 = (this.shopCat === 'all' || this.shopCat === 'perm') ? PERMS.filter(q => !fl || q.stat === fl) : [];
+    const pl2 = (!recTab && (this.shopCat === 'all' || this.shopCat === 'perm')) ? PERMS.filter(q => !fl || q.stat === fl) : [];
     if (pl2.length) { rows.push({ hdr: 'MEJORAS PERMANENTES · se compran varias veces', lv: 'perm', h: 26 * u }); for (let k = 0; k < pl2.length; k += cols) rows.push({ its: pl2.slice(k, k + cols), h: cellH + gap }); }
     let maxS = 0; { let acc = 0; for (let i = rows.length - 1; i >= 0; i--) { acc += rows[i].h; if (acc > gh) { maxS = i + 1; break; } } }
     this.shopScroll = Phaser.Math.Clamp(this.shopScroll, 0, maxS);
     let yy = gy, n = 0;
-    if (!rows.length) this.T('shNone', 'Ningún objeto da esa ventaja en esta categoría', gx + gw / 2, gy + 40 * u, { size: 13 * u, color: '#7a8db3', origin: [0.5, 0], depth: D + 1 });
+    if (!rows.length && !recTab) this.T('shNone', 'Ningún objeto da esa ventaja en esta categoría', gx + gw / 2, gy + 40 * u, { size: 13 * u, color: '#7a8db3', origin: [0.5, 0], depth: D + 1 });
     for (let ri = this.shopScroll; ri < rows.length; ri++) {
       const row = rows[ri]; if (yy + row.h > gy + gh + gap) break;
       if (row.hdr) { g.fillStyle(LV_COL[row.lv], 1).fillRect(gx, yy + 4 * u, 5 * u, 14 * u); g.fillStyle(LV_COL[row.lv], 0.3).fillRect(gx + 10 * u, yy + 11 * u, gw - 10 * u, 1); this.T('shH' + n, row.hdr, gx + 12 * u, yy + 2 * u, { size: 11 * u, bold: true, color: LV_HEX[row.lv], depth: D + 1, stroke: 2 }); yy += row.h; n++; continue; }
@@ -514,6 +589,8 @@ export class Hud extends Phaser.Scene {
       sbtn('dn', '▼', { x: gx + gw - 28 * u, y: gy + gh + 10 * u, w: 28 * u, h: 24 * u }, this.shopScroll < maxS, () => { this.shopScroll++; });
     }
 
+    if (recTab) this.recPanel(g, p, A, u, gx, gy, gw, gh, D, bev, head, over);
+
     // inventory strip
     const iy = y0 + ph - pad * 1.3 - 62 * u;
     head('shInv', 'INVENTARIO · clic para ver · teclas 1-6 para usar', gx0, iy - 24 * u);
@@ -539,9 +616,13 @@ export class Hud extends Phaser.Scene {
     const xs = [it.consumable?.hp ? `cura ${it.consumable.hp} de vida` : '', it.consumable?.mana ? `${it.consumable.mana} de maná` : '', it.active ? `activo (enfriamiento ${it.active.cd}s)` : ''].filter(Boolean).join(' · ');
     if (xs) { const st = this.T('dSx', xs, dx + 4 * u, dy, { size: 11 * u, color: '#9fe8ff', depth: D + 1, stroke: 2 }); st.setWordWrapWidth(dw, true); dy += st.height + 4 * u; } else if (!sk.length) { this.T('dSx', '—', dx + 4 * u, dy, { size: 11 * u, color: '#9fe8ff', depth: D + 1 }); dy += 16 * u; }
     dy += 6 * u + (this.passH || 0);
-    const ups = ITEMS.filter(i => i.recipe && i.recipe.includes(it.id));   // what this item can become one level up
+    const ups = (() => {   // everything this item can become, at any level (a green item -> the purple ones that use it), purple first
+      const out = [], seen = new Set(), walk = id => { for (const i of ITEMS) if (i.recipe && i.recipe.includes(id) && !seen.has(i.id)) { seen.add(i.id); out.push(i); walk(i.id); } };
+      walk(it.id); return out.sort((a, b) => b.lvl - a.lvl || a.cost - b.cost);
+    })();
+    const upS = Math.min(34 * u, 40 * u), upCols = Math.max(1, Math.floor((dw - 8 * u) / (upS + 5 * u))), upRows = Math.ceil(ups.length / upCols);
     {   // recipe tree: the item on top, its components below (up to 3 crafting levels). Owned components are marked: they are consumed when you craft.
-      const upH = ups.length ? 74 * u : 0, by0 = y0 + ph - pad * 1.3 - 46 * u, tx = dx, tt0 = dy, th = by0 - 10 * u - tt0 - upH, rowH = (th - 24 * u) / 3, ts = Math.min(52 * u, rowH - 26 * u), tree = recipeTree(p.inv, it.id), GOLD = 0xffd23f;
+      const upH = ups.length ? 38 * u + upRows * (upS + 5 * u) + 6 * u : 0, by0 = y0 + ph - pad * 1.3 - 46 * u, tx = dx, tt0 = dy, th = by0 - 10 * u - tt0 - upH, rowH = (th - 24 * u) / 3, ts = Math.min(52 * u, rowH - 26 * u), tree = recipeTree(p.inv, it.id), GOLD = 0xffd23f;
       const done = nd => nd.owned || (nd.children.length > 0 && nd.children.every(done));   // a node is complete when you own it or own everything under it
       const pulse = 0.65 + 0.35 * Math.sin(this.time.now / 260);
       bev(tx - 4 * u, tt0, dw + 8 * u, th, 8 * u, 0x0a1224, 1, 0x2a3650, 1, 1);
@@ -551,11 +632,12 @@ export class Hud extends Phaser.Scene {
       const place = (node, depth, xl, xr, parent) => {
         const cx = (xl + xr) / 2, cy = tt0 + 24 * u + depth * rowH, q = { x: cx - ts / 2, y: cy, w: ts, h: ts }, c = ITEM_BY_ID[node.id], k = n++, dn = done(node);
         if (parent) { const lit = dn; if (lit) g.lineStyle(7, GOLD, 0.22 * pulse).lineBetween(parent.x, parent.y + ts, cx, cy); g.lineStyle(lit ? 3 : 2, lit ? 0xffe27a : 0x4b5870, 1).lineBetween(parent.x, parent.y + ts, cx, cy); }
-        this.tile(g, 'tr' + k, node.id, q, D, depth <= 1 || node.owned ? 1 : 0.8);
+        const npl = buyPlan(p.inv, node.id), aff = node.owned || dn || (npl.ok && p.gold >= npl.gold);   // dark when you cannot get it yet
+        this.tile(g, 'tr' + k, node.id, q, D, aff ? 1 : 0.45);
         if (depth <= 1 || dn) glow(q, 3);   // the item being crafted, its ingredients and anything already completed
         else g.lineStyle(2, LV_COL[c.lvl], 1).strokeRect(q.x - 2, q.y - 2, q.w + 4, q.h + 4);
-        const lw = Math.max(60 * u, Math.min(dw / (depth === 2 ? 4 : depth === 1 ? 2 : 1), 150 * u)), lab = this.T('trL' + k, c.name, cx, cy + ts + 3 * u, { size: 10 * u, color: depth <= 1 ? '#ffe9a0' : '#cfe0ff', depth: D + 1, stroke: 2, origin: [0.5, 0] }); lab.setWordWrapWidth(lw, true).setAlign('center');
-        this.T('trP' + k, node.owned ? '✔ TIENES' : depth === 0 ? '' : `${c.cost}`, cx, cy + ts + 3 * u + lab.height, { size: 10 * u, bold: true, color: node.owned ? '#ffd23f' : '#ffffff', depth: D + 1, stroke: 2, origin: [0.5, 0] });
+        const lw = Math.max(60 * u, Math.min(dw / (depth === 2 ? 4 : depth === 1 ? 2 : 1), 150 * u)), lab = this.T('trL' + k, c.name, cx, cy + ts + 3 * u, { size: 10 * u, color: !aff ? '#6d7890' : depth <= 1 ? '#ffe9a0' : '#cfe0ff', depth: D + 1, stroke: 2, origin: [0.5, 0] }); lab.setWordWrapWidth(lw, true).setAlign('center');
+        this.T('trP' + k, node.owned ? '✔ TIENES' : depth === 0 ? '' : `${c.cost}`, cx, cy + ts + 3 * u + lab.height, { size: 10 * u, bold: true, color: node.owned ? '#ffd23f' : aff ? '#ffffff' : '#ff6a6a', depth: D + 1, stroke: 2, origin: [0.5, 0] });
         if (depth > 0) this.shopBtns.push({ x: cx - lw / 2, y: cy, w: lw, h: ts + 26 * u, tip: node.id, fn: () => { this.shopSel = node.id; this.shopSlot = null; } });
         const w2 = (xr - xl) / Math.max(1, node.children.length);
         node.children.forEach((ch, i) => place(ch, depth + 1, xl + i * w2, xl + (i + 1) * w2, { x: cx, y: cy }));
@@ -563,18 +645,22 @@ export class Hud extends Phaser.Scene {
       place(tree, 0, tx + 6 * u, tx + dw - 6 * u, null);
       if (ups.length) {   // items that use this one as an ingredient (one crafting level up)
         const uy = tt0 + th + 8 * u; bev(tx - 4 * u, uy, dw + 8 * u, upH - 4 * u, 8 * u, 0x0a1224, 1, 0x2a3650, 1, 1);
-        head('upH', 'SE USA PARA CREAR', tx + 4 * u, uy + 5 * u);
-        const us = Math.min(36 * u, (dw - 12 * u) / Math.max(ups.length, 1) - 6 * u);
-        ups.forEach((ui, i) => { const q = { x: tx + 8 * u + i * (us + 6 * u), y: uy + 26 * u, w: us, h: us }; this.tile(g, 'up' + i, ui.id, q, D, 1); glow(q, 2); this.shopBtns.push({ ...q, tip: ui.id, fn: () => { this.shopSel = ui.id; this.shopSlot = null; } }); });
+        head('upH', `SE USA PARA CREAR · ${ups.length} objeto${ups.length > 1 ? 's' : ''}`, tx + 4 * u, uy + 5 * u);
+        ups.forEach((ui, i) => {
+          const q = { x: tx + 8 * u + (i % upCols) * (upS + 5 * u), y: uy + 28 * u + Math.floor(i / upCols) * (upS + 5 * u), w: upS, h: upS }, upl = buyPlan(p.inv, ui.id), aff = upl.ok && p.gold >= upl.gold || p.slotOf(ui.id) >= 0;
+          this.tile(g, 'up' + i, ui.id, q, D, aff ? 1 : 0.45); if (aff) glow(q, 2); else g.lineStyle(2, LV_COL[ui.lvl], 0.6).strokeRect(q.x - 2, q.y - 2, q.w + 4, q.h + 4);
+          if (this.shopSel === ui.id) g.lineStyle(3, 0xffffff, 1).strokeRect(q.x - 3, q.y - 3, q.w + 6, q.h + 6);
+          this.shopBtns.push({ ...q, tip: ui.id, fn: () => { this.shopSel = ui.id; this.shopSlot = null; } });
+        });
       }
     }
     const by = y0 + ph - pad * 1.3 - 46 * u, bh = 44 * u, bw1 = (dw - 8 * u) * 0.62, bw2 = dw - 8 * u - bw1, pl = buyPlan(p.inv, it.id);
     const label = !pl.ok ? pl.reason : p.gold < pl.gold ? `FALTA ORO (${pl.gold})` : `${it.recipe ? 'ARMAR' : 'COMPRAR'} ${pl.gold}`;
-    sbtn('buy', label, { x: dx, y: by, w: bw1, h: bh }, p.canBuy(it.id), () => p.buyItem(it.id), 0x14583a);
+    sbtn('buy', label, { x: dx, y: by, w: bw1, h: bh }, p.canBuy(it.id), () => { const rec = this.recIds?.includes(it.id); if (p.buyItem(it.id) !== false) p.recChain = rec ? { from: it.id } : null; }, 0x14583a);   // buying a recommended item unlocks its complement + next item
     const sv = sl ? sellValue(it) * (it.consumable ? Math.max(1, sl.charges) : 1) : 0;
     sbtn('sell', sl ? `VENDER ${sv}` : 'VENDER', { x: dx + bw1 + 8 * u, y: by, w: bw2, h: bh }, !!sl, () => p.sellItem(sellSlot), 0x5c3a1d);
     { const hb = this.shopBtns.find(b2 => b2.tip && over(b2)); if (hb) { this.shopHover = hb.tip; this.itemTip({ id: hb.tip, cd: 0 }, null, u, true); } }
-    if (fl || this.fltHover) { const txt = this.fltHover || `Filtro: ${STAT_LABEL[fl]}`, t = this.T('fltName', txt, this.fltHover ? ptr.x + 16 * u : gx + 4 * u, this.fltHover ? ptr.y - 6 * u : ty + 46 * u, { size: 12 * u, bold: true, color: '#ffd23f', depth: D + 6, stroke: 4 }); if (!this.fltHover) t.setText(`Filtro: ${STAT_LABEL[fl]}`).setPosition(gx + gw - t.width - 4 * u, ty + 8 * u).setVisible(false); }
+    if (!recTab && (fl || this.fltHover)) { const txt = this.fltHover || `Filtro: ${STAT_LABEL[fl]}`, t = this.T('fltName', txt, this.fltHover ? ptr.x + 16 * u : gx + 4 * u, this.fltHover ? ptr.y - 6 * u : ty + 46 * u, { size: 12 * u, bold: true, color: '#ffd23f', depth: D + 6, stroke: 4 }); if (!this.fltHover) t.setText(`Filtro: ${STAT_LABEL[fl]}`).setPosition(gx + gw - t.width - 4 * u, ty + 8 * u).setVisible(false); }
   }
 
   setVol(bar, x) {
@@ -653,6 +739,60 @@ export class Hud extends Phaser.Scene {
       const tv = this.T(`${id}v${i}`, `${Math.round(base)}`, nx, y - fs * 0.05, { size: fs, color: '#ffffff', bold: true, stroke: 2 });
       if (Math.abs(d) >= 0.5) this.T(`${id}b${i}`, `${d > 0 ? '+' : '-'}${Math.abs(Math.round(d))}`, nx + tv.width + fs * 0.4, y - fs * 0.05, { size: fs, color: d > 0 ? '#5dff8a' : '#ff6a6a', bold: true, stroke: 2 });
     });
+  }
+
+  /* ---------- scoreboard (hold TAB): both teams, champion faces, names, K/D/A, level, gold and their 6 items ---------- */
+  drawScoreboard(A, p, u, W, H, on) {
+    if (!this.sbG) this.sbG = this.add.graphics().setDepth(26);
+    const g = this.sbG; g.clear(); if (!on) { this.sbOn = false; return; }
+    const D = 27, rows = A.champs.filter(c => c.isChamp), mine = A.player.baseTeam;
+    const teams = [mine, 1 - mine].map(t => rows.filter(c => c.baseTeam === t).sort((a, b) => b.kills - a.kills || a.deaths - b.deaths));
+    const maxN = Math.max(1, ...teams.map(t => t.length)), pw = Math.min(W - 20, 880 * u), rh = Math.min(62 * u, (H - 150 * u) / (maxN * 2 + 1.2)), hh = 30 * u, th = 26 * u;
+    const ph = th * 2 + hh * 1 + (teams[0].length + teams[1].length) * rh + 54 * u, x0 = (W - pw) / 2, y0 = Math.max(8, (H - ph) / 2 - 20 * u);
+    this.boxes.push({ x: 0, y: 0, w: W, h: H });
+    g.fillStyle(0x000000, 0.5).fillRect(0, 0, W, H);
+    g.fillStyle(0x060b16, 0.96).fillRect(x0, y0, pw, ph).lineStyle(3, 0x3fd0ff, 0.95).strokeRect(x0, y0, pw, ph);
+    const cX = { face: x0 + 14 * u, name: x0 + 14 * u + rh + 10 * u, lvl: x0 + pw * 0.36, kda: x0 + pw * 0.43, gold: x0 + pw * 0.56, items: x0 + pw * 0.64 };
+    const hdr = (id, str, x, y, col = '#7ee0ff', al = [0, 0.5]) => this.T('sb' + id, str, x, y, { size: 11 * u, bold: true, color: col, origin: al, depth: D + 1, stroke: 2 });
+    hdr('H0', 'CAMPEÓN', cX.name, y0 + 17 * u); hdr('H1', 'NIV', cX.lvl, y0 + 17 * u); hdr('H2', 'K / D / A', cX.kda, y0 + 17 * u); hdr('H3', 'ORO', cX.gold, y0 + 17 * u); hdr('H4', 'OBJETOS', cX.items, y0 + 17 * u);
+    const tot = [0, 1].map(i => teams[i].reduce((a, c) => a + c.kills, 0));
+    let y = y0 + 34 * u, n = 0, ci = 0;
+    teams.forEach((list, ti) => {
+      const col = ti === 0 ? 0x3b8cff : 0xff5252, tc = ti === 0 ? '#8ab4ff' : '#ff8a8a', secH = th + 2 * u + list.length * rh + 4 * u;
+      g.fillStyle(ti === 0 ? 0x0a1c3d : 0x3a0c12, 1).fillRect(x0 + 4 * u, y - 2 * u, pw - 8 * u, secH + 2 * u).lineStyle(2.5, col, 1).strokeRect(x0 + 4 * u, y - 2 * u, pw - 8 * u, secH + 2 * u);   // the whole section is tinted: blue = your team, red = the rivals
+      g.fillStyle(col, 0.55).fillRect(x0 + 6 * u, y, pw - 12 * u, th).fillStyle(col, 1).fillRect(x0 + 6 * u, y, 5 * u, th);
+      this.T('sbT' + ti, `${ti === 0 ? 'TU EQUIPO' : 'EQUIPO RIVAL'}  ·  ${tot[ti]} bajas`, x0 + 18 * u, y + th / 2, { size: 14 * u, bold: true, color: '#ffffff', origin: [0, 0.5], depth: D + 1, stroke: 3 });
+      y += th + 2 * u;
+      list.forEach(c => {
+        const q = { x: x0 + 6 * u, y, w: pw - 12 * u, h: rh - 3 * u }, me = c === A.player, dead = !c.alive;
+        g.fillStyle(ti === 0 ? 0x10284f : 0x4a1218, 1).fillRect(q.x, q.y, q.w, q.h).lineStyle(1, col, 0.55).strokeRect(q.x, q.y, q.w, q.h);
+        if (me) {   // your own box shines: bright fill, pulsing white glow and a white border
+          const pz = 0.6 + 0.4 * Math.sin(this.time.now / 220);
+          g.fillStyle(0xffffff, 0.14 + 0.08 * pz).fillRect(q.x, q.y, q.w, q.h);
+          g.lineStyle(10, 0xffffff, 0.12 * pz).strokeRect(q.x - 4, q.y - 4, q.w + 8, q.h + 8).lineStyle(5, col, 0.4 * pz).strokeRect(q.x - 2, q.y - 2, q.w + 4, q.h + 4).lineStyle(3, 0xffffff, 1).strokeRect(q.x, q.y, q.w, q.h);
+          g.fillStyle(0xffd23f, 1).fillRect(q.x, q.y, 6 * u, q.h);
+        }
+        const fs = q.h - 6 * u, fx = cX.face, fy = q.y + 3 * u;
+        g.fillStyle(0x000000, 1).fillRect(fx - 1, fy - 1, fs + 2, fs + 2).lineStyle(2, col, 1).strokeRect(fx - 1, fy - 1, fs + 2, fs + 2);
+        if (this.textures.exists('face_' + c.key)) this.iconImg('sbF' + ci, 'face_' + c.key, fx + fs / 2, fy + fs / 2, fs, D + 0.4).setAlpha(dead ? 0.4 : 1);
+        const my = q.y + q.h / 2;
+        this.T('sbN' + ci, c.def.name, cX.name, my - 8 * u, { size: 14 * u, bold: true, color: me ? '#ffe27a' : dead ? '#7a8394' : '#ffffff', origin: [0, 0.5], depth: D + 1, stroke: 3 });
+        this.T('sbC' + ci, dead ? 'MUERTO' : CLASS_LABEL(c), cX.name, my + 9 * u, { size: 10 * u, color: dead ? '#ff7a7a' : '#8aa0c8', origin: [0, 0.5], depth: D + 1, stroke: 2 });
+        this.T('sbL' + ci, `${c.level}`, cX.lvl, my, { size: 16 * u, bold: true, color: '#ffe27a', origin: [0, 0.5], depth: D + 1, stroke: 3 });
+        this.T('sbK' + ci, `${c.kills} / ${c.deaths} / ${c.assists}`, cX.kda, my, { size: 16 * u, bold: true, color: '#ffffff', origin: [0, 0.5], depth: D + 1, stroke: 3 });
+        this.T('sbG' + ci, `${Math.floor(c.gold)}`, cX.gold, my, { size: 14 * u, bold: true, color: '#ffd23f', origin: [0, 0.5], depth: D + 1, stroke: 3 });
+        const sz = Math.min(q.h - 8 * u, (x0 + pw - 14 * u - cX.items - 5 * 4 * u) / 6);
+        for (let i = 0; i < 6; i++) {
+          const iq = { x: cX.items + i * (sz + 4 * u), y: my - sz / 2, w: sz, h: sz }, sl = c.inv[i];
+          if (!sl) { g.fillStyle(0x0d1422, 1).fillRect(iq.x, iq.y, iq.w, iq.h).lineStyle(1, 0x2a3650, 1).strokeRect(iq.x, iq.y, iq.w, iq.h); continue; }
+          this.tile(g, 'sbI' + ci + '_' + i, sl.id, iq, D + 0.3, dead ? 0.55 : 1);
+          if (ITEM_BY_ID[sl.id].consumable && sl.charges > 1) this.T('sbX' + ci + '_' + i, `x${sl.charges}`, iq.x + iq.w - 1, iq.y + iq.h, { size: 9 * u, bold: true, origin: [1, 1], color: '#ffe066', depth: D + 1.5, stroke: 2 });
+        }
+        y += rh; ci++;
+      });
+      y += 10 * u;   // gap between the two sections
+    });
+    this.T('sbHint', 'Mantén TAB para ver el marcador', x0 + pw / 2, y0 + ph - 11 * u, { size: 10 * u, color: '#6d7d9c', origin: [0.5, 0.5], depth: D + 1, stroke: 2 });
   }
 
   // death recap: the killer (big) with the abilities that hit you and their damage; click a helper's face to see what they did
@@ -821,6 +961,36 @@ export class Hud extends Phaser.Scene {
     });
   }
 
+  // round portrait of a champion (colour or grey), cached as a canvas texture
+  roundFace(key, gray) {
+    const id = (gray ? 'faceG_' : 'faceR_') + key; if (this.textures.exists(id)) return id;
+    if (!this.textures.exists('face_' + key)) return null;
+    const src = this.textures.get('face_' + key).getSourceImage(), S = 96, ct = this.textures.createCanvas(id, S, S), c = ct.getContext('2d');
+    c.beginPath(); c.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2); c.clip();
+    if (gray) c.filter = 'grayscale(1) brightness(0.6)';
+    const k = Math.max(S / src.width, S / src.height); c.drawImage(src, (S - src.width * k) / 2, (S - src.height * k) / 2, src.width * k, src.height * k);
+    ct.refresh(); return id;
+  }
+  // allies above the minimap: round face with a health ring around it; dead allies are grey with the seconds left to respawn on their face
+  drawAllies(A, g, o, q, u) {
+    const me = A.player, list = A.champs.filter(c => c.isChamp && c !== me && c.baseTeam === me.baseTeam);
+    const bg = (this.allyG ||= this.add.graphics().setDepth(6)); bg.clear();   // level badges live on their own, higher layer (above every face)
+    const sz = 44 * u, gap = 26 * u, y = q.y - 40 * u - sz / 2;
+    list.forEach((c, i) => {
+      const cx = q.x + q.w - sz / 2 - 4 * u - (list.length - 1 - i) * (sz + gap), r = sz / 2, dead = !c.alive, f = dead ? 0 : Phaser.Math.Clamp(c.hp / c.maxHp, 0, 1);
+      o.fillStyle(0x000000, 0.7).fillCircle(cx, y, r + 5 * u);
+      o.lineStyle(4 * u, 0x2a1414, 1).beginPath().arc(cx, y, r + 2.5 * u, 0, Math.PI * 2).strokePath();
+      if (f > 0.005) o.lineStyle(4 * u, f > 0.5 ? 0x4cd964 : f > 0.25 ? 0xffd23f : 0xff4a4a, 1).beginPath().arc(cx, y, r + 2.5 * u, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * f, false).strokePath();
+      const id = this.roundFace(c.key, dead); if (id) this.iconImg('allyF' + i, id, cx, y, sz, 4.5);
+      if (dead) {
+        o.fillStyle(0x000000, 0.35).fillCircle(cx, y, r);
+        this.T('allyD' + i, `${Math.max(0, Math.ceil(c.respawnTime - c.deadT))}`, cx, y, { size: sz * 0.5, bold: true, color: '#ffffff', origin: [0.5, 0.5], depth: 5, stroke: 4 });
+      }
+      bg.fillStyle(0x000000, 0.92).fillCircle(cx + r * 0.78, y + r * 0.78, 10 * u).lineStyle(2, dead ? 0x6a6a72 : 0xffd23f, 1).strokeCircle(cx + r * 0.78, y + r * 0.78, 10 * u);
+      this.T('allyL' + i, `${c.level}`, cx + r * 0.78, y + r * 0.78, { size: 12 * u, bold: true, color: dead ? '#9a9aa4' : '#ffe27a', origin: [0.5, 0.5], depth: 7, stroke: 2 });
+      this.T('allyN' + i, c.def.name, cx, y + r + 11 * u, { size: 9 * u, color: dead ? '#8a8a94' : '#cfe3ff', origin: [0.5, 0], depth: 5, stroke: 2 });
+    });
+  }
   drawMinimap(A, g, o, q) {
     const fx = q.w / WORLD_W, fy = q.h / WORLD_H;     // stretched to fill the hole
     g.fillStyle(0x7d8226).fillRect(q.x, q.y, q.w, q.h);
@@ -833,7 +1003,15 @@ export class Hud extends Phaser.Scene {
     A.fighters.forEach(ft => {
       if ((!ft.alive && !ft.isNexus) || ft.hiddenFor(A.player)) return;
       const me = A.player, cx = q.x + ft.x * fx, cy = q.y + ft.y * fy;
-      g.fillStyle(ft.isNexus && !ft.alive ? 0x444444 : ft === me ? 0x3ddc84 : ft.team === me.baseTeam ? 0x3b82f6 : 0xff3b3b);
+      const tc = ft.isNexus && !ft.alive ? 0x444444 : ft === me ? 0x3ddc84 : ft.team === me.baseTeam ? 0x3b82f6 : 0xff3b3b;
+      if (ft.isChamp) {   // champions are drawn as their round face with a team-coloured ring (green = you, blue = ally, red = enemy)
+        const rr = 11 * (q.w / 330), id = this.roundFace(ft.key, false);
+        o.fillStyle(0x000000, 0.8).fillCircle(cx, cy, rr + 2.5).lineStyle(2.5, tc, 1).strokeCircle(cx, cy, rr + 1);
+        if (id) this.iconImg('mmF' + ft.nid, id, cx, cy, rr * 2, 4.2);
+        if (ft === A.selected) o.lineStyle(2, 0xffffff).strokeCircle(cx, cy, rr + 5);
+        return;
+      }
+      g.fillStyle(tc);
       if (ft.isNexus) g.fillRect(cx - 6, cy - 6, 12, 12); else if (ft.isTower) g.fillRect(cx - 4, cy - 4, 8, 8); else g.fillCircle(cx, cy, ft.isBot || ft.isMinion ? 2.5 : 5);
       if (ft === A.selected) o.lineStyle(2, 0xffffff).strokeCircle(cx, cy, 8);
     });

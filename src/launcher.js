@@ -3,6 +3,7 @@ import './launcher.css';
 import { net, BOT } from './net.js';
 import { STAT_STYLE, statCss, scaleRows, rowStat, pct } from './stats.js';
 import { CHAMPIONS, CLASSES, CLASS_TABS, classLabel, ABILITY_KEYS } from './data.js';
+import { ITEM_BY_ID } from './items.js';
 import { vol, saveVol } from './audio.js';
 import { bootScreen } from './bootscreen.js';
 
@@ -64,21 +65,32 @@ function loginScreen(mode = 'login') {
   });
 }
 
+// news: affected champions / items as icons with an arrow (up = buff, down = nerf, rework = changed); the written details are one click away
+const ARROW = { up: ['▲', 'MEJORA'], down: ['▼', 'NERFEO'], rework: ['⟳', 'CAMBIO'] };
+const changeChip = c => {
+  const champ = c.k === 'champ', nm = champ ? CHAMPIONS[c.id]?.name : ITEM_BY_ID[c.id]?.name; if (!nm) return '';
+  const d = ARROW[c.d] ? c.d : 'rework', img = champ ? `<div class="ci" style="${faceCss(c.id)}"></div>` : `<div class="ci"><img src="assets/items/${c.id}.png?v=${BUILD}" alt=""></div>`;
+  return `<div class="chg ${d}" data-tip="${esc(`<b>${nm}</b> · ${ARROW[d][1]}${c.t ? '<br>' + esc(c.t) : ''}`)}">${img}<b class="ar">${ARROW[d][0]}</b></div>`;
+};
+const newsEntry = n => `<div class="nw"><div class="t"><h3>${esc(n.title)}</h3><span class="tag">${esc(n.tag || 'NOTICIA')}</span><span class="d">v${esc(n.version)} · ${esc(n.date)}</span></div>
+  ${(n.changes || []).length ? `<div class="chgs">${n.changes.map(changeChip).join('')}</div>` : ''}
+  <button class="ntg" data-a="ntoggle">Ver detalles ▾</button><ul hidden>${(n.items || []).map(i => `<li>${esc(i)}</li>`).join('')}</ul></div>`;
+
 function homeScreen() {
   screen = 'home';
+  // layout: the news box spans the full width (to the right edge) but stops above the action bar; "Unirse a partida" is always at the bottom left
   view.innerHTML = `<div class="scr">${header()}<div class="home">
     <div class="panel news"><h2>NOTICIAS Y ACTUALIZACIONES</h2><div class="list" id="news"><i style="color:var(--mut)">Cargando...</i></div></div>
-    <div class="acts">
-      <div class="panel"><h2>JUGAR</h2><div class="acts">
-        <button class="btn big go" data-a="quick">Unirse a partida<small>Te une a una sala pública con hueco o crea una nueva.</small></button>
-        <button class="btn big" data-a="create">Crear sala<small>Genera un código para invitar hasta ${MAXP} jugadores.</small></button>
-        <button class="btn big" data-a="joinbox">Unirse a sala<small>Entra con el código que te pasó un amigo.</small></button>
-      </div><div class="err"></div></div>
-      <div class="panel"><h2>SIN CONEXIÓN</h2><button class="btn ghost" style="width:100%" data-a="practice">Práctica y zona de entrenamiento</button></div>
+    <div class="dock">
+      <button class="btn big go" data-a="quick">Unirse a partida<small>Te une a una sala pública con hueco o crea una nueva.</small></button>
+      <button class="btn big" data-a="create">Crear sala<small>Genera un código para invitar hasta ${MAXP} jugadores.</small></button>
+      <button class="btn big" data-a="joinbox">Unirse a sala<small>Entra con el código que te pasó un amigo.</small></button>
+      <button class="btn big ghost" data-a="practice">Práctica<small>Zona de entrenamiento sin conexión.</small></button>
+      <div class="err"></div>
     </div></div></div>`;
   net.news().then(list => {
     const el = $('#news', view); if (!el) return;
-    el.innerHTML = list.map(n => `<div class="nw"><div class="t"><h3>${esc(n.title)}</h3><span class="tag">${esc(n.tag || 'NOTICIA')}</span><span class="d">v${esc(n.version)} · ${esc(n.date)}</span></div><ul>${(n.items || []).map(i => `<li>${esc(i)}</li>`).join('')}</ul></div>`).join('') || '<i>Sin noticias.</i>';
+    el.innerHTML = list.map(newsEntry).join('') || '<i>Sin noticias.</i>';
   }).catch(() => { const el = $('#news', view); if (el) el.innerHTML = '<i style="color:var(--rd)">No se pudieron cargar las noticias.</i>'; });
 }
 
@@ -253,6 +265,7 @@ const actions = {
   pslot(el) { const arr = prac[el.dataset.g], i = +el.dataset.i; arr[i] = KEYS[(KEYS.indexOf(arr[i]) + 1) % KEYS.length]; practiceScreen(); },
   pplay() { practiceStart(false); },
   ptrain() { practiceStart(true); },
+  ntoggle(t) { const ul = t.parentElement.querySelector('ul'); ul.hidden = !ul.hidden; t.textContent = ul.hidden ? 'Ver detalles ▾' : 'Ocultar detalles ▴'; },
   quick() { toast('Buscando partida...', true); send('quick_join'); },
   create() { send('create_room', { public: false }); },
   joinbox() { snd('ui_open'); joinModal(); },

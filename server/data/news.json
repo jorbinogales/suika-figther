@@ -1,5 +1,539 @@
 [
   {
+    "id": "0.9.26",
+    "date": "2026-11-03",
+    "version": "0.9.26",
+    "title": "El ataque hacia delante ahora necesita impulso",
+    "tag": "CAMBIO",
+    "changes": [
+      {
+        "k": "champ",
+        "id": "xeviche",
+        "d": "rework",
+        "t": "El ataque con impulso exige correr antes"
+      },
+      {
+        "k": "champ",
+        "id": "junior",
+        "d": "rework",
+        "t": "El ataque con impulso exige correr antes"
+      },
+      {
+        "k": "champ",
+        "id": "yonaiker",
+        "d": "rework",
+        "t": "El ataque con impulso exige correr antes"
+      },
+      {
+        "k": "champ",
+        "id": "hector",
+        "d": "rework",
+        "t": "El ataque con impulso exige correr antes"
+      },
+      {
+        "k": "champ",
+        "id": "jorbi",
+        "d": "rework",
+        "t": "El ataque con impulso exige correr antes"
+      },
+      {
+        "k": "champ",
+        "id": "julio",
+        "d": "rework",
+        "t": "El ataque con impulso exige correr antes"
+      },
+      {
+        "k": "champ",
+        "id": "leandro",
+        "d": "rework",
+        "t": "El ataque con impulso exige correr antes"
+      },
+      {
+        "k": "champ",
+        "id": "luis",
+        "d": "rework",
+        "t": "El ataque con impulso exige correr antes"
+      },
+      {
+        "k": "champ",
+        "id": "axel",
+        "d": "rework",
+        "t": "El ataque con impulso exige correr antes"
+      },
+      {
+        "k": "champ",
+        "id": "eliud",
+        "d": "rework",
+        "t": "El ataque con impulso exige correr antes"
+      }
+    ],
+    "items": [
+      "Para lanzar el ataque hacia delante hay que correr hacia donde apuntas durante casi medio segundo y ganar impulso.",
+      "Si atacas sin impulso, haces el golpe normal del combo.",
+      "Después de usarlo, hay que volver a correr para recuperar el impulso."
+    ]
+  },
+  {
+    "id": "0.9.25",
+    "date": "2026-11-03",
+    "version": "0.9.25",
+    "title": "Animaciones de combo para Xeviche, Junior, Yonaiker y Héctor, e iconos de los objetos nuevos",
+    "tag": "NUEVO",
+    "changes": [
+      {
+        "k": "champ",
+        "id": "xeviche",
+        "d": "rework",
+        "t": "Animaciones propias en cada golpe del combo y en el ataque con impulso, en 8 direcciones"
+      },
+      {
+        "k": "champ",
+        "id": "junior",
+        "d": "rework",
+        "t": "Animaciones propias en cada golpe del combo y en el ataque con impulso, en 8 direcciones"
+      },
+      {
+        "k": "champ",
+        "id": "yonaiker",
+        "d": "rework",
+        "t": "Animaciones propias en cada golpe del combo y en el ataque con impulso, en 8 direcciones"
+      },
+      {
+        "k": "champ",
+        "id": "hector",
+        "d": "rework",
+        "t": "Animaciones propias en cada golpe del combo y en el ataque con impulso, en 8 direcciones"
+      },
+      {
+        "k": "item",
+        "id": "exoesqueleto",
+        "d": "rework",
+        "t": "Nuevo icono"
+      },
+      {
+        "k": "item",
+        "id": "moto_electrica",
+        "d": "rework",
+        "t": "Nuevo icono"
+      },
+      {
+        "k": "item",
+        "id": "botiquin_maestro",
+        "d": "rework",
+        "t": "Nuevo icono"
+      },
+      {
+        "k": "item",
+        "id": "centro_mando",
+        "d": "rework",
+        "t": "Nuevo icono"
+      },
+      {
+        "k": "item",
+        "id": "arsenal_artillero",
+        "d": "rework",
+        "t": "Nuevo icono"
+      },
+      {
+        "k": "item",
+        "id": "propulsor_cohete",
+        "d": "rework",
+        "t": "Nuevo icono"
+      },
+      {
+        "k": "item",
+        "id": "consola_overclock",
+        "d": "rework",
+        "t": "Nuevo icono"
+      }
+    ],
+    "items": [
+      "Cada golpe del combo continúa al anterior sin volver a la postura de reposo.",
+      "El ataque hacia delante tiene su propia animación.",
+      "Los 7 objetos morados nuevos ya tienen su icono definitivo."
+    ]
+  },
+  {
+    "id": "0.9.24",
+    "date": "2026-11-03",
+    "version": "0.9.24",
+    "title": "Árbol de crafteo completo, 7 objetos morados nuevos y marcas de hielo y fuego",
+    "tag": "NUEVO",
+    "changes": [
+      {
+        "k": "item",
+        "id": "exoesqueleto",
+        "d": "up",
+        "t": "Nuevo: gana ataque con poca vida"
+      },
+      {
+        "k": "item",
+        "id": "moto_electrica",
+        "d": "up",
+        "t": "Nuevo: carga estática tras correr"
+      },
+      {
+        "k": "item",
+        "id": "botiquin_maestro",
+        "d": "up",
+        "t": "Nuevo consumible: cura, maná y limpia efectos"
+      },
+      {
+        "k": "item",
+        "id": "centro_mando",
+        "d": "up",
+        "t": "Nuevo activo: soldados + escudo"
+      },
+      {
+        "k": "item",
+        "id": "arsenal_artillero",
+        "d": "up",
+        "t": "Nuevo activo: mortero + humo"
+      },
+      {
+        "k": "item",
+        "id": "propulsor_cohete",
+        "d": "up",
+        "t": "Nuevo activo: impulso hacia delante"
+      },
+      {
+        "k": "item",
+        "id": "consola_overclock",
+        "d": "up",
+        "t": "Nuevo: recupera maná al lanzar poderes"
+      }
+    ],
+    "items": [
+      "Reorganización del crafteo: ningún objeto verde se queda sin uso, todos los verdes sirven ahora para construir al menos un objeto morado, y todos los grises sirven para construir al menos un verde.",
+      "Siete objetos morados nuevos (sus estadísticas suman las de sus dos materiales, como el resto): Exoesqueleto (Mancuerna de código + Anillo de vitalidad), Moto eléctrica (Cadena de bicicleta + Capa de cifrado), Botiquín maestro (Antídoto + Barra energética), Centro de mando (Maletín de soldados + Escudo de emergencia), Arsenal artillero (Mortero portátil + Bomba de humo), Propulsor cohete (Sprint de energía + Teleport a la base) y Consola de overclock (Termo de café + Memoria RAM). Sus iconos son provisionales hasta que se dibujen los definitivos.",
+      "La ralentización ahora se marca con un icono de hielo (cristal azul) bajo la barra del campeón y con una zona de hielo con cristales en el suelo; la quemadura también deja una marca de brasas y llamas en el suelo bajo el enemigo. Pueden combinarse con el veneno."
+    ]
+  },
+  {
+    "id": "0.9.23",
+    "date": "2026-11-03",
+    "version": "0.9.23",
+    "title": "Núcleo de IA: escudo permanente y contadores en los objetos",
+    "tag": "MEJORA",
+    "changes": [
+      {
+        "k": "item",
+        "id": "nucleo_ia",
+        "d": "rework",
+        "t": "El escudo dura hasta que se rompe"
+      },
+      {
+        "k": "item",
+        "id": "firewall_magico",
+        "d": "rework",
+        "t": "Muestra su recarga"
+      },
+      {
+        "k": "item",
+        "id": "servidor_redundante",
+        "d": "rework",
+        "t": "Muestra su recarga"
+      }
+    ],
+    "items": [
+      "Núcleo de IA: el escudo de su pasiva ya no desaparece solo. Una vez activado se queda hasta que se rompe, y entonces el contador de 12 s vuelve a empezar desde cero. El contador corre siempre, también fuera de combate: son 12 s en todo momento, desde que compras el objeto o se rompe el escudo.",
+      "Los objetos con pasivas que tienen enfriamiento (Núcleo de IA, Firewall mágico y Servidor redundante) muestran ahora su contador en el recuadro del objeto, con el mismo reloj oscuro y los segundos que ya usaban los objetos activos."
+    ]
+  },
+  {
+    "id": "0.9.22",
+    "date": "2026-11-03",
+    "version": "0.9.22",
+    "title": "Nuevo panel de noticias",
+    "tag": "MEJORA",
+    "items": [
+      "El panel de noticias es ahora un recuadro que llega hasta el borde derecho de la pantalla pero no hasta abajo, y las noticias se muestran en columnas.",
+      "Para no cargarlo de texto, cada noticia muestra los iconos de los objetos o campeones afectados con una flecha: verde hacia arriba si recibieron una mejora, roja hacia abajo si recibieron un nerfeo y amarilla con giro si fueron cambiados o rediseñados. Pasa el ratón por un icono para ver el detalle y pulsa «Ver detalles» para leer el texto completo.",
+      "Los botones de jugar (Unirse a partida, Crear sala, Unirse a sala y Práctica) están siempre visibles en una barra en la parte inferior, con «Unirse a partida» a la izquierda."
+    ]
+  },
+  {
+    "id": "0.9.21",
+    "date": "2026-11-03",
+    "version": "0.9.21",
+    "title": "Icono de quemadura",
+    "tag": "MEJORA",
+    "items": [
+      "Los enemigos quemados ahora se marcan con un icono de llama roja bajo su barra de maná, distinto de la gota verde del veneno; si están quemados y envenenados a la vez se ven los dos iconos juntos. También aparece en tu barra de estados con la llama roja y quién te quemó.",
+      "Aplica a todo lo que quema: el lanzallamas y la definitiva de Junior, la Q de Yonaiker, la estela de fuego de la definitiva de Héctor y los objetos con quemadura como la Tarjeta gráfica. La estela de Héctor y el bombardeo de Junior ahora dejan además una quemadura breve de poco daño.",
+      "Núcleo de IA (y su versión menor, la Memoria RAM): el escudo de su pasiva ahora escala con tu poder de IA (25 + el 50 % de tu poder de IA, cada 12 s en combate) en vez de con tu vida máxima, ya que es un objeto de mago."
+    ],
+    "changes": [
+      {
+        "k": "item",
+        "id": "nucleo_ia",
+        "d": "up",
+        "t": "El escudo de su pasiva escala con el poder de IA"
+      },
+      {
+        "k": "item",
+        "id": "memoria_ram",
+        "d": "up",
+        "t": "Versión menor del Núcleo de IA"
+      }
+    ]
+  },
+  {
+    "id": "0.9.20",
+    "date": "2026-11-03",
+    "version": "0.9.20",
+    "title": "Leandro: veneno de los contratos y bots de su definitiva",
+    "tag": "BALANCE",
+    "items": [
+      "Lanzamiento de contrato: el veneno ya no hace más daño que el impacto. Ahora el veneno de cada contrato causa la mitad del daño de su impacto, repartido mientras el enemigo permanece en la zona verde infectada (antes escalaba aparte con el poder de IA y podía superar al impacto). La descripción y las estadísticas de la habilidad lo reflejan.",
+      "IA voy (R): los bots invocados escalan con el poder de IA de Leandro. Cuanto más poder de IA tenga, más vida y más daño tienen. Con 60 de poder de IA los bots tienen unos 240 de vida (cuerpo a cuerpo) y 155 (a distancia) y hacen 27 de daño; con 400 tienen unos 810 y 520 de vida y hacen 180 de daño."
+    ],
+    "changes": [
+      {
+        "k": "champ",
+        "id": "leandro",
+        "d": "down",
+        "t": "Lanzamiento de contrato: el veneno es ahora la mitad del impacto"
+      },
+      {
+        "k": "champ",
+        "id": "leandro",
+        "d": "up",
+        "t": "IA voy: los bots escalan en vida y daño con tu poder de IA"
+      }
+    ]
+  },
+  {
+    "id": "0.9.19",
+    "date": "2026-11-03",
+    "version": "0.9.19",
+    "title": "Tarjeta gráfica: nueva pasiva",
+    "tag": "BALANCE",
+    "items": [
+      "Tarjeta gráfica (y su versión menor, la Pantalla holográfica) cambia de pasiva: ya no quema a quien está cerca de ti. Ahora tus ataques básicos y tus habilidades dejan una quemadura a tus enemigos durante 4 segundos, con daño de poder de IA que escala con tu poder de IA y se renueva con cada golpe (no se acumula). Los efectos de ese tipo no queman a las torres.",
+      "Se quita el anillo naranja de zona que dibujaba la pasiva anterior."
+    ],
+    "changes": [
+      {
+        "k": "item",
+        "id": "tarjeta_grafica",
+        "d": "rework",
+        "t": "Nueva pasiva: tus ataques y habilidades dejan quemaduras"
+      },
+      {
+        "k": "item",
+        "id": "pantalla_holo",
+        "d": "rework",
+        "t": "Versión menor de la Tarjeta gráfica"
+      }
+    ]
+  },
+  {
+    "id": "0.9.18",
+    "date": "2026-11-03",
+    "version": "0.9.18",
+    "title": "Animación de daño y curación en las barras de vida",
+    "tag": "MEJORA",
+    "items": [
+      "Cuando un campeón recibe daño, su barra de vida baja de golpe y queda una franja rojiza casi transparente que refleja la vida que tenía antes; esa franja se encoge poco a poco con una animación, en vez de desaparecer al instante.",
+      "Cuando se cura, aparece una franja verde oscura transparente que indica hasta dónde llegará la vida, y la barra se va llenando de forma gradual hasta ese punto.",
+      "Funciona en las barras sobre los campeones, en las de los súbditos y en la barra del campeón seleccionado (arriba a la derecha)."
+    ]
+  },
+  {
+    "id": "0.9.17",
+    "date": "2026-11-03",
+    "version": "0.9.17",
+    "title": "Panel del campeón seleccionado",
+    "tag": "MEJORA",
+    "items": [
+      "Al seleccionar un campeón, en la franja de arriba a la derecha su nombre se sustituye por una imagen pequeña del campeón (con marco azul si es aliado, rojo si es enemigo y verde si eres tú); los objetos que lleva siguen a su lado.",
+      "Justo debajo de esa franja aparecen su barra de vida y su barra de maná o recurso (carga, furia) con sus números, con las mismas rayas de 100 y 1000 de vida que las barras del juego."
+    ]
+  },
+  {
+    "id": "0.9.16",
+    "date": "2026-11-03",
+    "version": "0.9.16",
+    "title": "Barras de vida con marcas",
+    "tag": "MEJORA",
+    "items": [
+      "Las barras de vida de los campeones muestran ahora marcas para ver de un vistazo cuánta vida tienen: una raya fina cada 100 de vida y una raya gruesa cada 1000. Cuando un campeón tiene tanta vida que las rayas finas quedarían demasiado juntas, solo se dibujan las gruesas."
+    ]
+  },
+  {
+    "id": "0.9.15",
+    "date": "2026-11-03",
+    "version": "0.9.15",
+    "title": "Ancla de abordaje de Junior: solo aturde al chocar",
+    "tag": "CORRECCIÓN",
+    "items": [
+      "La Q de Junior (Ancla de abordaje) ahora solo arrastra: los campeones enganchados no pueden actuar mientras los lleva, pero ya no quedan aturdidos ni al engancharlos ni al soltarlos. El aturdimiento aparece únicamente si chocan contra una pared (igual que el daño del impacto, que rompe la pared).",
+      "Si el rival es Xeviche con la arepa lista, el escudo absorbe el ancla por completo (se rompe y Junior sigue de largo)."
+    ],
+    "changes": [
+      {
+        "k": "champ",
+        "id": "junior",
+        "d": "down",
+        "t": "Ancla de abordaje: solo aturde si choca con una pared"
+      }
+    ]
+  },
+  {
+    "id": "0.9.14",
+    "date": "2026-11-03",
+    "version": "0.9.14",
+    "title": "Recompensas de súbditos, indicador de remate y marcador mejorado",
+    "tag": "MEJORA",
+    "items": [
+      "Los súbditos dan oro y experiencia, pero la mayor parte es para quien los remata: el campeón que da el golpe final se lleva el oro y toda la experiencia del súbdito. Golpearlos sin rematarlos no da nada.",
+      "Los aliados que están cerca de un súbdito que muere (a menos de 700 de distancia) ganan una parte pequeña de la experiencia (un 30 %) pero ningún oro.",
+      "Indicador de remate: cuando un ataque básico tuyo bastaría para matar a un súbdito enemigo, su barra de vida se ilumina y parpadea en amarillo con un borde blanco. Tiene en cuenta el daño del siguiente golpe de tu combo y la armadura o resistencia del súbdito.",
+      "Marcador (TAB) rediseñado: se divide en dos secciones, tu equipo en azul y el equipo rival en rojo, cada una con su cabecera y su fondo de color; tu propio recuadro brilla con un borde blanco parpadeante y una franja dorada."
+    ]
+  },
+  {
+    "id": "0.9.13",
+    "date": "2026-11-03",
+    "version": "0.9.13",
+    "title": "Niveles más lentos, oro por asistencias, tienda al morir y minimapa con caras",
+    "tag": "MEJORA",
+    "items": [
+      "Subir de nivel cuesta más: cada nivel necesita aproximadamente un 30 % más de experiencia que el anterior y se parte de una base mayor, de modo que llegar al nivel máximo lleva en total alrededor de un 55 % más de experiencia.",
+      "Derribar a un campeón da 300 de oro. Cada derribo también da 100 de oro por asistencia, repartidos a partes iguales entre todos los aliados que golpearon a la víctima en los últimos 10 segundos (si ayudan dos, 50 cada uno). Se corrigió además un fallo por el que las asistencias no se estaban contando.",
+      "Ahora puedes comprar en la tienda estando muerto, desde cualquier punto del mapa, mientras esperas a reaparecer (tecla B o el botón de tienda). Si reapareces fuera de la base, la tienda se cierra.",
+      "El minimapa muestra las caras de todos los campeones, aliados y enemigos, con un aro de color (verde tú, azul aliados, rojo enemigos).",
+      "Encima del minimapa aparece una fila con tus aliados: su cara con un aro de vida circular a su alrededor, su nivel y su nombre. Si un aliado está muerto, su foto se ve en gris con los segundos que faltan para reaparecer encima de su rostro."
+    ]
+  },
+  {
+    "id": "0.9.12",
+    "date": "2026-11-03",
+    "version": "0.9.12",
+    "title": "Tienda: árbol de crafteo completo",
+    "tag": "MEJORA",
+    "items": [
+      "Al elegir un objeto de la tienda siempre ves su árbol de crafteo completo hacia abajo (sus componentes hasta el nivel básico) y, debajo, todo lo que se puede construir con él: si eliges uno verde aparecen los morados que lo usan, y si eliges un componente básico aparecen los verdes y morados a los que lleva, con los morados primero. Cada uno se puede pulsar para verlo.",
+      "Los objetos que no puedes comprar ahora (por falta de oro o de espacio) se ven oscurecidos en toda la tienda: en la lista, en las recomendaciones, en la build, en el árbol de crafteo y en la lista de lo que se puede construir."
+    ]
+  },
+  {
+    "id": "0.9.11",
+    "date": "2026-11-03",
+    "version": "0.9.11",
+    "title": "Marcador con TAB",
+    "tag": "NUEVO",
+    "items": [
+      "Mantén pulsada la tecla TAB para ver el marcador de la partida: los dos equipos separados, con la cara y el nombre de cada campeón, su nivel, sus bajas / muertes / asistencias (K / D / A), su oro y los 6 objetos que lleva.",
+      "Tu equipo aparece arriba y el rival abajo, cada uno con su total de bajas; tu campeón va resaltado en verde y los muertos se muestran apagados con la etiqueta MUERTO. Al soltar TAB se cierra."
+    ]
+  },
+  {
+    "id": "0.9.10",
+    "date": "2026-11-03",
+    "version": "0.9.10",
+    "title": "Tienda recomendada y contador de combo",
+    "tag": "NUEVO",
+    "items": [
+      "La tienda ahora tiene dos pestañas: RECOMENDADO y TODOS. En Recomendado ves 3 objetos morados (nivel 3) elegidos para tu campeón según los rivales de la partida, en tarjetas verticales: por ejemplo, un tanque contra magos de IA recibe resistencia a la IA, y contra rivales físicos recibe armadura.",
+      "Cada tarjeta muestra debajo, en su mismo recuadro, contra quién es efectivo con la cara de los campeones rivales que están en la partida.",
+      "Debajo de las 3 recomendaciones hay una build preestablecida de 6 objetos morados para tu campeón, en orden de compra; el siguiente por conseguir aparece resaltado en dorado y se puede comprar con un clic.",
+      "Cada vez que compras un objeto recomendado, la lista se actualiza con el objeto siguiente de tu build y un complemento de otra categoría. Las recomendaciones cambian según tu oro, tus compras y los rivales.",
+      "El contador del combo de ataques básicos ahora es un recuadro junto a tus barras (como el icono de invulnerabilidad) con el número del golpe 1, 2 o 3 y tres marcas debajo; desaparece cuando se acaba el tiempo del combo."
+    ]
+  },
+  {
+    "id": "0.9.9",
+    "date": "2026-11-03",
+    "version": "0.9.9",
+    "title": "Combo de ataques básicos",
+    "tag": "NUEVO",
+    "items": [
+      "Los ataques básicos ahora son un combo de 3 golpes: haz clic tres veces seguidas (cada clic dentro de 0,6 s del anterior) y encadenas golpe, segundo golpe y remate, cada uno con su propia animación. Tres puntos junto a tu barra de maná indican en qué golpe vas.",
+      "Cada campeón mantiene su estilo: los de distancia (Leandro, Xeviche, Axel, Julio, Eliud y Yonaiker) encadenan disparos y los de cuerpo a cuerpo (Jorbi, Luis, Héctor y Junior) encadenan golpes, con un remate más fuerte. Xeviche lanza un lego por clic (rojo, azul y uno amarillo algo mayor en el remate) y Leandro conserva su proyectil mágico.",
+      "Entre golpe y golpe el campeón no vuelve al reposo: se queda en su pose de combate (por ejemplo, Xeviche con la mano alzada) esperando el siguiente clic, y cada golpe continúa la postura final del anterior. Si pasa la ventana del combo, vuelve al reposo.",
+      "Atacar mientras avanzas hacia donde apuntas ya no es un golpe del combo: es un ataque único con impulso hacia delante (de 70 a 110 px según el campeón) y animación propia, con el daño y la recuperación de un ataque básico normal. Xeviche, por ejemplo, se lanza hacia delante soltando un lego verde; cada campeón tiene su versión.",
+      "Cada clic lanza el siguiente golpe de inmediato y nunca queda bloqueado: los dos primeros golpes salen cada ~0,3 s, se recuerdan hasta 3 clics seguidos y el combo solo se corta si dejas de atacar unos 0,7 s. Tras el tercer golpe (el remate) hay una recuperación larga de ~1 s antes de poder empezar otro combo, para que no haya ráfagas continuas de ataques. Si mantienes el botón pulsado el combo se encadena solo. El daño de los tres golpes está ajustado para que un combo completo dé aproximadamente un 5 % más de daño por segundo que el ataque básico anterior.",
+      "El tercer golpe de Jorbi es su golpe crítico y el tercer puñetazo de Junior llena su contador de puño y aturde (antes eran el 3.º y el 4.º). Xeviche ya tiene las animaciones propias de sus tres golpes en las 8 direcciones; las de los demás campeones llegan por tandas y mientras tanto reutilizan su ataque actual."
+    ],
+    "changes": [
+      {
+        "k": "champ",
+        "id": "leandro",
+        "d": "rework",
+        "t": "Nuevo combo de ataques básicos"
+      },
+      {
+        "k": "champ",
+        "id": "xeviche",
+        "d": "rework",
+        "t": "Nuevo combo de ataques básicos"
+      },
+      {
+        "k": "champ",
+        "id": "jorbi",
+        "d": "rework",
+        "t": "Nuevo combo de ataques básicos"
+      },
+      {
+        "k": "champ",
+        "id": "axel",
+        "d": "rework",
+        "t": "Nuevo combo de ataques básicos"
+      },
+      {
+        "k": "champ",
+        "id": "julio",
+        "d": "rework",
+        "t": "Nuevo combo de ataques básicos"
+      },
+      {
+        "k": "champ",
+        "id": "luis",
+        "d": "rework",
+        "t": "Nuevo combo de ataques básicos"
+      },
+      {
+        "k": "champ",
+        "id": "eliud",
+        "d": "rework",
+        "t": "Nuevo combo de ataques básicos"
+      },
+      {
+        "k": "champ",
+        "id": "hector",
+        "d": "rework",
+        "t": "Nuevo combo de ataques básicos"
+      },
+      {
+        "k": "champ",
+        "id": "yonaiker",
+        "d": "rework",
+        "t": "Nuevo combo de ataques básicos"
+      },
+      {
+        "k": "champ",
+        "id": "junior",
+        "d": "rework",
+        "t": "Nuevo combo de ataques básicos"
+      }
+    ]
+  },
+  {
+    "id": "0.9.8",
+    "date": "2026-11-03",
+    "version": "0.9.8",
+    "title": "Sprites en 8 direcciones",
+    "tag": "MEJORA",
+    "items": [
+      "Los campeones ahora se ven en 8 direcciones: arriba, abajo, izquierda, derecha y las cuatro diagonales. El personaje mira hacia donde camina y, cuando está quieto o lanza una habilidad, hacia donde apuntas.",
+      "Xeviche es el primero con todo su arsenal en 8 direcciones: reposo (6 cuadros), caminar y correr (8), ataque (6), sus tres habilidades (8) y su definitiva (10). El resto de campeones irá llegando por tandas; mientras tanto siguen con sus sprites actuales.",
+      "Al cambiar de dirección a mitad de un paso la animación continúa sin saltos.",
+      "Los sprites de cada campeón y unidad se empaquetan ahora en un atlas de texturas (un solo archivo por personaje, recortado y sin cuadros repetidos). El juego usa menos de la mitad de memoria de vídeo con el mismo arte y carga menos archivos, lo que deja margen para las animaciones nuevas de las 8 direcciones."
+    ]
+  },
+  {
     "id": "0.9.7",
     "date": "2026-11-03",
     "version": "0.9.7",
@@ -88,6 +622,32 @@
       "Junior: la Q lo lanza hacia delante arrastrando a los campeones enemigos que alcance; la F tiene menos alcance; con la E activa no puede girar, usar otras habilidades ni atacar y se muestra su barra de duración; las llamas y cráteres de la R duran hasta que termina la ulti; el 4º golpe ya no se cierra el juego.",
       "Héctor: la R ahora es una bici que avanza sola, arranca lenta y acelera hasta una gran velocidad; la dirige libremente y desaparece al acabarse su tiempo (barra bajo el maná).",
       "Torretas de Yonaiker apoyadas en el suelo; nueva selección de campeón con arte conceptual (icono de cara y arte vertical con efecto de intermitencia al seleccionar)."
+    ],
+    "changes": [
+      {
+        "k": "champ",
+        "id": "xeviche",
+        "d": "rework",
+        "t": "Rediseño y nuevo kit"
+      },
+      {
+        "k": "champ",
+        "id": "yonaiker",
+        "d": "rework",
+        "t": "Rediseño y nuevo kit"
+      },
+      {
+        "k": "champ",
+        "id": "junior",
+        "d": "rework",
+        "t": "Ajustes"
+      },
+      {
+        "k": "champ",
+        "id": "hector",
+        "d": "rework",
+        "t": "Ajustes"
+      }
     ]
   },
   {

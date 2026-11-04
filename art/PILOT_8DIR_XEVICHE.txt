@@ -1,0 +1,9 @@
+Tarea nueva (piloto): sprites en 8 direcciones. Lee primero D:\mycowork\game\art\SPRITES_8DIR_SPEC.md (formato, sincronía de fases, nº de cuadros) y mira art/ref/xeviche.png, art/raw/xeviche/idle.png y art/raw/xeviche/walk.png (diseño actual V2 de Xeviche: camisa gris con cuello y puños naranjas, pantalón caqui, cinturón marrón, gafas azul oscuro, pelo negro corto con degradado, sonrisa con brackets).
+
+Personaje del piloto: XEVICHE. Genera 10 tiras en art/raw/xeviche/ (fondo magenta #FF00FF, celdas 512x512, tira horizontal):
+- idle_s.png, idle_se.png, idle_e.png, idle_ne.png, idle_n.png  -> 6 cuadros cada una (3072x512)
+- walk_s.png, walk_se.png, walk_e.png, walk_ne.png, walk_n.png  -> 8 cuadros cada una (4096x512)
+
+Reglas clave: mismo personaje, misma escala y mismos pies en la misma fila en las 5 direcciones; las 5 direcciones del mismo ciclo comparten la MISMA fase en cada cuadro (cuadro N = mismo instante del paso en todas); ciclos en bucle perfecto. e = perfil derecho redibujado con el nuevo nº de cuadros. NO dibujes sw/w/nw (el motor espeja). No sobrescribas idle.png/walk.png/run.png.
+
+Entrega también la hoja de contacto de revisión art/review_8dir/xeviche_idle.png y art/review_8dir/xeviche_walk.png (5 filas = 5 direcciones, todas las celdas) para comprobar la sincronía. Verifica tamaños exactos y avísame al terminar (lista de archivos). Si una dirección te sale mal (p. ej. se/ne parecen perfil con cabeza torcida), regenera esa tira antes de entregar.
