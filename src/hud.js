@@ -63,7 +63,7 @@ export class Hud extends Phaser.Scene {
     this.g = this.add.graphics().setDepth(1);        // dark fills behind the art + bars/minimap
     this.top = this.add.graphics().setDepth(3);      // overlays above icons (cooldown sweep, highlights)
     // the scene object survives restarts but its display objects do not: forget every pooled object / texture of the previous match
-    this.fogImg = null; this.glowG = null; this.hgImg = null; this.stImgs = {}; this.itImgs = {}; this.bnImgs = {}; this.blindImg = null; this.blindTex = null; this.blindWas = false; if (this.textures.exists('blindmask')) this.textures.remove('blindmask');
+    this.fogImg = null; this.glowG = null; this.sbG = null; this.allyG = null; this.sbOn = false; this.hgImg = null; this.stImgs = {}; this.itImgs = {}; this.bnImgs = {}; this.blindImg = null; this.blindTex = null; this.blindWas = false; if (this.textures.exists('blindmask')) this.textures.remove('blindmask');
     this.txt = {}; this.icons = []; this.pimg = {}; this.panels = {}; this.iconRects = []; this.upRects = []; this.helpRect = null;
     this.tipG = this.add.graphics().setDepth(6);
     this.redG = this.add.graphics().setDepth(0.5);   // red screen tint while dead
@@ -536,7 +536,7 @@ export class Hud extends Phaser.Scene {
     const recTab = this.shopCat === 'rec', fcw = recTab ? 0 : 50 * u, gw = pw * 0.56 - pad - fcw - 8 * u, gx = x0 + pad * 1.4 + fcw + 8 * u, gx0 = x0 + pad * 1.4, ty = y0 + 52 * u, SH = { rec: 'RECOMENDADO', all: 'TODOS' };
     const cats = Object.keys(SH), tw = gw / cats.length;
     cats.forEach((c, i) => sbtn('tab' + c, SH[c], { x: gx + i * tw, y: ty, w: tw - 3 * u, h: 28 * u }, true, () => { this.shopCat = c; this.shopScroll = 0; this.saveShop(); }, this.shopCat === c ? 0x2e6aa8 : 0x10213a, c === 'rec' ? '#ffd23f' : '#fff'));
-    const cs = 60 * u, gap = 8 * u, cellH = cs + 17 * u, gy = ty + 38 * u, invH = 110 * u, gh = ph - (gy - y0) - invH - pad * 1.3, cols = Math.max(1, Math.floor((gw + gap) / (cs + gap)));
+    const cs = 82 * u, gap = 10 * u, cellH = cs + 19 * u, gy = ty + 38 * u, invH = 110 * u, gh = ph - (gy - y0) - invH - pad * 1.3, cols = Math.max(1, Math.floor((gw + gap) / (cs + gap)));
     bev(gx - 6 * u, gy - 6 * u, gw + 12 * u, gh + 12 * u, 8 * u, 0x0a1224, 1, 0x2a3650, 1, 1);
     const STAT_KEYS = ['atk', 'ap', 'armor', 'mr', 'hp', 'mana', 'speed', 'aspd', 'lifesteal', 'cdr', 'hpRegen', 'manaRegen'], fl = this.shopStat;
     if (!recTab) {   // filter by advantage: vertical column on the left; the first entry (TODOS) clears the filter
@@ -620,9 +620,9 @@ export class Hud extends Phaser.Scene {
       const out = [], seen = new Set(), walk = id => { for (const i of ITEMS) if (i.recipe && i.recipe.includes(id) && !seen.has(i.id)) { seen.add(i.id); out.push(i); walk(i.id); } };
       walk(it.id); return out.sort((a, b) => b.lvl - a.lvl || a.cost - b.cost);
     })();
-    const upS = Math.min(34 * u, 40 * u), upCols = Math.max(1, Math.floor((dw - 8 * u) / (upS + 5 * u))), upRows = Math.ceil(ups.length / upCols);
+    const upS = 42 * u, upCols = Math.max(1, Math.floor((dw - 8 * u) / (upS + 5 * u))), upRows = Math.ceil(ups.length / upCols);
     {   // recipe tree: the item on top, its components below (up to 3 crafting levels). Owned components are marked: they are consumed when you craft.
-      const upH = ups.length ? 38 * u + upRows * (upS + 5 * u) + 6 * u : 0, by0 = y0 + ph - pad * 1.3 - 46 * u, tx = dx, tt0 = dy, th = by0 - 10 * u - tt0 - upH, rowH = (th - 24 * u) / 3, ts = Math.min(52 * u, rowH - 26 * u), tree = recipeTree(p.inv, it.id), GOLD = 0xffd23f;
+      const upH = ups.length ? 38 * u + upRows * (upS + 5 * u) + 6 * u : 0, by0 = y0 + ph - pad * 1.3 - 46 * u, tx = dx, tt0 = dy, th = by0 - 10 * u - tt0 - upH, rowH = (th - 24 * u) / 3, ts = Math.min(64 * u, rowH - 26 * u), tree = recipeTree(p.inv, it.id), GOLD = 0xffd23f;
       const done = nd => nd.owned || (nd.children.length > 0 && nd.children.every(done));   // a node is complete when you own it or own everything under it
       const pulse = 0.65 + 0.35 * Math.sin(this.time.now / 260);
       bev(tx - 4 * u, tt0, dw + 8 * u, th, 8 * u, 0x0a1224, 1, 0x2a3650, 1, 1);
@@ -743,7 +743,7 @@ export class Hud extends Phaser.Scene {
 
   /* ---------- scoreboard (hold TAB): both teams, champion faces, names, K/D/A, level, gold and their 6 items ---------- */
   drawScoreboard(A, p, u, W, H, on) {
-    if (!this.sbG) this.sbG = this.add.graphics().setDepth(26);
+    if (!this.sbG?.scene) this.sbG = this.add.graphics().setDepth(26);   // recreated if the previous match's one was destroyed (transparent TAB background)
     const g = this.sbG; g.clear(); if (!on) { this.sbOn = false; return; }
     const D = 27, rows = A.champs.filter(c => c.isChamp), mine = A.player.baseTeam;
     const teams = [mine, 1 - mine].map(t => rows.filter(c => c.baseTeam === t).sort((a, b) => b.kills - a.kills || a.deaths - b.deaths));
@@ -974,7 +974,7 @@ export class Hud extends Phaser.Scene {
   // allies above the minimap: round face with a health ring around it; dead allies are grey with the seconds left to respawn on their face
   drawAllies(A, g, o, q, u) {
     const me = A.player, list = A.champs.filter(c => c.isChamp && c !== me && c.baseTeam === me.baseTeam);
-    const bg = (this.allyG ||= this.add.graphics().setDepth(6)); bg.clear();   // level badges live on their own, higher layer (above every face)
+    const bg = (this.allyG?.scene ? this.allyG : (this.allyG = this.add.graphics().setDepth(6))); bg.clear();   // level badges live on their own, higher layer (above every face)
     const sz = 44 * u, gap = 26 * u, y = q.y - 40 * u - sz / 2;
     list.forEach((c, i) => {
       const cx = q.x + q.w - sz / 2 - 4 * u - (list.length - 1 - i) * (sz + gap), r = sz / 2, dead = !c.alive, f = dead ? 0 : Phaser.Math.Clamp(c.hp / c.maxHp, 0, 1);

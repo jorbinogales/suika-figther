@@ -16,3 +16,10 @@ Formato IDÉNTICO a los iconos de objetos existentes (mira `public/assets/items/
 | consola_overclock | Consola de overclock | termo_cafe + memoria_ram | una consola/placa con chips RAM y un termo de café humeante conectado, brillo azul de poder de IA |
 
 Entrega los 7 PNG, verifica que son 256x256 con fondo magenta puro y avísame: yo los proceso con `python tools/process_sprites.py`.
+
+---
+## Ronda 2: 3 objetos de cortacuración (mismo formato: 256x256, fondo magenta #FF00FF, `art/raw/items_new/<id>.png`)
+Misma línea visual que los iconos anteriores. Idea común: un corazón/herida vendada o con grieta.
+- `cuarentena_digital` — Cuarentena digital (poder de IA): pantalla holográfica azul con un corazón rojo agrietado y una cinta de cuarentena (rayas amarillas/negras) cruzada.
+- `ransomware` — Ransomware (ataque físico): un candado rojo con un martillo clavado/cruzado y un corazón roto detrás.
+- `espinas_firewall` — Espinas de firewall (tanque cybersecurity): escudo de firewall azul/gris cubierto de pinchos metálicos con un corazón rojo vendado en el centro.

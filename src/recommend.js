@@ -39,7 +39,7 @@ const names = list => list.map(f => f.key);   // champion keys (the shop draws t
 
 // ---- who is on the other team: damage mix, resistances, crowd control ----
 export function analyse(enemies) {
-  const list = enemies.map(f => { const ap = f.ap || 0, atk = f.atk || 0; return { f, ap, atk, apShare: ap + atk > 0 ? ap / (ap + atk) : 0.5, armor: f.armor || 0, mr: f.mr || 0, burst: ap + atk, cc: PROFILE[f.key]?.cc || [], melee: PROFILE[f.key]?.melee ?? true }; });
+  const list = enemies.map(f => { const ap = f.ap || 0, atk = f.atk || 0; return { f, ap, atk, apShare: ap + atk > 0 ? ap / (ap + atk) : 0.5, armor: f.armor || 0, mr: f.mr || 0, burst: ap + atk, cc: PROFILE[f.key]?.cc || [], melee: PROFILE[f.key]?.melee ?? true, heals: (f.it?.lifesteal || 0) > 0 || (f.it?.hpRegen || 0) > 1 || f.pas?.has?.('proteina_extra') || PROFILE[f.key]?.role === 'Soporte' }; });
   const n = list.length || 1, apShare = list.length ? list.reduce((a, e) => a + e.apShare, 0) / n : 0.5;
   return { list, n: list.length, apShare, adShare: 1 - apShare };
 }
@@ -49,6 +49,7 @@ export function counters(item, th, me) {
   const E = th.list, st = item.stats || {}, top = (arr, key, desc = true, k = 3) => arr.slice().sort((a, b) => desc ? b[key] - a[key] : a[key] - b[key]).slice(0, k).map(e => e.f.key);
   if (!E.length) return { names: [], reason: '', k: 0 };
   const units = Object.keys(st).reduce((a, k) => a + st[k] * (NORM[k] || 0), 0) || 1, share = k => (st[k] || 0) * NORM[k] / units;   // an item counts as a defensive counter only if that resistance is most of what it gives
+  if (['cuarentena_digital', 'ransomware', 'espinas_firewall'].includes(item.id)) { const l = E.filter(e => e.heals); return { names: names(l.map(e => e.f)), reason: 'rivales que se curan (cortacuración)', k: 1.4 * l.length / E.length }; }
   if (item.consumable?.cleanse) { const l = E.filter(e => e.cc.length); return { names: names(l.map(e => e.f)), reason: 'control (aturdir, silenciar, ralentizar)', k: 0.8 * l.length / E.length }; }
   if (share('mr') >= 0.5) { const l = E.filter(e => e.apShare >= 0.5); return { names: top(l, 'ap'), reason: 'daño de poder de IA', k: 1.6 * l.length / E.length }; }
   if (share('armor') >= 0.5) { const l = E.filter(e => e.apShare < 0.5); return { names: top(l, 'atk'), reason: 'daño físico', k: 1.6 * l.length / E.length }; }

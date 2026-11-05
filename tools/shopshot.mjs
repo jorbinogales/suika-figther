@@ -9,6 +9,7 @@ const sleep = t => new Promise(r => setTimeout(r, t));
 await sleep(3000);
 await p.evaluate(g => { const a = window.__arena; a.player.gold = g; a.scene.get('hud').toggleShop(); }, gold);
 await sleep(800);
+if (process.env.ALL) { await p.evaluate(() => { const h = window.__arena.scene.get('hud'); h.shopCat = 'all'; }); await sleep(500); }
 if (buy) { await p.evaluate(id => { const a = window.__arena, h = a.scene.get('hud'); h.shopSel = id; h.recIds = h.recIds || []; const rec = h.recIds.includes(id); a.player.buyItem(id); a.player.recChain = rec ? { from: id } : null; }, buy); await sleep(800); }
 await p.screenshot({ path: `shot_shop_${char}${buy ? '_after' : ''}.png` });
 console.log(await p.evaluate(() => { const h = window.__arena.scene.get('hud'); return JSON.stringify({ open: h.shopOpen, cat: h.shopCat, recs: h.recIds }); }));

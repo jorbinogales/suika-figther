@@ -172,6 +172,15 @@ export class Fighter {
     if (isWalk(nx, this.y)) this.x = nx;
     if (isWalk(this.x, ny)) this.y = ny;
   }
+  // dash / lunge movement: small sub-steps and it STOPS at solids (Leandro's tires, nexus) and map limits instead of being pushed out on the far side; returns false when blocked
+  dashStep(dx, dy) {
+    const n = Math.max(1, Math.ceil(Math.hypot(dx, dy) / 8)), sx = dx / n, sy = dy / n;
+    for (let i = 0; i < n; i++) {
+      const ox = this.x, oy = this.y; this.tryMove(clamp(this.x + sx, 60, WORLD_W - 60), clamp(this.y + sy, WALK_Y0, WALK_Y1));
+      if (this.w.solidAt(this.x, this.y) || (this.x === ox && this.y === oy)) { this.x = ox; this.y = oy; return false; }
+    }
+    return true;
+  }
   get br() { return this.def.radius || BODY_R; }   // body radius for hits
   get facing() { return this.ax >= 0 ? 1 : -1; }
   get cy() { return this.y - this.def.height * 0.6; }        // chest height on screen
@@ -218,7 +227,7 @@ export class Fighter {
     this.state = 'idle';
     this.stateT = 0; this.stateDur = 0;
     this.pending = null; this.fired = false;
-    this.stunT = 0; this.slows = []; this.poisons = []; this.rootT = 0;
+    this.stunT = 0; this.slows = []; this.poisons = []; this.rootT = 0; this.woundT = 0;
     this.running = false;
     this.deadT = 0;
     this.in = { mx: 0, my: 0, run: false };
@@ -794,6 +803,7 @@ export class Fighter {
     if (this.blindT > 0) add('blind', 'Cegado', this.blindT, true, 'Tu visión se reduce a una zona pequeña a tu alrededor.');
     if (this.lure) add('lure', 'Hechizado', this.lure.t, true, 'Caminas hacia Xeviche y no puedes atacar ni usar poderes.');
     if (this.charmT > 0) add('charm', 'Controlado', this.charmT, true, 'Luchas para el enemigo y no puedes usar poderes.');
+    if (this.woundT > 0) add('wound', 'Herida', this.woundT, true, `Recibes un ${Math.round(this.woundPct * 100)} % menos de curación, regeneración y robo de vida.`, { icon: 'icon_wound', name: 'Herida', tint: 0xff5a5a });
     if (this.slows.length) add('slow', 'Ralentizado', Math.max(...this.slows.map(s => s.t)), true, 'Te mueves más lento.', { icon: 'icon_slow', name: 'Ralentización', tint: 0x7ee0ff });
     if (this.poisons.some(p => p.burn)) add('burn', 'Quemado', Math.max(...this.poisons.filter(p => p.burn).map(p => p.t)), true, 'Recibes daño de fuego cada medio segundo.', { icon: 'icon_burn', name: 'Quemadura', by: (() => { const s = this.poisons.find(p => p.burn)?.src; return (s?.owner || s)?.def?.name || ''; })(), tint: 0xff5a2a });
     if (this.poisons.some(p => !p.burn)) add('poison', 'Envenenado', Math.max(...this.poisons.filter(p => !p.burn).map(p => p.t)), true, 'Recibes daño cada medio segundo.', { icon: 'icon_poison', name: 'Envenenado', tint: 0x7be05a });
@@ -811,9 +821,12 @@ export class Fighter {
     return L;
   }
 
+  // anti-heal: while wounded every source of healing is reduced (wound(pct, t) keeps the strongest pct and the longest time)
+  wound(pct, t) { if (this.isTower || !this.alive) return; this.woundPct = Math.max(this.woundT > 0 ? this.woundPct : 0, pct); this.woundT = Math.max(this.woundT || 0, t); this.w.markSrc?.(this, 'wound'); }
+  get healMult() { return this.woundT > 0 ? 1 - this.woundPct : 1; }
   heal(n) {
     if (this.isTower) return;
-    const h = Math.min(n, this.maxHp - this.hp);
+    const h = Math.min(n * this.healMult, this.maxHp - this.hp);
     this.hp += h;
     if (h > 0) this.w.float(this.x, this.y - this.def.height - 10, `+${Math.round(h)}`, '#5dff8a');
   }
@@ -908,7 +921,7 @@ export class Fighter {
     if (this.combatT > 0) this.combatT -= dt;
     if (this.isChamp && this.pas.size) this.itemPassives(dt);
     if (this.isChamp) {   // item regen, passive income and the base fountain
-      this.hp = Math.min(this.maxHp, this.hp + this.it.hpRegen * dt);
+      this.hp = Math.min(this.maxHp, this.hp + this.it.hpRegen * dt * this.healMult);
       if (this.maxMana) this.mana = Math.min(this.maxMana, this.mana + this.it.manaRegen * dt);
       this.gold += dt * 3.2;
       if (w.inBase(this)) { this.hp = Math.min(this.maxHp, this.hp + this.maxHp * 0.10 * dt); if (this.maxMana) this.mana = Math.min(this.maxMana, this.mana + this.maxMana * 0.10 * dt); }
@@ -938,6 +951,7 @@ export class Fighter {
     if (!this.isTower) this.hp = Math.min(this.maxHp, this.hp + dt * this.maxHp * 0.004);   // structures never regenerate
     if (this.isChamp && this.ai && this.retreat && Math.hypot(this.x - this.spawn.x, this.y - this.spawn.y) < 260) { this.hp = Math.min(this.maxHp, this.hp + dt * this.maxHp * 0.07); this.mana = Math.min(this.maxMana, this.mana + dt * this.maxMana * 0.05); }   // base fountain for retreating AI
     this.slows = this.slows.filter(s => (s.t -= dt) > 0);
+    if (this.woundT > 0) this.woundT -= dt;
     this.poisons = this.poisons.filter(p => {
       p.t -= dt; p.tick += dt;
       if (p.tick >= 0.5) { p.tick -= 0.5; w.damage(p.src, this, p.dps * 0.5, p.type || 'true', true); if (p.burn && Math.random() < 0.35) w.vfx('burning_ground', this.x + (Math.random() - 0.5) * 30, this.y - 6, { scale: 1.4, alpha: 0.8, below: true }); }
@@ -971,11 +985,11 @@ export class Fighter {
         if (Math.random() < 0.8) w.vfx('poison_hit', this.x, this.y - 14, { scale: 2.2, tint: 0x6a3cff, below: true, alpha: 0.8 });
       }
       if (this.dashV) {   // dashing: fast move along the aim
-        this.tryMove(clamp(this.x + this.dashV.x * dt, 60, WORLD_W - 60), clamp(this.y + this.dashV.y * dt, WALK_Y0, WALK_Y1));
+        if (!this.dashStep(this.dashV.x * dt, this.dashV.y * dt)) this.stateT = this.stateDur;   // hit a wall / tire / the edge: the dash ends there
         if (Math.random() < 0.5 && !this.dashShield) w.vfx('run_dust', this.x, this.y - 6, { scale: 1.6, alpha: 0.6, below: true });
         if (this.stateT >= this.stateDur) { if (this.dashV && this.dashShield) { const d = this.dashShield; this.dashShield = null; this.shieldHp = Math.max(this.shieldHp, d.sh); this.shieldT = d.t; this.w.markSrc(this, 'shield'); } this.dashV = null; if (this.inkDash) this.inkDash = null; if (this.bike) { this.bike = null; this.setSkin(this.key); } }
       }
-      if (this.lunge) { const L = this.lunge; L.t -= dt; if (this.rootT <= 0) this.tryMove(clamp(this.x + L.vx * dt, 60, WORLD_W - 60), clamp(this.y + L.vy * dt, WALK_Y0, WALK_Y1)); if (Math.random() < 0.6) w.vfx('run_dust', this.x - this.ax * 14, this.y - 6, { scale: 1.2, alpha: 0.5, below: true }); if (L.t <= 0) this.lunge = null; }
+      if (this.lunge) { const L = this.lunge; L.t -= dt; if (this.rootT <= 0 && !this.dashStep(L.vx * dt, L.vy * dt)) L.t = 0; if (Math.random() < 0.6) w.vfx('run_dust', this.x - this.ax * 14, this.y - 6, { scale: 1.2, alpha: 0.5, below: true }); if (L.t <= 0) this.lunge = null; }
       if (!this.fired && this.stateT >= this.windup) { this.fired = true; this.pending?.(); }
       if (this.stateT >= this.stateDur) {
         this.state = 'idle';

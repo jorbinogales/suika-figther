@@ -89,7 +89,15 @@ C('arsenal_artillero', 'Arsenal artillero', 'util', ['mortero_portatil', 'bomba_
 C('propulsor_cohete', 'Propulsor cohete', 'util', ['sprint_energia', 'teleport_base'], 'Activo: te lanzas hacia delante y ganas gran velocidad unos segundos.', { active: { type: 'blink', cd: 28, dist: 340, time: 3 } });
 C('consola_overclock', 'Consola de overclock', 'ap', ['termo_cafe', 'memoria_ram'], 'Poder de IA, maná, regeneración y recarga de poderes.');
 
+// ---- anti-heal ("herida"): -40 % healing, regeneration, shields-by-heal and life steal on the target ----
+C('cuarentena_digital', 'Cuarentena digital', 'ap', ['pantalla_holo', 'amuleto_logico'], 'Poder de IA y resistencia a la IA. Tus ataques y habilidades aplican Herida (cortacuración).');
+C('ransomware', 'Ransomware', 'ad', ['martillo_debug', 'mancuerna_codigo'], 'Ataque, recarga y resistencia. Tus ataques físicos aplican Herida (cortacuración).');
+C('espinas_firewall', 'Espinas de firewall', 'arm', ['escudo_firewall', 'rodilleras_pro'], 'Armadura, vida y regeneración. Quien te hace daño físico recibe Herida (cortacuración).');
+
 export const PASSIVES = {
+  cuarentena_digital:  { name: 'Cuarentena',          desc: 'Tus ataques básicos y habilidades que hacen daño aplican Herida durante 3 s: el objetivo recibe un 40 % menos de curación, regeneración y robo de vida.' },
+  ransomware:          { name: 'Secuestro de datos',  desc: 'Tus ataques físicos (básicos y habilidades de daño físico) aplican Herida durante 3 s: el objetivo recibe un 40 % menos de curación, regeneración y robo de vida.' },
+  espinas_firewall:    { name: 'Contraataque',        desc: 'Cuando un enemigo te hace daño físico recibe Herida durante 3 s (-40 % de curación, regeneración y robo de vida); si es un ataque básico, además recibe un poco de daño de IA.' },
   exoesqueleto:        { name: 'Adrenalina de acero', desc: 'Con menos del 50 % de vida ganas un 20 % de ataque físico.' },
   moto_electrica:      { name: 'Carga estática',      desc: 'Tras moverte 2 s seguidos, tu siguiente ataque básico causa 40 de daño de IA extra.' },
   consola_overclock:   { name: 'Overclock',           desc: 'Cada vez que usas un poder recuperas el 8 % de tu maná máximo.' },

@@ -1,5 +1,122 @@
 [
   {
+    "id": "0.9.29",
+    "date": "2026-11-05",
+    "version": "0.9.29",
+    "title": "Animaciones de combo y de movimiento para todos los campeones",
+    "tag": "NUEVO",
+    "changes": [
+      {
+        "k": "champ",
+        "id": "jorbi",
+        "d": "rework",
+        "t": "Animaciones propias de combo, ataque con impulso y movimiento en 8 direcciones"
+      },
+      {
+        "k": "champ",
+        "id": "julio",
+        "d": "rework",
+        "t": "Animaciones propias de combo, ataque con impulso y movimiento en 8 direcciones"
+      },
+      {
+        "k": "champ",
+        "id": "leandro",
+        "d": "rework",
+        "t": "Animaciones propias de combo, ataque con impulso y movimiento en 8 direcciones"
+      },
+      {
+        "k": "champ",
+        "id": "luis",
+        "d": "rework",
+        "t": "Animaciones propias de combo, ataque con impulso y movimiento en 8 direcciones"
+      },
+      {
+        "k": "champ",
+        "id": "axel",
+        "d": "rework",
+        "t": "Animaciones propias de combo, ataque con impulso y movimiento en 8 direcciones"
+      },
+      {
+        "k": "champ",
+        "id": "eliud",
+        "d": "rework",
+        "t": "Animaciones propias de combo, ataque con impulso y movimiento en 8 direcciones"
+      }
+    ],
+    "items": [
+      "Jorbi, Julio, Leandro, Luis, Axel y Eliud ya tienen reposo, caminar, correr, los tres golpes del combo y el ataque con impulso en 8 direcciones.",
+      "Con esto los 10 campeones tienen el set completo."
+    ]
+  },
+  {
+    "id": "0.9.28",
+    "date": "2026-11-05",
+    "version": "0.9.28",
+    "title": "Correcciones: desplazamientos, banderas, tabla TAB y tienda más grande",
+    "tag": "CORRECCIÓN",
+    "changes": [
+      {
+        "k": "champ",
+        "id": "junior",
+        "d": "rework",
+        "t": "Sus desplazamientos ya no atraviesan los neumáticos de Leandro y se detienen en los límites"
+      },
+      {
+        "k": "champ",
+        "id": "jorbi",
+        "d": "rework",
+        "t": "Sus desplazamientos ya no atraviesan los neumáticos de Leandro y se detienen en los límites"
+      },
+      {
+        "k": "champ",
+        "id": "julio",
+        "d": "rework",
+        "t": "Sus desplazamientos ya no atraviesan los neumáticos de Leandro y se detienen en los límites"
+      }
+    ],
+    "items": [
+      "Los desplazamientos (Rico caldito, Ancla de abordaje, voltereta, ola de tinta, ataque con impulso y Propulsor cohete) se detienen al chocar con los 4 neumáticos de Leandro, con la base o con el límite del mapa.",
+      "Al reconquistar un campamento enemigo, su bandera se sustituye directamente por la tuya, sin pasar por la bandera blanca.",
+      "Corregido: a veces el fondo azul y rojo de la tabla TAB aparecía transparente al empezar otra partida.",
+      "Todos los objetos de la tienda (lista, árbol de crafteo y \"se usa para crear\") se ven más grandes.",
+      "Herida: el icono ahora es un corazón roto."
+    ]
+  },
+  {
+    "id": "0.9.27",
+    "date": "2026-11-05",
+    "version": "0.9.27",
+    "title": "Cortacuración: nuevo estado Herida y 3 objetos para aplicarlo",
+    "tag": "NUEVO",
+    "changes": [
+      {
+        "k": "item",
+        "id": "cuarentena_digital",
+        "d": "up",
+        "t": "Nuevo (poder de IA): tus ataques y habilidades aplican Herida"
+      },
+      {
+        "k": "item",
+        "id": "ransomware",
+        "d": "up",
+        "t": "Nuevo (ataque físico): tus ataques físicos aplican Herida"
+      },
+      {
+        "k": "item",
+        "id": "espinas_firewall",
+        "d": "up",
+        "t": "Nuevo (tanque): quien te hace daño físico queda con Herida"
+      }
+    ],
+    "items": [
+      "Herida: durante 3 s el objetivo recibe un 40 % menos de curación, regeneración de objetos y robo de vida. Aparece un corazón roto bajo su barra de maná.",
+      "Cuarentena digital (Pantalla holográfica + Amuleto lógico): tus ataques básicos y tus habilidades que hacen daño aplican Herida.",
+      "Ransomware (Martillo de debug + Mancuerna de código): tus ataques físicos aplican Herida.",
+      "Espinas de firewall (Escudo de firewall + Rodilleras pro): quien te hace daño físico recibe Herida; si es un ataque básico, además recibe un poco de daño de IA.",
+      "La tienda recomienda estos objetos cuando el equipo rival tiene robo de vida o regeneración."
+    ]
+  },
+  {
     "id": "0.9.26",
     "date": "2026-11-03",
     "version": "0.9.26",

@@ -309,6 +309,13 @@ export class Arena extends Phaser.Scene {
       if (up) { g.fillStyle(0x1a1208).fillTriangle(5, 14, 11, 0, 18, 14); g.fillStyle(0xffffff).fillTriangle(7, 14, 11, 3, 16, 14); g.fillStyle(0x9fd0ff).fillTriangle(9, 7, 11, 3, 13, 8); }
       else { g.fillStyle(0x1a1208).fillTriangle(6, 14, 12, 27, 19, 17); g.fillStyle(0xffffff).fillTriangle(8, 15, 12, 24, 17, 17); g.fillStyle(0x9fd0ff).fillTriangle(10, 21, 12, 24, 14, 20); }
     });
+    mk('icon_wound', 48, 48, g => {   // wound (anti-heal): a BROKEN heart (two halves with a zigzag crack) on a dark tile
+      g.fillStyle(0x1a0808).fillRect(0, 0, 48, 48).lineStyle(2, 0xff5a5a).strokeRect(1, 1, 46, 46);
+      g.fillStyle(0xd62828).fillCircle(15, 19, 9).fillTriangle(6, 22, 26, 22, 22, 41).fillTriangle(6, 22, 22, 41, 20, 24).fillRect(6, 19, 17, 4);   // left half
+      g.fillStyle(0xd62828).fillCircle(33, 21, 9).fillTriangle(42, 24, 24, 26, 28, 43).fillRect(24, 21, 18, 4);                                         // right half, slightly lower and apart
+      g.fillStyle(0xff8a8a).fillCircle(12, 16, 3.5).fillCircle(31, 18, 3.5);
+      g.lineStyle(3, 0x1a0808).lineBetween(25, 8, 21, 18).lineBetween(21, 18, 27, 24).lineBetween(27, 24, 22, 32).lineBetween(22, 32, 26, 45);
+    });
     mk('icon_slow', 48, 48, g => {   // slow: an ice crystal / snowflake on a dark blue tile
       g.fillStyle(0x08162a).fillRect(0, 0, 48, 48).lineStyle(2, 0x7ee0ff).strokeRect(1, 1, 46, 46);
       g.lineStyle(5, 0x2f8fd8); for (let i = 0; i < 3; i++) { const a = i * Math.PI / 3; g.lineBetween(24 - Math.cos(a) * 18, 24 - Math.sin(a) * 18, 24 + Math.cos(a) * 18, 24 + Math.sin(a) * 18); }
@@ -711,6 +718,7 @@ export class Arena extends Phaser.Scene {
   enemiesNear(team, x, y, r) { return this.fighters.filter(t => t.alive && t.team !== team && eDist(t.x, t.y, x, y) <= r); }
 
   // tires are solid: nobody walks through them, anyone caught under a new wall is pushed out
+  solidAt(x, y) { return this.obstacles.some(o => Math.hypot(x - o.x, y - o.y) < o.r + BODY_R * 0.7) || this.fighters.some(n => n.isNexus && n.alive && Math.hypot(x - n.x, y - n.y) < n.br * 0.8 + BODY_R * 0.6); }
   resolveSolids(f) {
     for (const n of this.fighters) if (n.isNexus && n.alive) {
       const min = n.br * 0.8 + BODY_R * 0.6, dx = f.x - n.x, dy = f.y - n.y, d = Math.hypot(dx, dy) || 1;
@@ -747,7 +755,7 @@ export class Arena extends Phaser.Scene {
     w.audio.play('ui_select', { at: f, vol: 0.5, gap: 100 });
     if (a.type === 'multi') { a.parts.forEach(pt => w.useActive(f, pt, a.m || 1.5)); return; }   // combined actives of the new level-3 items
     if (a.type === 'blink') {   // rocket thruster: a quick dash along the aim (stops at walls) and a speed boost
-      let d = 0; while (d < a.dist) { const nd = Math.min(a.dist, d + 20), nx = f.x + f.ax * nd, ny = f.y + f.ay * nd * 0.75; if (!isWalk(nx, ny) || ny < WALK_Y0 || ny > WALK_Y1) break; d = nd; }
+      let d = 0; while (d < a.dist) { const nd = Math.min(a.dist, d + 20), nx = f.x + f.ax * nd, ny = f.y + f.ay * nd * 0.75; if (!isWalk(nx, ny) || ny < WALK_Y0 || ny > WALK_Y1 || this.solidAt(nx, ny)) break; d = nd; }
       f.x += f.ax * d; f.y += f.ay * d * 0.75; f.speedBoost = 0.3; f.speedT = a.time; w.vfx('shockwave', f.x, f.y - 6, { scale: 2.4, below: true, tint: 0xffaa44 }); w.vfx('buff', f.x, f.cy, { scale: 3, tint: 0xffaa44 }); w.float(f.x, f.y - f.def.height - 34, '¡Propulsor!', '#ffaa44'); return;
     }
     if (a.type === 'shield') { w.markSrc(f, 'shield'); f.shieldHp = Math.max(f.shieldHp, 150 * m); f.shieldT = a.time; w.float(f.x, f.y - f.def.height - 34, `Escudo ${Math.round(f.shieldHp)}`, '#7ee0ff'); }
@@ -931,7 +939,7 @@ export class Arena extends Phaser.Scene {
       c.contested = n[0] > 0 && n[1] > 0;
       if (!c.contested && (n[0] || n[1])) {
         const T = n[0] ? 0 : 1, O = 1 - T, rate = dt / 8 * (1 + 0.35 * (n[T] - 1));
-        if (c.owner === O) { c.prog[O] = Math.max(0, c.prog[O] - rate); if (c.prog[O] <= 0) { c.prog[O] = 0; c.owner = null; } }
+        if (c.owner === O) { c.prog[O] = Math.max(0, c.prog[O] - rate); if (c.prog[O] <= 0) this.captureCamp(c, T); }   // reconquering: the rival's flag is simply replaced by yours (never a neutral / white flag in between)
         else if (c.prog[O] > 0) c.prog[O] = Math.max(0, c.prog[O] - rate);
         else { c.prog[T] = Math.min(1, c.prog[T] + rate); if (c.prog[T] >= 1 && c.owner !== T) this.captureCamp(c, T); }
       } else if (!c.contested && c.owner != null) c.prog[c.owner] = Math.min(1, c.prog[c.owner] + dt / 20);   // nobody on it: the owner's pie slowly refills
@@ -1083,7 +1091,7 @@ export class Arena extends Phaser.Scene {
       if ((s.t -= dt) <= 0) { s.img?.destroy(); s.shd?.destroy(); return false; }
       const who = this.fighters.find(f => f.isChamp && f.alive && !f.away && f.team === s.team && eDist(f.x, f.y, s.x, s.y) <= s.r);
       if (!who) return true;
-      const h = Math.min(s.heal, who.maxHp - who.hp);   // instant heal, then the robot is spent
+      const h = Math.min(s.heal * who.healMult, who.maxHp - who.hp);   // instant heal, then the robot is spent
       who.hp += h; this.float(who.x, who.y - who.def.height - 8, `+${Math.round(h)}`, '#5dff8a'); this.vfx('heal', who.x, who.cy, { scale: 4 }); this.vfx('levelup', s.x, s.y - 10, { scale: 2.4, tint: 0x5dff8a }); this.audio.play('heal', { at: who, vol: 0.7, gap: 60 });
       s.img?.destroy(); s.shd?.destroy(); return false;
     });
@@ -1798,7 +1806,7 @@ export class Arena extends Phaser.Scene {
     target.hp -= dmg;
     if (target.isChamp && dmg > 0) this.logDamage(src, target, dmg, type, dot);
     if (target.recall && dmg > 0) { target.recall = null; this.float(target.x, target.y - target.def.height - 30, 'Teletransporte cancelado', '#ff9a7a'); }
-    { const o = src?.owner || src; if (o?.isChamp && o.it?.lifesteal && type === 'physical' && !dot && o !== target) o.hp = Math.min(o.maxHp, o.hp + dmg * o.it.lifesteal * (o.pas.has('garras_vampiricas') && o.hp < o.maxHp * 0.4 ? 1 + o.pas.get('garras_vampiricas') : 1)); }
+    { const o = src?.owner || src; if (o?.isChamp && o.it?.lifesteal && type === 'physical' && !dot && o !== target) o.hp = Math.min(o.maxHp, o.hp + o.healMult * dmg * o.it.lifesteal * (o.pas.has('garras_vampiricas') && o.hp < o.maxHp * 0.4 ? 1 + o.pas.get('garras_vampiricas') : 1)); }
     this.onHitPassives(src, target, dmg, type, dot);
     if (target.protein && dmg > 0) { target.protein = null; this.float(target.x, target.y - target.def.height - 30, '¡Proteína rota!', '#ff9a7a'); }
     if (!dot) target.flash();
@@ -1847,6 +1855,13 @@ export class Arena extends Phaser.Scene {
     const o = src?.owner || src;
     if (o?.isChamp && o.pas?.has('tarjeta_grafica') && target.team !== o.team && !target.isTower && target.alive && target !== o) {   // Tarjeta gráfica: every attack and ability sets the target on fire for a few seconds (AI damage over time)
       target.burn((6 + o.ap * 0.18) * o.pas.get('tarjeta_grafica'), 4, o, 'magic', 'tarjeta');
+    }
+    if (o?.isChamp && o.pas?.size && target.team !== o.team && !target.isTower && target.alive && target !== o) {   // anti-heal items: the wound is applied by abilities (AI), by basic attacks (physical)
+      if (o.pas.has('cuarentena_digital')) target.wound(0.4, 3);   // mage: every attack and every ability that deals damage
+      if (o.pas.has('ransomware') && type === 'physical') target.wound(0.4, 3);   // melee / physical: every physical hit
+    }
+    if (target.isChamp && target.pas?.has('espinas_firewall') && type === 'physical' && o && o.alive && !o.isTower && o !== target && o.team !== target.team) {   // Espinas de firewall: whoever hits you with a basic attack is wounded and takes a little damage back
+      o.wound(0.4, 3); if (this.basicDmg) { this.inPassive = true; this.damage(target, o, 12 + target.armor * 0.12, 'magic', true); this.inPassive = false; } this.vfx('spark', o.x, o.cy, { scale: 1.8, tint: 0xff5a5a });
     }
     if (o?.isChamp && o.pas?.has('moto_electrica') && this.basicDmg && o.moveT > 2 && target.team !== o.team && !target.isTower && target.alive) {   // Moto eléctrica: static charge after running
       o.moveT = 0; this.inPassive = true; this.damage(o, target, 40 * o.pas.get('moto_electrica'), 'magic', true); this.inPassive = false; this.vfx('spark', target.x, target.cy, { scale: 3, tint: 0x66e0ff });
@@ -2271,7 +2286,7 @@ export class Arena extends Phaser.Scene {
     const me = this.player;
     for (const f of this.fighters) {
       const champ = f.isChamp;
-      if (f.hiddenFor(me) || this.blindVis(f) <= 0) { f.bt && Object.values(f.bt).forEach(t => t.setVisible(false)); f.invIc?.setVisible(false); f.poisIc?.setVisible(false); f.burnIc?.setVisible(false); f.slowIc?.setVisible(false); continue; }
+      if (f.hiddenFor(me) || this.blindVis(f) <= 0) { f.bt && Object.values(f.bt).forEach(t => t.setVisible(false)); f.invIc?.setVisible(false); f.poisIc?.setVisible(false); f.burnIc?.setVisible(false); f.slowIc?.setVisible(false); f.woundIc?.setVisible(false); continue; }
       if (champ && !f.bt) {
         const mk = () => { const t = this.add.text(0, 0, '', { fontFamily: 'monospace', fontSize: '10px', fontStyle: 'bold', color: '#fff', stroke: '#000', strokeThickness: 3, resolution: 3 }).setOrigin(0.5).setDepth(100000); t.texture.setFilter(Phaser.Textures.FilterMode.LINEAR); return t; };
         f.bt = { hp: mk(), mp: mk(), name: mk(), lvl: mk() };
@@ -2327,7 +2342,8 @@ export class Arena extends Phaser.Scene {
       const sy = y + h + mh + 9 + (nb + (sb ? 1 : 0)) * 7;   // status icons under the mana bar: poison (green drop) and burn (red flame), side by side when both apply
       let sx = 8 + (f.poisoned ? 17 : 0);
       if (champ && f.burning) { const bi = (f.burnIc ||= this.add.image(0, 0, 'icon_burn').setDepth(100001).setDisplaySize(14, 14)); bi.setVisible(true).setPosition(x + sx, sy); sx += 17; } else f.burnIc?.setVisible(false);
-      if (champ && f.slowed) { const si = (f.slowIc ||= this.add.image(0, 0, 'icon_slow').setDepth(100001).setDisplaySize(14, 14)); si.setVisible(true).setPosition(x + sx, sy); } else f.slowIc?.setVisible(false);
+      if (champ && f.slowed) { const si = (f.slowIc ||= this.add.image(0, 0, 'icon_slow').setDepth(100001).setDisplaySize(14, 14)); si.setVisible(true).setPosition(x + sx, sy); sx += 17; } else f.slowIc?.setVisible(false);
+      if (champ && f.woundT > 0) { const wi = (f.woundIc ||= this.add.image(0, 0, 'icon_wound').setDepth(100001).setDisplaySize(14, 14)); wi.setVisible(true).setPosition(x + sx, sy); } else f.woundIc?.setVisible(false);
       if (champ && f.poisoned) { const pi = (f.poisIc ||= this.add.image(0, 0, 'icon_poison').setDepth(100001).setDisplaySize(14, 14)); pi.setVisible(true).setPosition(x + 8, sy); } else f.poisIc?.setVisible(false);   // poisoned: icon under the mana bar
       if (champ && f.arepaUp) { const ic = (f.invIc ||= this.add.image(0, 0, 'icon_invul').setDepth(100001).setDisplaySize(22, 22)); ic.setVisible(true).setPosition(x + w + 16, y + h / 2 + 4); } else f.invIc?.setVisible(false);   // invulnerable: yellow aura icon by the bars
       if (f.stunT > 0) g.fillStyle(0xffd23f).fillRect(x, y - 6, w * Math.min(1, f.stunT / 2), 3);
