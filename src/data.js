@@ -58,8 +58,8 @@ export const CHAMPIONS = {
             desc: 'Lanza un corazón hacia donde apuntas. Si impacta a un enemigo, este pierde el control de su campeón y camina lentamente hacia Xeviche durante unos segundos (no puede atacar ni usar habilidades). Causa un poco de daño de IA.',
             speed: 480, range: 520, lure: [2.0, 2.5, 3.0], dmg: [20, 35, 50], apScale: 0.3 },
       ult: { name: 'Karis Harem', icon: 'xeviche_ult', cd: [90, 80, 70], mana: [120, 120, 120], windup: 0.5, dur: 3.5,
-             desc: 'Xeviche se da la vuelta e invoca a tres empleadas con el mismo uniforme que, juntas, lanzan un gran rayo que atraviesa cualquier unidad causando daño de IA continuo. Xeviche no puede moverse hasta que la habilidad termine. Mejorarla aumenta el tiempo y el daño del rayo. Escala con tu poder de IA.',
-             length: 650, width: 130, time: [3, 4, 5], dps: [70, 95, 120], apScale: 0.55 },
+             desc: 'Xeviche se da la vuelta e invoca a tres empleadas con el mismo uniforme. Cada una dispara su propio láser, así que son tres rayos paralelos que atraviesan cualquier unidad causando daño de IA continuo (cada láser golpea por separado). Xeviche no puede moverse hasta que la habilidad termine. Mejorarla aumenta el tiempo y el daño de los láseres. Escala con tu poder de IA.',
+             length: 650, beamW: 52, spread: 74, time: [3, 4, 5], dps: [70, 95, 120], apScale: 0.55 },
     },
   },
 };
@@ -202,33 +202,101 @@ CHAMPIONS.hector = {
   },
 };
 
+// Maduro — soporte (ranged, magic). Passive: Devaluación. Q megaphone decree line (silence), F bodyguards (-20% damage + push), E empty supply box (area: enemies / allies), R = Súper Bigote (15 s):
+// his Q / F / E become Iron Fist (dash punch + stun), Anti-imperialist Shield (blocks the first hit or CC) and Iron Hand (grab + armour shred); basic attacks become punches. `sb` holds the transformed kit.
+CHAMPIONS.maduro = {
+  name: 'Maduro', cls: 'soporte', ref: 'ref_maduro', height: 122,
+  passive: { name: 'Devaluación', icon: 'maduro_passive',
+    desc: 'Cada vez que Maduro daña a un campeón enemigo, durante unos segundos le roba un 5 % del oro que gana (por cualquier vía). Los súbditos aliados de Maduro cercanos dan a los rivales un 10 % menos de oro al morir. Por cada 1000 de oro robado Maduro gana 80 de escudo permanente.',
+    steal: 0.05, mark: 4, minion: 0.1, per: 1000, shield: 80 },
+  stats: { hp: 640, mana: 320, atk: 40, ap: 32, armor: 28, mr: 24, speed: 134, run: 214, range: 380, atkCd: 0.8 },
+  grow: { hp: 0.07, atk: 0.04, ap: 0.06 },
+  basic: { kind: 'projectile', base: 12, apScale: 0.55, type: 'magic', speed: 580, vfx: 'magic_missile', obj: 'decree_scroll', scale: 0.12, windup: 0.22, dur: 0.42 },
+  abilities: {
+    p1: { name: 'Decreto presidencial', icon: 'maduro_p1', cd: [10, 9, 8], mana: [60, 65, 70], windup: 0.3, dur: 0.6,
+          desc: 'Lanza un discurso por un megáfono gigante en línea recta. Los enemigos golpeados reciben daño mágico y quedan SILENCIADOS 1.5 s (no hay réplica). Si golpea a más de un campeón, el segundo queda además RALENTIZADO un 40 %.',
+          dmg: [60, 100, 140], apScale: 0.6, length: 640, width: 84, silence: 1.5, slowPct: 0.4, slowTime: 2 },
+    p2: { name: 'Colectivo protector', icon: 'maduro_p2', cd: [16, 15, 14], mana: [50, 55, 60], windup: 0.1, dur: 0.5,
+          desc: 'Invoca un escudo de escoltas a su alrededor: recibe un 20 % menos de daño durante 3 s. Al activarse causa daño físico a los enemigos cuerpo a cuerpo cercanos y los empuja hacia atrás.',
+          dr: [0.2, 0.22, 0.25], time: [3, 3.5, 4], radius: 170, dmg: [40, 70, 100], atkScale: 0.5, push: 120 },
+    p3: { name: 'La cesta básica', icon: 'maduro_p3', cd: [14, 13, 12], mana: [60, 65, 70], windup: 0.25, dur: 0.6,
+          desc: 'Lanza una caja de recursos vacía a una zona. Los enemigos dentro sufren DESABASTECIMIENTO 4 s: -30 % de velocidad de ataque y de curación. Los aliados dentro ganan una gran velocidad de movimiento 3 s, pero pagan con un 5 % de su vida máxima (lealtad).',
+          range: 520, radius: 130, time: [4, 4.5, 5], aspd: 0.3, heal: 0.3, ally: [0.35, 0.4, 0.45], allyTime: 3, drain: 0.05 },
+    ult: { name: '¡Aparición de Súper Bigote!', icon: 'maduro_ult', cd: [100, 90, 80], mana: [100, 100, 100], windup: 0.5, dur: 0.9,
+           desc: 'Se transforma en el superhéroe Súper Bigote durante 15 s. Una onda de choque global RALENTIZA a todos los enemigos del mapa un 20 % durante 2 s. Mientras dura gana un 30 % de velocidad, armadura extra y su Q, F y E se vuelven ofensivas: Puño de hierro, Escudo antimperialista y Mano de hierro. Sus ataques básicos pasan a ser puñetazos.',
+           time: 15, slow: 0.2, slowTime: 2, speed: 0.3, armor: [30, 45, 60], mr: [15, 25, 35] },
+  },
+  sb: {
+    basic: { kind: 'melee', base: 22, atkScale: 1.0, type: 'physical', reach: 100, windup: 0.2, dur: 0.42, vfx: 'punch' },
+    abilities: {
+      p1: { name: 'Puño de hierro', icon: 'maduro_p1_sb', cd: [8, 7, 6], mana: [60, 65, 70], windup: 0.1, dur: 0.5,
+            desc: 'Súper Bigote vuela una corta distancia hacia delante y asesta un puñetazo devastador en el suelo. El primer campeón enemigo golpeado recibe daño físico masivo y queda ATURDIDO 1.5 s; los enemigos alrededor del impacto reciben daño colateral.',
+            dmg: [90, 140, 190], atkScale: 1.1, dist: 260, stun: 1.5, splash: 0.5, radius: 130 },
+      p2: { name: 'Escudo antimperialista', icon: 'maduro_p2_sb', cd: [14, 13, 12], mana: [50, 55, 60], windup: 0.1, dur: 0.4,
+            desc: 'Crea un escudo de energía electromagnética que bloquea el primer ataque, proyectil o control de masas que lo golpee. Al bloquear, el escudo estalla y causa daño mágico a los enemigos cercanos según lo bloqueado.',
+            time: [4, 4.5, 5], radius: 190, burst: 0.8, base: 60 },
+      p3: { name: 'Mano de hierro', icon: 'maduro_p3_sb', cd: [12, 11, 10], mana: [60, 65, 70], windup: 0.2, dur: 0.5,
+            desc: 'Estira su mano biónica hacia delante. Si atrapa a un enemigo lo ARRASTRA hacia él y le reduce la armadura un 25 % durante 3 s.',
+            dmg: [60, 90, 120], atkScale: 0.7, range: 480, width: 64, shred: 0.25, shredTime: 3 },
+    },
+  },
+};
+export const maduroSB = def => ({ ...def, ref: 'ref_superbigote', basic: def.sb.basic, abilities: { ...def.abilities, ...def.sb.abilities } });
+
+// Diosa Canales — asesina / escaramuzadora de daño físico. Resource = "Farándula" (the mana bar: starts empty, fills by fighting, no mana costs).
+// Passive Rompiendo el Tabú; Q Pose de portada (dash, recast = backflip + kisses), W Tumbando la Zona (charm those who look at her), E Tacón de aguja (back-hit execute), R Show principal.
+CHAMPIONS.diosa = {
+  name: 'Diosa Canales', cls: 'hacker', ref: 'ref_diosa', height: 120, farandula: true,
+  passive: { name: 'Rompiendo el Tabú', icon: 'diosa_passive',
+    desc: 'Cuando asesina a un campeón enemigo se vuelve INVISIBLE durante unos segundos, hasta que ataque o lance una habilidad.',
+    invis: 4 },
+  stats: { hp: 590, mana: 100, atk: 54, ap: 18, armor: 24, mr: 20, speed: 150, run: 236, range: 90, atkCd: 0.7 },
+  grow: { hp: 0.07, atk: 0.055, ap: 0.03 },
+  basic: { kind: 'melee', base: 15, atkScale: 1.0, type: 'physical', reach: 92, windup: 0.18, dur: 0.38, vfx: 'punch' },
+  abilities: {
+    p1: { name: 'Pose de portada', icon: 'diosa_p1', cd: [11, 10, 9], mana: [15, 15, 15], windup: 0.05, dur: 0.4,
+          desc: 'Avanza rápidamente en una dirección y causa daño físico a todos los enemigos que atraviesa. Si golpea a un campeón puede volver a pulsarla durante 3 s para dar una voltereta hacia atrás lanzando una ráfaga de besos que causa daño de IA (y activa los efectos de impacto).',
+          dmg: [50, 85, 120], atkScale: 0.7, dist: 300, width: 56, recast: 3, recastCd: 0.4, kissDmg: [45, 75, 105], kissAp: 0.5, back: 200, kissRange: 420 },
+    p2: { name: 'Tumbando la zona', icon: 'diosa_p2', cd: [18, 17, 16], mana: [35, 35, 35], windup: 0.15, dur: 0.7,
+          desc: 'Ejecuta un baile provocativo a su alrededor. Los campeones enemigos que la miren quedan ENCANTADOS 1.25 s y caminan indefensos hacia ella; los que estén de espaldas solo se ralentizan un 50 %. Por cada campeón afectado gana un escudo temporal.',
+          radius: 300, charm: [1.25, 1.4, 1.55], slow: 0.5, slowTime: 2, shield: [60, 85, 110], shieldTime: 4 },
+    p3: { name: 'Tacón de aguja', icon: 'diosa_p3', cd: [9, 8, 7], mana: [20, 20, 20], windup: 0.18, dur: 0.45,
+          desc: 'Da una poderosa estocada con su tacón. De frente causa daño y ralentiza gravemente (60 %). Si golpea por la espalda, causa además daño según la vida que le falta al objetivo: una ejecución.',
+          dmg: [60, 95, 130], atkScale: 0.8, reach: 165, width: 60, slow: 0.6, slowTime: 2, backPct: [0.25, 0.3, 0.35] },
+    ult: { name: 'Show principal', icon: 'diosa_ult', cd: [100, 90, 80], mana: [50, 50, 50], windup: 0.1, dur: 1.0,
+           desc: 'Marca en el suelo un círculo de luces y se vuelve invulnerable 1 s (sigue visible) mientras se limpia de cualquier control de masas. Al caer explota en flashes de cámaras: ciega 1.5 s a los campeones enemigos del círculo y les ROBA el 50 % de su oro; llena su Farándula y durante 8 s sus habilidades se recargan el doble de rápido.',
+           radius: 450, blind: 1.5, cdrTime: 8, steal: 0.5 },
+  },
+};
+
 // small helper
 export const rk = (arr, rank) => arr[Math.min(Math.max(rank, 1), arr.length) - 1];
 
-// Yonaiker — soporte (ranged, physical). Q = buried sentry robots, W = invisible snare, E = invisible vision/healing sentinel (one at a time),
-// R = barricade with a robot turret at each end (one at a time; its cooldown starts when it is gone).
+// Yonaiker — soporte (ranged, physical). Q = toggle machine gun (aboard), F = smoke grenade (on foot) / supply crates (aboard), E = bomber ship (charge bar fills only by landing basic hits),
+// R = smoke screen (aboard).
 CHAMPIONS.yonaiker = {
   name: 'Yonaiker', cls: 'soporte', ref: 'ref_yonaiker', height: 118, charge: true,   // no mana: a charge bar fills until the ship picks him up
   stats: { hp: 540, mana: 0, atk: 46, ap: 20, armor: 20, mr: 18, speed: 138, run: 220, range: 400, atkCd: 0.85 },
   grow: { hp: 0.06, atk: 0.045, ap: 0.05 },
   basic: { kind: 'projectile', base: 12, atkScale: 0.9, type: 'physical', speed: 620, vfx: 'bullet_tracer', scale: 1.3, windup: 0.22, dur: 0.4 },
   abilities: {
-    p1: { name: 'Bombardero', icon: 'yonaiker_p1', cd: [3, 2.6, 2.2], mana: [0, 0, 0], windup: 0.2, dur: 1.0,
-          desc: 'Yonaiker no usa maná: tiene una barra de carga que se llena sola. Al llenarse se detiene y una nave pasa a recogerlo. A bordo tiene una vista aérea (50 % más lejos que la normal) con la mira en el centro de la pantalla; se mueve con WASD. Con clic (o Q) lanza un misil, con unos segundos de enfriamiento entre misil y misil, sobre la mira, que causan daño físico y quemadura (escala con tu ataque) y dejan llamas y la tierra rasgada. La barra se vacía mientras vuela; al vaciarse, la nave lo devuelve a tierra y la carga empieza de nuevo. A bordo no puede ser atacado. Mejorarla acelera la carga, alarga el vuelo y aumenta el daño.',
-          chargeTime: [40, 34, 28], time: [10, 12, 14], rate: [3, 2.6, 2.2], dmg: [55, 85, 115], atkScale: 0.7, hit: 95, burn: [10, 14, 18], burnTime: 3, fireLife: 4, fireDmg: [8, 12, 16] },
+    p1: { name: 'Ametralladora', icon: 'yonaiker_gun', cd: [1, 1, 1], mana: [0, 0, 0], windup: 0, dur: 0.15, toggle: true,
+          desc: 'Solo a bordo de la nave. Se activa y se desactiva con la tecla: mientras está encendida, la nave dispara balas sin parar sobre el área de la mira (un círculo con una mira de punta roja), sin gastar nada. Cada bala cae en un punto al azar del área y causa poco daño físico (escala con tu ataque) a los enemigos que toca. Se apaga sola al volver a tierra. Mejorarla dispara más rápido y causa más daño.',
+          rate: [0.1, 0.09, 0.08], dmg: [5, 7, 9], atkScale: 0.12, area: 80, hit: 40 },
     p2: { name: 'Granada de humo', icon: 'yonaiker_p2', cd: [12, 11, 10], mana: [0, 0, 0], windup: 0.3, dur: 0.6,
-          desc: 'Solo a pie. Lanza una granada de humo a la zona que elijas (dentro de su alcance). La nube envenena a todos los enemigos que estén dentro causando daño físico continuo (escala con tu ataque).',
-          range: 520, radius: 140, life: [5, 6, 7], dps: [16, 24, 32], atkScale: 0.3 },
-    p3: { name: 'Cajas de ayuda', icon: 'yonaiker_p3', cd: [28, 25, 22], mana: [0, 0, 0], windup: 0.3, dur: 0.6,
-          desc: 'Solo a bordo de la nave. Pide suministros por radio: caen tres cajas de ayuda sobre la zona de la mira. El aliado que las recoja (pasando por encima) obtiene una ventaja al azar: vida, maná, más ataque, más defensa, más velocidad de ataque o más velocidad de movimiento.',
-          heal: [0.2, 0.28, 0.36], buff: [0.2, 0.28, 0.36], time: [8, 10, 12] },
+          desc: 'A pie: lanza una granada de humo a la zona que elijas (dentro de su alcance). La nube envenena a todos los enemigos que estén dentro causando daño físico continuo (escala con tu ataque) y además ciega a los campeones enemigos mientras permanezcan dentro (la zona se marca con un círculo morado; al salir recuperan la vista). A bordo de la nave: pide suministros por radio y caen tres cajas de ayuda sobre la zona de la mira; el aliado que las recoja (pasando por encima) obtiene una ventaja al azar: vida, maná, más ataque, más defensa, más velocidad de ataque o más velocidad de movimiento.',
+          range: 520, radius: 140, life: [5, 6, 7], dps: [16, 24, 32], atkScale: 0.3,
+          crateCd: [28, 25, 22], heal: [0.2, 0.28, 0.36], buff: [0.2, 0.28, 0.36], time: [8, 10, 12] },
+    p3: { name: 'Bombardero', icon: 'yonaiker_p1', cd: [3, 2.6, 2.2], mana: [0, 0, 0], windup: 0.2, dur: 1.0,
+          desc: 'Yonaiker no usa maná: tiene una barra de nave que NO se llena sola; solo sube cuando dispara y acierta daño con sus ataques básicos. Al llenarse se detiene y una nave pasa a recogerlo. A bordo tiene una vista aérea (50 % más lejos que la normal) con la mira en el centro de la pantalla; se mueve con WASD. Con clic (o manteniendo E) lanza un misil, con unos segundos de enfriamiento entre misil y misil, sobre el área de la mira, que causan daño físico y quemadura (escala con tu ataque) y dejan llamas y la tierra rasgada. La barra se vacía mientras vuela (el vuelo dura mucho más que antes); al vaciarse, la nave lo devuelve a tierra y la barra empieza de cero. A bordo no puede ser atacado. Mejorarla alarga el vuelo, carga más rápido por impacto y aumenta el daño.',
+          gainBasic: [4, 4.6, 5.2], time: [28, 34, 40], rate: [3, 2.6, 2.2], dmg: [55, 85, 115], atkScale: 0.7, hit: 95, burn: [10, 14, 18], burnTime: 3, fireLife: 4, fireDmg: [8, 12, 16] },
     ult: { name: 'Cortina de humo', icon: 'yonaiker_ult', cd: [100, 90, 80], mana: [0, 0, 0], windup: 0.4, dur: 0.8,
-           desc: 'Solo a bordo de la nave. Lanza humo sobre una gran zona del mapa (donde apunta la mira): solo los campeones enemigos dentro quedan cegados (ven muy poco a su alrededor) y silenciados (no pueden usar habilidades) durante un tiempo prolongado.',
+           desc: 'Solo a bordo de la nave. Lanza una gran nube de humo donde apunta la mira, marcada con un círculo morado: todos los campeones enemigos que estén dentro quedan cegados (ven muy poco a su alrededor) y silenciados (no pueden usar habilidades) mientras permanezcan en el círculo; al salir recuperan la vista y las habilidades.',
            radius: 650, time: [6, 8, 10] },
   },
 };
 
-// Junior — peleador cuerpo a cuerpo, capitán de un navío. Basic punches: every 4th hit stuns. Q = anchor drag, W = somersault + shield, E = flamethrower (5 s, can move), R = missile barrage.
+// Junior — peleador cuerpo a cuerpo, capitán de un navío. Basic punches: every 3rd hit stuns. Q = anchor drag, W = somersault + shield, E = flamethrower (5 s, can move), R = missile barrage.
 CHAMPIONS.junior = {
   name: 'Junior', cls: 'programador', ref: 'ref_junior', height: 122,
   stats: { hp: 780, mana: 260, atk: 44, ap: 18, armor: 34, mr: 22, speed: 135, run: 215, range: 90, atkCd: 0.8 },
@@ -254,13 +322,13 @@ CHAMPIONS.junior = {
 // Targeting preview shown while aiming a power (first press/click), cast on the second click.
 //  line: projectile trajectory | circle: area/range | wall: row of objects placed at the cursor
 export function aimSpec(champ, key, rank, f) {
-  const a = CHAMPIONS[champ].abilities[key];
+  const a = (f?.def?.abilities || CHAMPIONS[champ].abilities)[key];
   switch (champ + ':' + key) {
     case 'leandro:p1':  return { type: 'zone', max: a.range, radius: a.radius, color: 0x7dff5a };
     case 'leandro:p2':  return { type: 'trapezoid', length: 760, nearW: 70, farW: 560, color: 0xb0ff60 };
     case 'leandro:p3':  return { type: 'wall', min: 80, max: 260, count: 4, spacing: 44, color: 0x9ad7ff };
     case 'leandro:ult': return { type: 'circle', radius: 160, color: 0x66ffcc };
-    case 'xeviche:p1':  return { type: 'line', range: 620, width: 70, color: 0xffd23f };
+    case 'xeviche:p1':  return { type: 'line', range: 620, width: 46, color: 0xffd23f };
     case 'xeviche:p3':  return { type: 'line', range: a.range, width: 44, color: 0xff3b60 };
     case 'julio:p1':    return { type: 'line', range: a.length, width: a.width, color: 0x8a5cff };
     case 'julio:p2':    return { type: 'line', range: rk(a.dashDist, rank), width: 56, color: 0x6a8cff };
@@ -289,7 +357,11 @@ export function aimSpec(champ, key, rank, f) {
     case 'junior:p2': return { type: 'line', range: rk(a.dist, rank), width: 60, color: 0x7ee0ff };
     case 'junior:p3': return { type: 'trapezoid', length: a.length, nearW: a.nearW, farW: a.farW, color: 0xff7a2a };
     case 'junior:ult': return { type: 'zone', max: a.range, radius: rk(a.radius, rank), color: 0xff4a3a };
-    case 'xeviche:ult': return { type: 'line', range: a.length, width: a.width, color: 0xffd23f };
+    case 'xeviche:ult': return { type: 'line', range: a.length, width: a.spread * 2 + a.beamW, color: 0xffd23f };   // the three lasers side by side
+    case 'diosa:p1': return { type: 'line', range: a.dist, width: a.width, color: 0xff4fa3 };
+    case 'diosa:p3': return { type: 'line', range: a.reach, width: a.width, color: 0xff9ad0 };
+    case 'maduro:p1': return f?.sb ? { type: 'line', range: a.dist + 60, width: 70, color: 0xff4a3a } : { type: 'line', range: a.length, width: a.width, color: 0xffd23f };
+    case 'maduro:p3': return f?.sb ? { type: 'line', range: a.range, width: a.width, color: 0xc0c8d8 } : { type: 'zone', max: a.range, radius: a.radius, color: 0xffd23f };
   }
   return { type: 'circle', radius: 80, color: 0xffffff };
 }

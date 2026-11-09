@@ -1,7 +1,7 @@
 // Sound manager. Files come from tools/build_sfx.py -> public/assets/sfx/sfx.json (name -> [files]).
 // Usage: scene.audio.play('punch', { at: fighter }) ; scene.audio.ability(fighter, 'p1') ; scene.audio.music('music_game')
 const LS = 'devbrawl_vol';
-export const vol = (() => { let v = { sfx: 0.8, music: 0.45, voice: 0.9 }; try { Object.assign(v, JSON.parse(localStorage.getItem(LS) || '{}')); } catch (e) { /* ignore */ } return v; })();
+export const vol = (() => { let v = { sfx: 0.8, music: 0.45, voice: 0.9, ui: 1 /* ui = HUD size factor 0.5-1 */ }; try { Object.assign(v, JSON.parse(localStorage.getItem(LS) || '{}')); } catch (e) { /* ignore */ } return v; })();
 export const saveVol = () => { try { localStorage.setItem(LS, JSON.stringify(vol)); } catch (e) { /* ignore */ } };
 
 // basic attacks of non-champion units (champions use their own unique sound 'atk_<champion>')

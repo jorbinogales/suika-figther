@@ -5,7 +5,7 @@ const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chro
 const sleep = t => new Promise(r => setTimeout(r, t));
 for (const ch of chars) {
   const p = await b.newPage(); const errs = []; p.on('pageerror', e => errs.push(e.message));
-  await p.goto(`http://localhost:5173/#char=${ch}&train=1&keep=1&noai=1&nofog=1`, { waitUntil: 'load' });
+  await p.goto(`http://localhost:5199/#char=${ch}&train=1&keep=1&noai=1&nofog=1`, { waitUntil: 'load' });
   await p.waitForFunction(() => window.__arena?.player && window.__arena.fighters?.length, { timeout: 90000 });
   await sleep(2000);
   const out = await p.evaluate(async () => {

@@ -1,11 +1,174 @@
 [
   {
+    "id": "0.9.36",
+    "date": "2026-11-06",
+    "version": "0.9.36",
+    "title": "Sprites y animaciones de Maduro, Súper Bigote y Diosa Canales",
+    "tag": "NUEVO",
+    "changes": [
+      {
+        "k": "champ",
+        "id": "maduro",
+        "d": "rework",
+        "t": "Sprites y animaciones en 8 direcciones, también en forma Súper Bigote"
+      },
+      {
+        "k": "champ",
+        "id": "diosa",
+        "d": "rework",
+        "t": "Sprites y animaciones en 8 direcciones"
+      }
+    ],
+    "items": [
+      "Maduro, su forma Súper Bigote y Diosa Canales ya tienen reposo, caminar, correr, los tres golpes del combo, el ataque con impulso y las animaciones de sus poderes.",
+      "El retrato del panel cambia a Súper Bigote mientras Maduro está transformado.",
+      "Algunas transiciones entre cuadros se pulirán más adelante."
+    ]
+  },
+  {
+    "id": "0.9.35",
+    "date": "2026-11-06",
+    "version": "0.9.35",
+    "title": "Retrato e iconos definitivos de Diosa Canales",
+    "tag": "NUEVO",
+    "changes": [
+      {
+        "k": "champ",
+        "id": "diosa",
+        "d": "rework",
+        "t": "Retrato de selección e iconos de habilidades definitivos"
+      }
+    ],
+    "items": [
+      "Diosa Canales estrena su arte de selección, su cara y los iconos de la pasiva y sus 4 habilidades."
+    ]
+  },
+  {
+    "id": "0.9.34",
+    "date": "2026-11-06",
+    "version": "0.9.34",
+    "title": "Diosa Canales: nueva pasiva y la Farándula ya no se pierde al subir de nivel",
+    "tag": "CAMBIO",
+    "changes": [
+      {
+        "k": "champ",
+        "id": "diosa",
+        "d": "rework",
+        "t": "Pasiva: al asesinar a un campeón se vuelve invisible hasta que ataque"
+      }
+    ],
+    "items": [
+      "Pasiva Rompiendo el Tabú: al asesinar a un campeón enemigo se vuelve invisible 4 s, o hasta que ataque o lance una habilidad. Ya no da velocidad al lanzar habilidades ni daño verdadero por las miradas.",
+      "Se mantiene el crítico garantizado con la Farándula al máximo.",
+      "Corregido: la barra de Farándula se vaciaba al subir de nivel o al comprar un objeto.",
+      "Farándula: ahora siempre empieza al 100 %, se muestra como una barra rosada sobre la campeona, cada habilidad la gasta y se recarga muy rápido mientras no ataca ni lanza habilidades (repetir la Q es gratis). Ya no se llena peleando ni da crítico.",
+      "R Show principal: dibuja un círculo en el suelo, ya no se vuelve invisible (sigue invulnerable 1 s) y roba el 50 % del oro de los campeones enemigos del círculo."
+    ]
+  },
+  {
+    "id": "0.9.33",
+    "date": "2026-11-06",
+    "version": "0.9.33",
+    "title": "Iconos definitivos de Maduro y de la ametralladora de Yonaiker",
+    "tag": "NUEVO",
+    "changes": [
+      {
+        "k": "champ",
+        "id": "maduro",
+        "d": "rework",
+        "t": "Iconos de habilidades y retratos definitivos"
+      },
+      {
+        "k": "champ",
+        "id": "yonaiker",
+        "d": "rework",
+        "t": "Nuevo icono de la ametralladora (Q)"
+      }
+    ],
+    "items": [
+      "Maduro estrena los iconos de la pasiva, Q, F, E y R, los de su forma Súper Bigote y su arte de selección.",
+      "La ametralladora de Yonaiker (Q) tiene su icono propio."
+    ]
+  },
+  {
+    "id": "0.9.32",
+    "date": "2026-11-06",
+    "version": "0.9.32",
+    "title": "Nueva campeona: Diosa Canales",
+    "tag": "NUEVO",
+    "changes": [
+      {
+        "k": "champ",
+        "id": "diosa",
+        "d": "up",
+        "t": "Nueva asesina de daño físico con barra de Farándula"
+      }
+    ],
+    "items": [
+      "Recurso: Farándula (en lugar de maná). Empieza vacía, se llena peleando (+8 % por golpe a un campeón) y sus habilidades la consumen: Q 15, W 35, E 20 y R 50 (repetir la Q es gratis). Con la barra al máximo, su siguiente ataque básico es un crítico garantizado que reduce un 20 % la armadura.",
+      "Pasiva Rompiendo el Tabú: al lanzar una habilidad gana un 15 % de velocidad; sus ataques básicos causan daño verdadero extra por cada campeón enemigo que la mira.",
+      "Q Pose de portada: dash que daña a los enemigos que atraviesa; si golpea a un campeón, pulsa Q otra vez para una voltereta hacia atrás con ráfaga de besos (daño de IA).",
+      "W Tumbando la zona: los enemigos que la miran quedan encantados 1.25 s y los que están de espaldas se ralentizan un 50 %; gana escudo por cada campeón afectado.",
+      "E Tacón de aguja: estocada que ralentiza de frente y, por la espalda, hace daño extra según la vida que falta.",
+      "R Show principal: 1 s invisible e invulnerable (limpia los controles), luego explota en flashes: ciega a los enemigos cercanos, llena la Farándula y durante 8 s sus habilidades se recargan el doble de rápido.",
+      "Arte provisional: los sprites y animaciones definitivos llegarán más adelante."
+    ]
+  },
+  {
+    "id": "0.9.31",
+    "date": "2026-11-06",
+    "version": "0.9.31",
+    "title": "Nuevo campeón: Maduro (y su forma Súper Bigote)",
+    "tag": "NUEVO",
+    "changes": [
+      {
+        "k": "champ",
+        "id": "maduro",
+        "d": "up",
+        "t": "Nuevo campeón de soporte: Devaluación, decreto, escoltas, cesta básica y Súper Bigote"
+      }
+    ],
+    "items": [
+      "Pasiva Devaluación: al dañar a un campeón enemigo le roba un 5 % del oro que gana; sus súbditos cercanos dan un 10 % menos de oro; cada 1000 de oro robado da 80 de escudo permanente.",
+      "Q Decreto presidencial: megáfono en línea que silencia 1.5 s (el segundo campeón golpeado también se ralentiza un 40 %).",
+      "F Colectivo protector: 20 % menos de daño durante 3 s y empuja a los rivales cuerpo a cuerpo.",
+      "E La cesta básica: desabastecimiento a los enemigos (menos velocidad de ataque y curación) y velocidad a los aliados a cambio de algo de vida.",
+      "R ¡Aparición de Súper Bigote!: 15 s de forma potenciada con onda de choque que ralentiza a todo el mapa; Q Puño de hierro, F Escudo antimperialista y E Mano de hierro; sus ataques pasan a ser puñetazos.",
+      "Arte provisional: los sprites y animaciones definitivos llegarán más adelante."
+    ]
+  },
+  {
+    "id": "0.9.30",
+    "date": "2026-11-06",
+    "version": "0.9.30",
+    "title": "Yonaiker a bordo de la nave en partidas online",
+    "tag": "CORRECCIÓN",
+    "changes": [
+      {
+        "k": "champ",
+        "id": "yonaiker",
+        "d": "up",
+        "t": "A bordo de la nave en multijugador: F, Q y R funcionan y se ven las miras"
+      }
+    ],
+    "items": [
+      "En partidas online, al subir a la nave Yonaiker ahora tiene vista aérea, su mira (WASD) y puede usar F (cajas), Q (ametralladora) y R (cortina de humo).",
+      "Se ve la mira de la ametralladora (Q), la de los misiles (E) y, cuando R está lista, un círculo morado discontinuo con la zona que cubrirá la cortina de humo (también en una partida sin conexión)."
+    ]
+  },
+  {
     "id": "0.9.29",
     "date": "2026-11-05",
     "version": "0.9.29",
     "title": "Animaciones de combo y de movimiento para todos los campeones",
     "tag": "NUEVO",
     "changes": [
+      {
+        "k": "item",
+        "id": "punio_acero",
+        "d": "up",
+        "t": "Golpe demoledor: ahora se activa cada 3er ataque básico (antes cada 4º)"
+      },
       {
         "k": "champ",
         "id": "jorbi",
@@ -44,6 +207,19 @@
       }
     ],
     "items": [
+      "Junior: si muere con el lanzallamas activo, el chorro de fuego desaparece al instante (antes podía quedarse en pantalla).",
+      "Yonaiker rediseñado: la Q es ahora la Ametralladora de la nave (se enciende y apaga; dispara balas sin parar sobre el área de la mira, que se muestra como un círculo con mira de punta roja). El Bombardero pasa a la E y lanza misiles sobre su área; la forma del área cambia según el proyectil.",
+      "Yonaiker: la barra de la nave ya no se llena sola, solo sube cuando dispara y acierta daño con sus ataques básicos. El vuelo dura mucho más (28 / 34 / 40 s).",
+      "Yonaiker: a bordo de la nave, Q enciende la ametralladora, clic o E lanzan misiles, F pide cajas de ayuda y R es la cortina de humo.",
+      "Yonaiker: la granada de humo (F) además de envenenar ciega a los campeones enemigos que estén dentro; la cortina de humo (R) ciega y silencia a los que estén dentro de su círculo. Humos con nuevo diseño: nubes con capas, borde pulsante y burbujas tóxicas.",
+      "Ceguera (gusano de Axel, granada y cortina de Yonaiker): el área se marca con un círculo morado, el campeón cegado ve un ojo tachado sobre su cabeza y un icono de ojo cegado en sus estados, y recupera la vista al salir del círculo.",
+      "Xeviche: la R (Karis Harem) mejora: cada empleada dispara su propio láser, ahora son 3 rayos paralelos (láser recto en lugar de onda) y cada uno hace daño por separado.",
+      "Xeviche: la Q (Lluvia de lego) tiene piezas más pequeñas y una zona de impacto y previsualización más estrechas.",
+      "Online: el icono de puñetazo de Junior ahora se ve sobre el enemigo marcado para todos los jugadores.",
+      "Xeviche (online incluido): el campeón hechizado muestra un corazón sobre la cabeza, un camino rosado con flechas hacia Xeviche y un filtro rosado.",
+      "Xeviche: el rival hechizado ahora muestra un icono de corazón bajo sus barras, igual que veneno, quemadura o herida.",
+      "Menú de pausa: nuevo control «Tamaño interfaz» para reducir el HUD (50 % – 100 %); se guarda entre partidas.",
+      "Resumen de muerte: el daño por veneno y por quemadura ahora se muestra por separado, cada uno con su icono.",
       "Jorbi, Julio, Leandro, Luis, Axel y Eliud ya tienen reposo, caminar, correr, los tres golpes del combo y el ataque con impulso en 8 direcciones.",
       "Con esto los 10 campeones tienen el set completo."
     ]

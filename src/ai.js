@@ -21,9 +21,17 @@ const RULES = {
   'luis:p1': (f, c) => c.enemiesNear(800) >= 1 && !f.w.fighters.some(d => d.antivirus && d.owner === f && d.alive),
   'luis:p2': (f, c) => c.champNear(650) >= 1 && !f.invis && c.hpR > 0.4,
   'luis:p3': (f, c) => c.champNear(300) >= 1,
-  'yonaiker:p1': () => false,   // the ship comes by itself when the charge bar is full
+  'diosa:p1': (f, c) => f.qRe ? c.target && c.d < 360 : c.target && c.d > 120 && c.d < 300,
+  'diosa:p2': (f, c) => c.champNear(280) >= 1,
+  'diosa:p3': (f, c) => c.target && c.d < 170,
+  'diosa:ult': (f, c) => (c.hpR < 0.4 && c.enemiesNear(500) >= 1) || c.champNear(450) >= 2,
+  'maduro:p1': (f, c) => c.target && c.d < (f.sb ? 320 : 560) && c.d > 60,
+  'maduro:p2': (f, c) => c.enemiesNear(240) >= 1 && (f.sb || c.hpR < 0.85),
+  'maduro:p3': (f, c) => c.target && c.d < (f.sb ? 440 : 480) && c.d > 120,
+  'maduro:ult': (f, c) => !f.sb && (c.champNear(800) >= 2 || (c.hpR < 0.5 && c.champNear(600) >= 1)),
+  'yonaiker:p1': () => false,   // aboard only: bots switch it on in updateBomber
   'yonaiker:p2': (f, c) => c.target && c.d < 480 && c.d > 120,
-  'yonaiker:p3': (f, c) => c.champNear(900) >= 1,
+  'yonaiker:p3': () => false,   // the ship comes by itself when the bar is full (it fills by landing hits)
   'yonaiker:ult': (f, c) => c.champNear(900) >= 2 || (c.hpR < 0.4 && c.champNear(600) >= 1),
   'junior:p1': (f, c) => c.target && c.d > 120 && c.d < 420,
   'junior:p2': (f, c) => c.hpR < 0.5 && c.enemiesNear(250) >= 1,

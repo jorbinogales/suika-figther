@@ -125,7 +125,7 @@ export class Hud extends Phaser.Scene {
     Object.values(this.panels).forEach(p => p.setVisible(false));
     const W = this.scale.width, H = this.scale.height, g = this.g, o = this.top, p = A.pc;
     g.clear(); o.clear(); this.tipG.clear(); this.redG.clear(); this.iconRects = []; this.upRects = []; this.boxes = [];
-    const u = Phaser.Math.Clamp(Math.min(H / 900, W / 1480), 0.42, 1.5), m = 14 * u;
+    const u = Phaser.Math.Clamp(Math.min(H / 900, W / 1480), 0.42, 1.5) * Phaser.Math.Clamp(vol.ui, 0.5, 1), m = 14 * u;
 
     // ---- worm: darkness, only a small circle around the champion stays visible ----
     if (p.alive && p.blindT > 0) {   // darkened map with an irregular, blurred vision area (not a perfect circle, not pitch black)
@@ -148,7 +148,7 @@ export class Hud extends Phaser.Scene {
     }
     this.blindWas = p.alive && p.blindT > 0; if (!this.blindWas) this.blindImg?.setVisible(false);
     if (p.alive && p.silenceT > 0) this.T('silT', `SILENCIADO ${p.silenceT.toFixed(1)}s`, W / 2, 64 * u, { size: 16 * u, bold: true, color: '#c77dff', origin: [0.5, 0], stroke: 4 });
-    const bm = p.bomber; if (bm && bm.phase === 'fly') this.T('bomber', `BOMBARDERO · ${Math.max(0, Math.ceil(bm.T - bm.t))}s · WASD: mover la vista · clic o Q: misiles · E: cajas · R: humo`, W / 2, 56 * u, { size: 18 * u, bold: true, color: '#66ff88', origin: [0.5, 0], stroke: 4 }); else this.texts?.bomber?.setVisible(false);
+    const bm = p.bomber; if (bm && bm.phase === 'fly') this.T('bomber', `BOMBARDERO · ${Math.max(0, Math.ceil(bm.T - bm.t))}s · WASD: mover la vista · Q: ametralladora · clic o E: misiles · F: cajas · R: humo`, W / 2, 56 * u, { size: 18 * u, bold: true, color: '#66ff88', origin: [0.5, 0], stroke: 4 }); else this.texts?.bomber?.setVisible(false);
     const ctT = p.charmT > 0 ? p.charmT : (A.control?.mode === 'remote' && A.control.target === p ? A.control.t : 0);
     if (p.alive && ctT > 0) this.T('charmT', `CONTROLADO ${ctT.toFixed(1)}s`, W / 2, 90 * u, { size: 18 * u, bold: true, color: '#ffd23f', origin: [0.5, 0], stroke: 4 });
 
@@ -240,8 +240,8 @@ export class Hud extends Phaser.Scene {
     this.fillBar(g, hp, p.hp / tot, 0x2fd06f);
     if (shd > 0) { const sx0 = hp.x + hp.w * p.hp / tot, sw = hp.w * shd / tot; g.fillStyle(0xffffff).fillRect(sx0, hp.y, sw, hp.h).fillStyle(0xbfc8d8).fillRect(sx0, hp.y + hp.h * 0.65, sw, hp.h * 0.35); }   // white shield bar in front of the health
     this.T('hpTxt', `${Math.ceil(p.hp)} / ${Math.ceil(p.maxHp)}${shd > 0 ? '  +' + Math.ceil(shd) : ''}`, hp.x + hp.w / 2, hp.y + hp.h / 2, { size: hp.h * 0.62, bold: true, origin: [0.5, 0.5] });
-    if (p.def.charge) this.fillBar(g, mp, p.charge / 100, 0x4fe0c0); else if (p.isRage) this.fillBar(g, mp, p.hen ? p.henHp / p.henMax : p.rage / 100, p.hen ? 0xffd23f : 0xff7a2a); else this.fillBar(g, mp, p.maxMana ? p.mana / p.maxMana : 0, 0x3b8cff);
-    this.T('mpTxt', p.def.charge ? (p.bomber?.phase === 'fly' ? `EN VUELO ${Math.ceil(p.charge)}%` : p.bomber ? 'LA NAVE LLEGA...' : `NAVE ${Math.floor(p.charge)}%`) : p.isRage ? (p.hen ? `GALLINA ${Math.ceil(p.henHp)} / ${Math.ceil(p.henMax)}` : `IRA ${Math.floor(p.rage)} / 100`) : `${Math.floor(p.mana)} / ${Math.floor(p.maxMana)}`, mp.x + mp.w / 2, mp.y + mp.h / 2, { size: mp.h * 0.62, bold: true, origin: [0.5, 0.5], stroke: 2 });
+    if (p.def.farandula) this.fillBar(g, mp, p.mana / Math.max(1, p.maxMana), 0xff4fa3); else if (p.def.charge) this.fillBar(g, mp, p.charge / 100, 0x4fe0c0); else if (p.isRage) this.fillBar(g, mp, p.hen ? p.henHp / p.henMax : p.rage / 100, p.hen ? 0xffd23f : 0xff7a2a); else this.fillBar(g, mp, p.maxMana ? p.mana / p.maxMana : 0, 0x3b8cff);
+    this.T('mpTxt', p.def.farandula ? `FARÁNDULA ${Math.floor(p.mana / Math.max(1, p.maxMana) * 100)}%` : p.def.charge ? (p.bomber?.phase === 'fly' ? `EN VUELO ${Math.ceil(p.charge)}%` : p.bomber ? 'LA NAVE LLEGA...' : `NAVE ${Math.floor(p.charge)}%`) : p.isRage ? (p.hen ? `GALLINA ${Math.ceil(p.henHp)} / ${Math.ceil(p.henMax)}` : `IRA ${Math.floor(p.rage)} / 100`) : `${Math.floor(p.mana)} / ${Math.floor(p.maxMana)}`, mp.x + mp.w / 2, mp.y + mp.h / 2, { size: mp.h * 0.62, bold: true, origin: [0.5, 0.5], stroke: 2 });
     if (A.aimKey) this.T('aimHint', `${p.def.abilities[A.aimKey].name}: CLIC para lanzar · clic derecho / ESC cancela`, W / 2, Rc('ability0').y - 44 * u, { size: 14 * u, color: '#ffd23f', bold: true, origin: [0.5, 1] });
 
     if (hov >= 0) this.drawTip(p, hov, this.iconRects[hov], u, W);
@@ -308,7 +308,7 @@ export class Hud extends Phaser.Scene {
       if (hf > hs2) g.fillStyle(0x0b6b2e, 0.7).fillRect(ex + bw * hs2, ey, bw * (hf - hs2), hh);
       if (shd > 0) g.fillStyle(0xffffff, 1).fillRect(ex + bw * hf, ey, bw * Math.min(1 - hf, shd / tot), hh);
       for (let t = 100; t < tot - 1; t += 100) { const big = t % 1000 === 0; if (!big && bw * 100 / tot < 4.5) continue; g.fillStyle(0x000000, big ? 1 : 0.6).fillRect(ex + bw * t / tot - (big ? 1.5 : 0.5), ey, big ? 3 : 1, hh); }
-      g.fillStyle(cb ? 0x0a2a24 : rb ? 0x3a1a0a : 0x12264a, 1).fillRect(ex, ey + hh + 4, bw, mh).fillStyle(cb ? 0x4fe0c0 : rb ? (sel.hen ? 0xffd23f : 0xff7a2a) : 0x3b8cff, 1).fillRect(ex, ey + hh + 4, bw * Phaser.Math.Clamp(mf, 0, 1), mh);
+      g.fillStyle(cb ? 0x0a2a24 : rb ? 0x3a1a0a : sel.def.farandula ? 0x3a0f26 : 0x12264a, 1).fillRect(ex, ey + hh + 4, bw, mh).fillStyle(cb ? 0x4fe0c0 : rb ? (sel.hen ? 0xffd23f : 0xff7a2a) : sel.def.farandula ? 0xff4fa3 : 0x3b8cff, 1).fillRect(ex, ey + hh + 4, bw * Phaser.Math.Clamp(mf, 0, 1), mh);
       this.T('tHp', `${Math.ceil(sel.hp)} / ${Math.ceil(sel.maxHp)}${shd > 0 ? '  +' + Math.ceil(shd) : ''}`, ex + bw / 2, ey + hh / 2, { size: hh * 0.68, bold: true, origin: [0.5, 0.5], stroke: 3, color: '#ffffff', depth: 4 });
       this.T('tMp', cb ? `${Math.floor(sel.charge)}%` : rb ? `${Math.floor(sel.hen ? sel.henHp : sel.rage)}` : `${Math.floor(sel.mana)} / ${Math.floor(sel.maxMana)}`, ex + bw / 2, ey + hh + 4 + mh / 2, { size: mh * 0.7, bold: true, origin: [0.5, 0.5], stroke: 3, color: '#ffffff', depth: 4 });
       this.boxes.push({ x: ex - 2, y: ey - 2, w: bw + 4, h: hh + mh + 8 });
@@ -368,16 +368,16 @@ export class Hud extends Phaser.Scene {
         ov.fillStyle(0x3fd0ff, 0.9).fillRoundedRect(W / 2 - 34 * u, H / 2 - 121 * u, 68 * u, 3 * u, 2 * u);
         btn('resume', 'CONTINUAR', px0, H / 2 - 100 * u, pw, bh, () => A.togglePause());
         // volume bars (click or drag): the filled part is the current level
-        [['music', 'MÚSICA', 0x3fd0ff], ['sfx', 'EFECTOS', 0x7dff9a], ['voice', 'VOZ ANUNCIADOR', 0xffd23f]].forEach(([k, label, col], n) => {
-          const y = H / 2 + 80 * u + n * 34 * u, lw = 150 * u, bx = px0 + lw, bw = pw - lw - 56 * u, bhh = 16 * u;
+        [['music', 'MÚSICA', 0x3fd0ff], ['sfx', 'EFECTOS', 0x7dff9a], ['voice', 'VOZ ANUNCIADOR', 0xffd23f], ['ui', 'TAMAÑO INTERFAZ', 0xff9a4a]].forEach(([k, label, col], n) => {
+          const y = H / 2 + 80 * u + n * 34 * u, lw = 150 * u, bx = px0 + lw, bw = pw - lw - 56 * u, bhh = 16 * u, val = k === 'ui' ? (vol.ui - 0.5) * 2 : vol[k];
           this.T('vl' + k, label, px0, y + bhh / 2, { size: 12 * u, bold: true, color: '#cfe3ff', origin: [0, 0.5], stroke: 3, depth: 22 });
           const trad = bhh / 2;
           ov.lineStyle(2, col, 0.28).strokeRoundedRect(bx - 2 * u, y - 2 * u, bw + 4 * u, bhh + 4 * u, trad + 2 * u);
           ov.fillStyle(0x08182e, 1).fillRoundedRect(bx, y, bw, bhh, trad);
-          if (vol[k] > 0) { ov.fillStyle(col, 0.95).fillRoundedRect(bx, y, Math.max(bhh, bw * vol[k]), bhh, trad); ov.fillStyle(0xffffff, 0.28).fillRoundedRect(bx + 2 * u, y + 2 * u, Math.max(0, bw * vol[k] - 4 * u), bhh * 0.32, 2 * u); }
+          if (val > 0) { ov.fillStyle(col, 0.95).fillRoundedRect(bx, y, Math.max(bhh, bw * val), bhh, trad); ov.fillStyle(0xffffff, 0.28).fillRoundedRect(bx + 2 * u, y + 2 * u, Math.max(0, bw * val - 4 * u), bhh * 0.32, 2 * u); }
           ov.lineStyle(1, 0x3fd0ff, 0.45).strokeRoundedRect(bx, y, bw, bhh, trad);
-          ov.fillStyle(0xeaf7ff, 1).fillRoundedRect(bx + bw * vol[k] - 3 * u, y - 3 * u, 6 * u, bhh + 6 * u, 3 * u).lineStyle(1, col, 0.9).strokeRoundedRect(bx + bw * vol[k] - 3 * u, y - 3 * u, 6 * u, bhh + 6 * u, 3 * u);
-          this.T('vp' + k, `${Math.round(vol[k] * 100)}%`, bx + bw + 8 * u, y + bhh / 2, { size: 12 * u, bold: true, color: '#fff', origin: [0, 0.5], stroke: 3, depth: 22 });
+          ov.fillStyle(0xeaf7ff, 1).fillRoundedRect(bx + bw * val - 3 * u, y - 3 * u, 6 * u, bhh + 6 * u, 3 * u).lineStyle(1, col, 0.9).strokeRoundedRect(bx + bw * val - 3 * u, y - 3 * u, 6 * u, bhh + 6 * u, 3 * u);
+          this.T('vp' + k, `${Math.round((k === 'ui' ? vol.ui : vol[k]) * 100)}%`, bx + bw + 8 * u, y + bhh / 2, { size: 12 * u, bold: true, color: '#fff', origin: [0, 0.5], stroke: 3, depth: 22 });
           this.volBars.push({ x: bx - 4 * u, y: y - 8 * u, w: bw + 8 * u, h: bhh + 16 * u, bx, bw, key: k });
         });
         if (!A.training && !A.net) btn('surr', 'RENDIRSE', px0, H / 2 - 40 * u, pw, bh, () => A.surrender(), 0x5c1d1d);
@@ -664,7 +664,8 @@ export class Hud extends Phaser.Scene {
   }
 
   setVol(bar, x) {
-    const A = this.scene.get('arena'); vol[bar.key] = Math.round(Phaser.Math.Clamp((x - bar.bx) / bar.bw, 0, 1) * 100) / 100; saveVol(); A.audio.refresh();
+    const A = this.scene.get('arena'), f = Phaser.Math.Clamp((x - bar.bx) / bar.bw, 0, 1);
+    vol[bar.key] = Math.round((bar.key === 'ui' ? 0.5 + f * 0.5 : f) * 100) / 100; saveVol(); A.audio.refresh();
   }
 
   leave() {

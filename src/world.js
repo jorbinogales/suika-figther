@@ -70,6 +70,9 @@ export class Boot extends Phaser.Scene {
     this.load.image('ref_eliud', 'assets/ref_eliud.png');
     this.load.image('ref_hector', 'assets/ref_hector.png');
     this.load.image('ref_yonaiker', 'assets/ref_yonaiker.png');
+    this.load.image('ref_maduro', 'assets/ref_maduro.png');
+    this.load.image('ref_diosa', 'assets/ref_diosa.png');
+    this.load.image('ref_superbigote', 'assets/ref_superbigote.png');
     this.load.image('ref_junior', 'assets/ref_junior.png');
     this.load.spritesheet('fist_progress', 'assets/objects/fist_progress_sheet.png', { frameWidth: 128, frameHeight: 128 });
     this.load.image('shadow', 'assets/map/shadow.png');
@@ -316,6 +319,25 @@ export class Arena extends Phaser.Scene {
       g.fillStyle(0xff8a8a).fillCircle(12, 16, 3.5).fillCircle(31, 18, 3.5);
       g.lineStyle(3, 0x1a0808).lineBetween(25, 8, 21, 18).lineBetween(21, 18, 27, 24).lineBetween(27, 24, 22, 32).lineBetween(22, 32, 26, 45);
     });
+    const eye = (g, cx, cy, k) => {   // a crossed-out eye (blindness): white almond, violet iris, red slash
+      g.fillStyle(0xf4f0ff).fillEllipse(cx, cy, 34 * k, 19 * k).fillStyle(0x7a3cff).fillCircle(cx, cy, 7.5 * k).fillStyle(0x120620).fillCircle(cx, cy, 3.6 * k).fillStyle(0xffffff).fillCircle(cx - 2.5 * k, cy - 2.5 * k, 1.6 * k);
+      g.lineStyle(7 * k, 0x120620).lineBetween(cx - 15 * k, cy + 14 * k, cx + 15 * k, cy - 14 * k).lineStyle(3.5 * k, 0xff3b5c).lineBetween(cx - 15 * k, cy + 14 * k, cx + 15 * k, cy - 14 * k);
+    };
+    mk('icon_blind', 48, 48, g => { g.fillStyle(0x14081f).fillRect(0, 0, 48, 48).lineStyle(2, 0xb070ff).strokeRect(1, 1, 46, 46); eye(g, 24, 24, 1.15); });   // status icon: blinded eye
+    mk('blind_eye', 44, 36, g => eye(g, 22, 18, 1));   // floats over a blinded champion
+    mk('icon_yonaiker_gun', 48, 48, g => {   // Yonaiker's machine gun (Q, aboard): a crosshair with a red-tipped pointer on a dark tile
+      g.fillStyle(0x0c1220).fillRect(0, 0, 48, 48).lineStyle(2, 0xff4a3a).strokeRect(1, 1, 46, 46);
+      g.lineStyle(3, 0xe8eefc).strokeCircle(24, 26, 13).lineStyle(2, 0xe8eefc).lineBetween(24, 15, 24, 37).lineBetween(13, 26, 35, 26);
+      g.fillStyle(0xff2a1a).fillTriangle(24, 3, 17, 15, 31, 15).fillStyle(0xffb0a0).fillTriangle(24, 6, 21, 12, 27, 12);
+      g.fillStyle(0xffd23f).fillRect(9, 40, 3, 5).fillRect(22, 41, 3, 5).fillRect(35, 40, 3, 5);
+    });
+    mk('bullet_td', 4, 9, g => { g.fillStyle(0xffd23f, 0.35).fillRect(1, 4, 2, 5); g.fillStyle(0xfff1a8).fillRect(1, 1, 2, 5); g.fillStyle(0xffffff).fillRect(1, 0, 2, 2); });   // top-down 8x8-style pixel bullet with a yellow trail
+    mk('icon_charm', 48, 48, g => {   // charm (Xeviche's heart lure): a pink heart on a dark magenta tile
+      g.fillStyle(0x240812).fillRect(0, 0, 48, 48).lineStyle(2, 0xff5a9a).strokeRect(1, 1, 46, 46);
+      g.fillStyle(0xb81c52).fillCircle(16, 19, 10).fillCircle(32, 19, 10).fillTriangle(6, 23, 42, 23, 24, 43);
+      g.fillStyle(0xff4d8d).fillCircle(16, 19, 8).fillCircle(32, 19, 8).fillTriangle(8, 23, 40, 23, 24, 40);
+      g.fillStyle(0xffb3cf).fillCircle(12, 16, 3.5).fillCircle(29, 16, 3);
+    });
     mk('icon_slow', 48, 48, g => {   // slow: an ice crystal / snowflake on a dark blue tile
       g.fillStyle(0x08162a).fillRect(0, 0, 48, 48).lineStyle(2, 0x7ee0ff).strokeRect(1, 1, 46, 46);
       g.lineStyle(5, 0x2f8fd8); for (let i = 0; i < 3; i++) { const a = i * Math.PI / 3; g.lineBetween(24 - Math.cos(a) * 18, 24 - Math.sin(a) * 18, 24 + Math.cos(a) * 18, 24 + Math.sin(a) * 18); }
@@ -500,7 +522,7 @@ export class Arena extends Phaser.Scene {
     const ptr = this.input.activePointer, overUi = (this.uiRects || []).some(r => ptr.x >= r.x && ptr.x <= r.x + r.w && ptr.y >= r.y && ptr.y <= r.y + r.h);
     const left = ptr.leftButtonDown(), leftClick = left && !this.prevLeft, right = ptr.rightButtonDown(), rightClick = right && !this.prevRight;
     this.prevLeft = left; this.prevRight = right;
-    if (p.bomber) { p.in = { mx: 0, my: 0, run: false }; ['p3', 'ult'].forEach(a => J(k[a]) && this.beginAim(a)); return; }   // aboard: clicks / Q fire in updateBomber; E and R are cast here
+    if (p.bomber) { p.in = { mx: 0, my: 0, run: false }; ['p1', 'p2', 'ult'].forEach(a => J(k[a]) && this.beginAim(a)); return; }   // aboard: clicks / E fire missiles in updateBomber; Q (machine gun), F (crates) and R are cast here
     if (leftClick && !overUi && !this.aimKey) {   // click on a champion selects it (info panel, top-right)
       const m = this.cursorWorld(ptr);
       const hit = this.fighters.find(f => f.isChamp && !f.hiddenFor(this.player) && Math.abs(m.x - f.x) < 48 && m.y > f.y - f.def.height - 10 && m.y < f.y + 15);
@@ -537,9 +559,8 @@ export class Arena extends Phaser.Scene {
     const p = this.pc, rank = p.ranks[a], d = p.def.abilities[a];
     if (d.passive) { this.float(p.x, p.y - p.def.height - 30, 'Habilidad pasiva', '#ffe066'); return; }
     if (p.silenceT > 0) { this.float(p.x, p.y - p.def.height - 30, 'SILENCIADO', '#c77dff'); this.audio.play('glitch', { gap: 250 }); return; }
-    if (p.key === 'yonaiker' && p.abilityLocked(a)) { this.float(p.x, p.y - p.def.height - 30, a === 'p2' ? 'No disponible a bordo de la nave' : 'Solo disponible a bordo de la nave', '#9fe8ff'); return; }   // F on foot, Q / E / R aboard
-    if (p.key === 'yonaiker' && a === 'p1') { this.float(p.x, p.y - p.def.height - 30, 'Dispara con clic o manteniendo Q', '#9fe8ff'); return; }
-    if ((p.key === 'luis' && a !== 'ult') || (p.key === 'hector' && a !== 'p2') || (p.key === 'yonaiker' && a !== 'p2' && a !== 'p1')) { p.tryCast(a); return; }   // instant casts: no aiming step
+    if (p.key === 'yonaiker' && p.abilityLocked(a)) { this.float(p.x, p.y - p.def.height - 30, a === 'p3' ? 'La nave llega al llenar la barra (dispara y acierta)' : 'Solo disponible a bordo de la nave', '#9fe8ff'); return; }   // Q gun on foot, F both, E / R aboard
+    if ((p.key === 'luis' && a !== 'ult') || (p.key === 'hector' && a !== 'p2') || (p.key === 'yonaiker' && (a !== 'p2' || p.bomber)) || (p.key === 'maduro' && (a === 'p2' || a === 'ult')) || (p.key === 'diosa' && (a === 'p2' || a === 'ult' || (a === 'p1' && p.qRe)))) { p.tryCast(a); return; }   // instant casts: no aiming step
     if (p.key === 'junior' && a === 'p2') { const m = this.mouseGround(); if (!this.hoverKey) p.setAim(m.x - p.x, m.y - p.y); p.tryCast(a); return; }   // somersault is instant; the flamethrower is aimed (the triangle preview) and then locks that direction
     if (p.key === 'jorbi' && a === 'p2') {   // instant dash toward the cursor (no aim step)
       const m = this.mouseGround(); if (!this.hoverKey) p.setAim(m.x - p.x, m.y - p.y);
@@ -718,6 +739,14 @@ export class Arena extends Phaser.Scene {
   enemiesNear(team, x, y, r) { return this.fighters.filter(t => t.alive && t.team !== team && eDist(t.x, t.y, x, y) <= r); }
 
   // tires are solid: nobody walks through them, anyone caught under a new wall is pushed out
+  // Súper Bigote's shield: absorbs the first hit or crowd control and bursts, hurting the enemies around it for a part of what it blocked
+  sShieldBlock(f, blocked) {
+    const sh = f.sShield; if (!sh) return false; f.sShield = null;
+    this.vfx('shockwave', f.x, f.y - 6, { scale: sh.r / 40, below: true, tint: 0x66b0ff }); this.vfx('shield', f.x, f.cy, { scale: 3.4, tint: 0xffffff, alpha: 0.9 }); this.audio.play('ui_confirm', { at: f, vol: 0.7, gap: 100 });
+    this.float(f.x, f.y - f.def.height - 30, '¡Bloqueado!', '#9fe8ff');
+    const d = sh.base + blocked * sh.mult; this.enemiesNear(f.team, f.x, f.y, sh.r).forEach(t => this.damage(f, t, d, 'magic', true));
+    return true;
+  }
   solidAt(x, y) { return this.obstacles.some(o => Math.hypot(x - o.x, y - o.y) < o.r + BODY_R * 0.7) || this.fighters.some(n => n.isNexus && n.alive && Math.hypot(x - n.x, y - n.y) < n.br * 0.8 + BODY_R * 0.6); }
   resolveSolids(f) {
     for (const n of this.fighters) if (n.isNexus && n.alive) {
@@ -1187,10 +1216,10 @@ export class Arena extends Phaser.Scene {
   }
   /* ---------- Xeviche: Karis Harem ---------- */
   startHarem(o, a, rank, T) {   // online clients run it too, for the helpers / beam / banner: the beam damage is host-only (updateHarem)
-    const H = { o, t: T, T, ax: o.ax, ay: o.ay, L: a.length, W: a.width, dps: rk(a.dps, rank) + o.ap * a.apScale, tick: 0, age: 0, helpers: [], beam: null };
+    const H = { o, t: T, T, ax: o.ax, ay: o.ay, L: a.length, BW: a.beamW, dps: rk(a.dps, rank) + o.ap * a.apScale, tick: 0, age: 0, helpers: [], g: null };   // each helper fires her own laser (BW wide); every laser deals the full dps
     const px = -H.ay, py = H.ax;
     [-1, 0, 1].forEach((k, i) => {
-      const x = o.x + H.ax * (80 + (k === 0 ? 26 : 0)) + px * k * 74, y = o.y + H.ay * (80 + (k === 0 ? 26 : 0)) * YR + py * k * 74 * YR, key = 'helper_' + 'abc'[i];
+      const x = o.x + H.ax * (80 + (k === 0 ? 26 : 0)) + px * k * a.spread, y = o.y + H.ay * (80 + (k === 0 ? 26 : 0)) * YR + py * k * a.spread * YR, key = 'helper_' + 'abc'[i];
       const spr = this.textures.exists('st_' + key) ? this.add.sprite(x, y, 'st_' + key).setOrigin(0.5, 0.71).setScale(0.78).setFlipX(H.ax < 0).setAlpha(0) : this.add.rectangle(x, y - 40, 34, 80, [0xffb84a, 0xff8a4a, 0xffd23f][i]).setAlpha(0);
       H.helpers.push({ spr, x, y, delay: i * 0.18, shown: false });
     });
@@ -1207,18 +1236,26 @@ export class Arena extends Phaser.Scene {
         spr.setAlpha(al).setDepth(h.y);
         if (spr.setFrame && spr.texture.key.startsWith('st_helper')) { const n = spr.texture.frameTotal - 1, t = H.age - h.delay; spr.setFrame(t < 0.25 ? Math.min(1, Math.floor(t * 8)) : 2 + (Math.floor(this.time.now / 90) % Math.max(1, n - 2))); }
       });
-      if (!over && H.age > 0.35) {   // beam starts once the helpers have landed
-        const ox = o.x + H.ax * 110, oy = o.y + H.ay * 110 * YR - o.def.height * 0.5;
-        if (!H.beam) H.beam = this.textures.exists('st_beam_harem') ? this.add.sprite(ox, oy, 'st_beam_harem').setOrigin(0, 0.5).setBlendMode(Phaser.BlendModes.ADD) : this.add.rectangle(ox, oy, H.L, H.W * 0.7, 0xffe27a, 0.6).setOrigin(0, 0.5);
-        const b = H.beam.setPosition(ox, oy).setRotation(Math.atan2(H.ay * YR, H.ax)).setDepth(99000).setAlpha(0.85 + 0.15 * Math.sin(this.time.now / 50));
-        b.setDisplaySize(H.L, H.W * 0.8); if (b.setFrame) b.setFrame(Math.floor(this.time.now / 60) % (this.textures.get('st_beam_harem').frameTotal - 1));
-        if (Math.random() < 0.5 && this.inView(ox, o.y, 500)) this.vfx('spark', ox + H.ax * Math.random() * H.L, o.y + H.ay * Math.random() * H.L * YR - 30, { scale: 2, tint: 0xffe27a });
-        if (this.net?.role !== 'client' && (H.tick -= dt) <= 0) {
-          H.tick = 0.25;
-          this.enemiesOf(o).forEach(t => { const dx = t.x - o.x, dy = t.y - o.y, along = dx * H.ax + dy * H.ay, side = Math.abs(dx * -H.ay + dy * H.ax); if (along > 40 && along < H.L + 40 && side < H.W / 2 + t.br) { this.damage(o, t, H.dps * 0.25, 'magic'); t.slow(0.45, 0.4); } });
+      const g = over ? null : (H.g ||= this.add.graphics().setDepth(99000).setBlendMode(Phaser.BlendModes.ADD)); g?.clear();
+      const live = H.helpers.filter(h => !over && H.age > h.delay + 0.35);   // each laser starts once its helper has landed
+      live.forEach((h, i) => {
+        const k = Math.min(1, (H.age - h.delay - 0.35) / 0.12), pulse = 0.88 + 0.12 * Math.sin(this.time.now / 45 + i * 2), bw = H.BW * k * pulse;   // straight lasers with a quick flicker
+        const ox = h.x + H.ax * 22, oy = h.y - 46, ex = ox + H.ax * H.L, ey = oy + H.ay * YR * H.L;
+        if (this.inView((ox + ex) / 2, (oy + ey) / 2, H.L)) {
+          [[1.5, 0xff9a1a, 0.2], [1, 0xffd23f, 0.45], [0.55, 0xfff1a8, 0.8], [0.22, 0xffffff, 1]].forEach(([m, c, al]) => g.lineStyle(bw * m, c, al).lineBetween(ox, oy, ex, ey));
+          g.fillStyle(0xffd23f, 0.45).fillCircle(ox, oy, bw * 0.95).fillStyle(0xffffff, 0.95).fillCircle(ox, oy, bw * 0.4);   // muzzle flare
+          g.fillStyle(0xffd23f, 0.35).fillCircle(ex, ey, bw * 0.7);
+          if (Math.random() < 0.3) this.vfx('spark', ox + H.ax * Math.random() * H.L, oy + H.ay * YR * Math.random() * H.L + 20, { scale: 1.6, tint: 0xffe27a });
         }
+      });
+      if (!over && H.age > 0.35 && this.net?.role !== 'client' && (H.tick -= dt) <= 0) {
+        H.tick = 0.25;
+        this.enemiesOf(o).forEach(t => live.forEach(h => {   // every laser hits on its own: the line starts at its helper
+          const dx = t.x - h.x, dy = t.y - h.y, along = dx * H.ax + dy * H.ay, side = Math.abs(dx * -H.ay + dy * H.ax);
+          if (along > 0 && along < H.L && side < H.BW / 2 + t.br) { this.damage(o, t, H.dps * 0.25, 'magic'); t.slow(0.45, 0.4); }
+        }));
       }
-      if (over) { H.beam?.destroy(); H.beam = null; if (o.harem === H) o.harem = null; }
+      if (over) { H.g?.destroy(); H.g = null; if (o.harem === H) o.harem = null; }
       if (over && H.helpers.every(h => h.spr.alpha <= 0.01)) { H.helpers.forEach(h => h.spr.destroy()); return false; }
       return true;
     });
@@ -1235,12 +1272,52 @@ export class Arena extends Phaser.Scene {
     o.bomber = B; (this.bombers ||= []).push(B);
     this.float(o.x, o.y - o.def.height - 34, 'Esperando la nave...', '#9fe8ff');
   }
+  // reticle of the ship (also used by the online guest's mirror): E = missile area (green), Q on = machine gun area with a red-tipped pointer, R ready = the purple zone the smoke screen will cover
+  drawBomberReticle(g, B, o) {
+    const p = B.pt, r = 46 + 4 * Math.sin(this.time.now / 90), gunShape = o.gun && o.ranks.p1 && this.time.now - (B.lastMissile || 0) > 700;
+    const ua = o.def.abilities.ult;
+    if (o.ranks.ult && o.cds.ult <= 0 && ua) {   // R is ready: the zone it would cover (dashed purple ring + faint fill) follows the reticle
+      const R = ua.radius, n = 36, pu = 0.5 + 0.5 * Math.sin(this.time.now / 260);
+      g.fillStyle(0x9b4dff, 0.06 + 0.03 * pu).fillEllipse(p.x, p.y, R * 2, R * 2 * YR);
+      g.lineStyle(3, 0xc58bff, 0.55 + 0.25 * pu);
+      for (let i = 0; i < n; i += 2) { const a0 = i / n * 6.283, a1 = (i + 1) / n * 6.283; g.beginPath().arc(p.x, p.y, R, a0, a1).strokePath(); }
+    }
+    if (gunShape) {
+      const R = o.def.abilities.p1.area, rr = R * (1 + 0.03 * Math.sin(this.time.now / 70));
+      g.lineStyle(3, 0xff4a3a, 0.9).strokeEllipse(p.x, p.y, rr * 2, rr * 2 * YR).lineStyle(1, 0xffd2c8, 0.5).strokeEllipse(p.x, p.y, rr * 1.2, rr * 1.2 * YR);
+      g.lineStyle(2, 0xffffff, 0.85).lineBetween(p.x - R * 0.35, p.y, p.x + R * 0.35, p.y).lineBetween(p.x, p.y - R * 0.35 * YR, p.x, p.y + R * 0.35 * YR);
+      g.fillStyle(0xff2a1a, 1).fillTriangle(p.x, p.y - R * 0.6 * YR, p.x - 7, p.y - R * 0.28 * YR, p.x + 7, p.y - R * 0.28 * YR);   // red-tipped pointer
+      B.ret?.setVisible(false);
+    } else if (this.textures.exists('bomber_reticle')) { B.ret ||= this.add.image(p.x, p.y, 'bomber_reticle').setDepth(99996).setBlendMode('ADD'); B.ret.setPosition(p.x, p.y).setDisplaySize(r * 3.2, r * 3.2 * YR).setVisible(true); }
+    else { g.lineStyle(3, 0x66ff88, 0.95).strokeEllipse(p.x, p.y, r * 2, r * 2 * YR).strokeEllipse(p.x, p.y, r * 1.1, r * 1.1 * YR).lineBetween(p.x - r * 1.3, p.y, p.x + r * 1.3, p.y).lineBetween(p.x, p.y - r * 1.3 * YR, p.x, p.y + r * 1.3 * YR); }
+  }
+  // online guest: the host runs the ship; here we only mirror its phase to drive the camera, move our own reticle (WASD) and read the trigger (sent to the host with the inputs)
+  bomberMirrorPhase(B, ph) {
+    const o = B.o, mine = o === this.pc, was = B.phase; B.phase = ph;
+    if (!mine) return;
+    if (ph === 'board') this.cameras.main.fadeOut(800, 0, 0, 0);
+    else if (ph === 'fly') { B.pt = { x: o.x, y: o.y }; this.snapZoom = true; this.cameras.main.fadeIn(1100, 0, 0, 0); }
+    else if (ph === 'land') this.cameras.main.fadeOut(600, 0, 0, 0);
+    else if (was === 'land' || was === 'fly' || ph === null) { B.ret?.destroy(); B.ret = null; this.snapZoom = true; this.cameras.main.resetFX(); this.cameras.main.fadeIn(700, 0, 0, 0); }
+  }
+  updateBomberMirror(dt) {
+    const o = this.pc, B = o?.bomber; if (!B?.mirror) return;
+    const g = this.bomberG; if (!g) return;
+    if (B.phase !== 'fly') { B.ret?.setVisible(false); return; }
+    const K = this.k, dn = (a, b) => (a.isDown || b.isDown ? 1 : 0), mx = dn(K.right, K.right2) - dn(K.left, K.left2), my = dn(K.down, K.down2) - dn(K.up, K.up2), sp = 520 * dt / (Math.hypot(mx, my) || 1);
+    B.pt = { x: Phaser.Math.Clamp(B.pt.x + mx * sp, 60, WORLD_W - 60), y: Phaser.Math.Clamp(B.pt.y + my * sp, WALK_Y0, WALK_Y1) };
+    const ptr = this.input.activePointer;
+    B.fire = (K.p3.isDown || ptr.leftButtonDown()) && !(this.uiRects || []).some(r => ptr.x >= r.x && ptr.x <= r.x + r.w && ptr.y >= r.y && ptr.y <= r.y + r.h);
+    if (o.gun && o.ranks.p1) B.gunT = 0;
+    this.drawBomberReticle(g, B, o);
+  }
   endBomber(B) { if (B.phase === 'fly') { B.phase = 'land'; B.t = 0; if (B.o === this.pc) this.cameras.main.fadeOut(600, 0, 0, 0); } }
   updateBomber(dt) {
     const g = (this.bomberG ||= this.add.graphics().setDepth(99995)); g.clear();
     this.bombers = (this.bombers || []).filter(B => {
       const o = B.o, ship = B.ship; B.t += dt; B.cd -= dt;
       if (B.phase === 'arrive' || B.phase === 'board') o.charge = 100; else if (B.phase !== 'fly') o.charge = 0;
+      if (B.phase === 'land' || B.phase === 'leave') o.gun = false;
       if (!o.alive && B.phase !== 'leave') { o.away = false; o.bomber = null; B.phase = 'leave'; B.t = 0; if (o === this.pc) this.cameras.main.resetFX(); }
       if (B.phase === 'arrive') {
         const k = Math.min(1, B.t / 1.5), e = 1 - (1 - k) * (1 - k);
@@ -1262,23 +1339,29 @@ export class Arena extends Phaser.Scene {
         if (human) {
           const K = this.k, dn = (a, b) => (a.isDown || b.isDown ? 1 : 0), mx = dn(K.right, K.right2) - dn(K.left, K.left2), my = dn(K.down, K.down2) - dn(K.up, K.up2), sp = 520 * dt / (Math.hypot(mx, my) || 1);   // the reticle is the center of the view; WASD slides the view
           B.pt = { x: Phaser.Math.Clamp(B.pt.x + mx * sp, 60, WORLD_W - 60), y: Phaser.Math.Clamp(B.pt.y + my * sp, WALK_Y0, WALK_Y1) };
-          fire = (this.k.p1.isDown || this.input.activePointer.leftButtonDown()) && !(this.uiRects || []).some(r => this.input.activePointer.x >= r.x && this.input.activePointer.x <= r.x + r.w && this.input.activePointer.y >= r.y && this.input.activePointer.y <= r.y + r.h);
+          fire = (this.k.p3.isDown || this.input.activePointer.leftButtonDown()) && !(this.uiRects || []).some(r => this.input.activePointer.x >= r.x && this.input.activePointer.x <= r.x + r.w && this.input.activePointer.y >= r.y && this.input.activePointer.y <= r.y + r.h);
           B.fire = fire;   // online client: sent to the host with the inputs
         } else if (aim) { B.pt = { x: Phaser.Math.Clamp(aim[0], 60, WORLD_W - 60), y: Phaser.Math.Clamp(aim[1], WALK_Y0, WALK_Y1) }; fire = !!aim[2]; }
         else {   // bots and remote players: bomb the nearest enemy champion
           const t = this.enemiesOf(o).filter(f => f.isChamp && f.alive && !f.away).sort((p, q) => dist(p, o) - dist(q, o))[0];
-          if (t) { B.pt = { x: t.x + (Math.random() - 0.5) * 60, y: t.y + (Math.random() - 0.5) * 40 }; fire = true; if (o.ranks.p3 && o.cds.p3 <= 0) o.tryCast('p3'); if (o.ranks.ult && o.cds.ult <= 0) o.tryCast('ult'); }
+          if (t) { B.pt = { x: t.x + (Math.random() - 0.5) * 60, y: t.y + (Math.random() - 0.5) * 40 }; fire = true; if (o.ranks.p1 && !o.gun && o.cds.p1 <= 0) o.tryCast('p1'); if (o.ranks.p2 && o.cds.p2 <= 0) o.tryCast('p2'); if (o.ranks.ult && o.cds.ult <= 0) o.tryCast('ult'); }
         }
         if (fire && B.ammo > 0 && B.cd <= 0) {
-          B.cd = rk(B.a.rate, B.rank); o.cds.p1 = B.cd; B.idle = 0;   // seconds between missiles (shown on the Q icon)
+          B.cd = rk(B.a.rate, B.rank); o.cds.p3 = B.cd; B.idle = 0;   // seconds between missiles (shown on the E icon)
           (this.yMissiles ||= []).push({ x: B.pt.x + (Math.random() - 0.5) * 26, y: B.pt.y + (Math.random() - 0.5) * 16, t: 0, fall: 0.85, B });
           this.audio.play('ui_confirm', { vol: 0.4, gap: 60 });
         }
-        if (human) {   // bomber reticle
-          const p = B.pt, r = 46 + 4 * Math.sin(this.time.now / 90);
-          if (this.textures.exists('bomber_reticle')) { B.ret ||= this.add.image(p.x, p.y, 'bomber_reticle').setDepth(99996).setBlendMode('ADD'); B.ret.setPosition(p.x, p.y).setDisplaySize(r * 3.2, r * 3.2 * YR).setVisible(true); }
-          else { g.lineStyle(3, 0x66ff88, 0.95).strokeEllipse(p.x, p.y, r * 2, r * 2 * YR).strokeEllipse(p.x, p.y, r * 1.1, r * 1.1 * YR).lineBetween(p.x - r * 1.3, p.y, p.x + r * 1.3, p.y).lineBetween(p.x, p.y - r * 1.3 * YR, p.x, p.y + r * 1.3 * YR); }
+        if (o.gun && o.ranks.p1) {   // machine gun: bullets rain on random points of the reticle area
+          const ga = o.def.abilities.p1; B.gunT = (B.gunT ?? 0) - dt;
+          for (let n = 0; B.gunT <= 0 && n < 4; n++) {
+            B.gunT += rk(ga.rate, o.ranks.p1);
+            const ang = Math.random() * 6.283, d = Math.sqrt(Math.random()) * ga.area;
+            (this.yBullets ||= []).push({ x: B.pt.x + Math.cos(ang) * d, y: B.pt.y + Math.sin(ang) * d * YR, t: 0, fall: 0.16, o, ga, rank: o.ranks.p1 });
+          }
+          this.audio.play('atk_yonaiker', { vol: 0.18, gap: 90 });
         }
+        if (fire && B.cd <= 0) B.lastMissile = this.time.now;   // the area shape follows the projectile used last
+        if (human) this.drawBomberReticle(g, B, o);   // bomber reticle: missile area, or the red-tipped crosshair of the machine gun, plus the zone of the smoke screen
         o.charge = 100 * Math.max(0, 1 - B.t / B.T);   // the bar drains while aboard
         if (B.t >= B.T) this.endBomber(B);
       } else if (B.phase === 'land') {   // black screen: he is dropped back on the ground, then the scene fades in
@@ -1291,6 +1374,20 @@ export class Arena extends Phaser.Scene {
       }
       return true;
     });
+    // machine gun bullets: pixel bullets dropping on the area, a small hit where they land
+    this.yBullets = (this.yBullets || []).filter(b => {
+      b.t += dt; const k = Math.min(1, b.t / b.fall);
+      if (!b.img) { b.img = this.textures.exists('bullet_td') ? this.add.image(b.x, b.y - 420, 'bullet_td').setScale(2.2).setDepth(99899) : this.add.rectangle(b.x, b.y - 420, 4, 14, 0xffd23f).setDepth(99899); }
+      b.img.setPosition(b.x, b.y - 420 * (1 - k * k) - 14);
+      if (b.t < b.fall) return true;
+      b.img.destroy(); this.vfx('spark', b.x, b.y - 8, { scale: 1.6, tint: 0xffd23f });
+      if (this.net?.role !== 'client') {
+        this.castCtx = { f: b.o, k: 'p1' };
+        this.enemiesNear(b.o.team, b.x, b.y, b.ga.hit).forEach(t => this.damage(b.o, t, rk(b.ga.dmg, b.rank) + b.o.atk * b.ga.atkScale, 'physical'));
+        this.castCtx = null;
+      }
+      return false;
+    });
     // missiles falling on the reticle: burn, flames and torn ground
     this.yMissiles = (this.yMissiles || []).filter(m => {
       m.t += dt; const k = Math.min(1, m.t / m.fall);
@@ -1302,7 +1399,7 @@ export class Arena extends Phaser.Scene {
       this.vfx('shockwave', m.x, m.y, { scale: 2.8, below: true, tint: 0xff7a2a }); this.vfx('spark', m.x, m.y - 24, { scale: 5, tint: 0xffa040 });
       if (this.inView(m.x, m.y, 200)) this.audio.play('explosion', { at: m, vol: 0.55, gap: 70 });
       if (this.net?.role !== 'client') {
-        this.castCtx = { f: o, k: 'p1' };
+        this.castCtx = { f: o, k: 'p3' };
         this.enemiesNear(o.team, m.x, m.y, a.hit).forEach(t => { this.damage(o, t, B.dmg, 'physical'); t.burn(rk(a.burn, rank) + o.atk * 0.1, a.burnTime, o); });
         this.firePatch(o, m.x, m.y, rk(a.fireDmg, rank), a.fireLife);
         this.castCtx = null;
@@ -1311,16 +1408,53 @@ export class Arena extends Phaser.Scene {
       return false;
     });
   }
-  smokePuff(x, y, r, life, o = null, dps = 0) {   // a smoke cloud; with an owner it poisons the enemies inside
+  // purple blindness area: enemy champions inside are blinded (and optionally silenced) only while they stand in it; leaving it gives the sight back almost at once
+  blindZone(o, x, y, r, life, silence = false) {
+    (this.blindZones ||= []).push({ o, x, y, r, t: life, T: life, silence, ctx: this.castCtx, g: this.add.graphics().setDepth(y - 2), seen: new Set(), immune: new Set() });
+  }
+  updateBlindZones(dt) {
+    this.blindZones = (this.blindZones || []).filter(z => {
+      z.t -= dt; const g = z.g.clear();
+      if (z.t <= 0) { z.g.destroy(); return false; }
+      const k = Math.max(0, Math.min(1, (z.T - z.t) / 0.4, z.t / 0.6)), pu = 0.5 + 0.5 * Math.sin(this.time.now / 260);
+      if (this.inView(z.x, z.y, z.r + 60)) {
+        g.fillStyle(0x9b4dff, (0.12 + 0.05 * pu) * k).fillEllipse(z.x, z.y, z.r * 2, z.r * 2 * YR);
+        g.lineStyle(4, 0xc58bff, (0.6 + 0.3 * pu) * k).strokeEllipse(z.x, z.y, z.r * 2, z.r * 2 * YR);
+        g.lineStyle(2, 0xe3c8ff, 0.3 * k).strokeEllipse(z.x, z.y, z.r * 1.7, z.r * 1.7 * YR);
+      }
+      if (this.net?.role === 'client') return true;
+      this.champs.forEach(t => {
+        if (!t.alive || t.away || t.team === z.o.team || z.immune.has(t)) return;
+        if (eDist(t.x, t.y, z.x, z.y) > z.r) { z.seen.delete(t); return; }
+        if (!z.seen.has(t)) { if (t.key === 'xeviche' && t.arepaBlocks()) { z.immune.add(t); return; } z.seen.add(t); this.float(t.x, t.y - t.def.height - 28, z.silence ? 'CEGADO Y SILENCIADO' : 'CEGADO', '#c58bff'); }
+        t.blindT = Math.max(t.blindT, 0.35); if (z.silence) t.silenceT = Math.max(t.silenceT, 0.35);
+        this.castCtx = z.ctx; this.markSrc(t, 'blind'); this.castCtx = null;
+      });
+      return true;
+    });
+  }
+  smokePuff(x, y, r, life, o = null, dps = 0) {   // a smoke cloud; with an owner (the grenade) it poisons AND blinds the enemies inside; without one (the ship's screen) it is only the look
     const spr = this.textures.exists('st_smoke_cloud') ? this.add.sprite(x, y - 10, 'st_smoke_cloud').setDisplaySize(r * 2.2, r * 2.2 * YR * 1.1).setAlpha(0) : this.add.ellipse(x, y, r * 2, r * 2 * YR, 0x9ab08a, 0).setStrokeStyle(2, 0x7a8f6a, 0.6);
     spr.setDepth(y + 40);
-    (this.smokes ||= []).push({ x, y, r, t: life, T: life, owner: o, dps, tick: 0, spr });
+    const puffs = Array.from({ length: o ? 12 : 9 }, () => ({ a: Math.random() * 6.283, d: Math.sqrt(Math.random()) * 0.62, s: 0.3 + Math.random() * 0.25, sp: (Math.random() - 0.5) * 0.7, ph: Math.random() * 6.283, c: Math.random() * 3 | 0 }));
+    (this.smokes ||= []).push({ x, y, r, t: life, T: life, owner: o, dps, tick: 0, spr, puffs, g: this.add.graphics().setDepth(y + 41), toxic: !!o });
+  }
+  drawSmoke(m, k) {   // billowing layers drifting around the center + a pulsing rim; toxic green for the grenade, cold grey for the ship's screen
+    const g = m.g.clear(); if (k <= 0 || !this.inView(m.x, m.y, m.r + 80)) return;
+    const t = this.time.now / 1000, pal = m.toxic ? [0x5f9f3c, 0x86c45e, 0x3f7a2c] : [0x565b6b, 0x7d8496, 0x383c48], rim = m.toxic ? 0x9be37a : 0xaab3c8;
+    g.fillStyle(pal[2], 0.16 * k).fillEllipse(m.x, m.y, m.r * 2, m.r * 2 * YR);   // dark base so the area reads as one cloud
+    m.puffs.forEach(p => {
+      const a = p.a + t * p.sp, px = m.x + Math.cos(a) * p.d * m.r, py = m.y + Math.sin(a) * p.d * m.r * YR - 6 - 10 * (0.5 + 0.5 * Math.sin(t * 1.3 + p.ph)), rr = m.r * p.s * (0.92 + 0.08 * Math.sin(t * 2 + p.ph));
+      g.fillStyle(pal[p.c], 0.2 * k).fillEllipse(px, py, rr * 2, rr * 1.7).fillStyle(pal[p.c], 0.16 * k).fillEllipse(px - rr * 0.15, py - rr * 0.18, rr * 1.35, rr * 1.1);   // soft body + lighter core
+    });
+    g.lineStyle(3, rim, (0.35 + 0.15 * Math.sin(t * 3)) * k).strokeEllipse(m.x, m.y, m.r * 2, m.r * 2 * YR);
+    if (m.toxic) for (let i = 0; i < 5; i++) { const ph = (t * 0.5 + i / 5) % 1, bx = m.x + Math.cos(i * 2.4 + t * 0.4) * m.r * 0.6 * (0.4 + 0.6 * ph), by = m.y + Math.sin(i * 2.4 + t * 0.4) * m.r * 0.6 * YR - ph * 60; g.fillStyle(0xcfff9a, 0.5 * k * (1 - ph)).fillCircle(bx, by, 3 + 3 * ph); }   // toxic bubbles rising
   }
   smokeGrenade(o, x, y, a, rank) {
     if (this.net?.role === 'client') return;
     const life = rk(a.life, rank), dps = rk(a.dps, rank) + o.atk * a.atkScale, ctx = this.castCtx;
     const gr = this.textures.exists('smoke_grenade') ? this.add.image(o.x, o.cy, 'smoke_grenade').setDisplaySize(30, 30) : this.add.circle(o.x, o.cy, 7, 0x5a7a4a);
-    gr.setDepth(99000); this.tweens.add({ targets: gr, x, y: y - 20, duration: 450, ease: 'Sine.Out', onComplete: () => { gr.destroy(); this.castCtx = ctx; this.smokePuff(x, y, a.radius, life, o, dps); this.castCtx = null; this.vfx('shockwave', x, y, { scale: 3, below: true, tint: 0x9be37a }); } });
+    gr.setDepth(99000); this.tweens.add({ targets: gr, x, y: y - 20, duration: 450, ease: 'Sine.Out', onComplete: () => { gr.destroy(); this.castCtx = ctx; this.smokePuff(x, y, a.radius, life, o, dps); this.blindZone(o, x, y, a.radius, life); this.castCtx = null; this.vfx('shockwave', x, y, { scale: 3, below: true, tint: 0x9be37a }); } });
   }
   callCrates(o, a, rank) {   // from the ship: three supply crates fall around the reticle
     if (this.net?.role === 'client') return;
@@ -1333,22 +1467,21 @@ export class Arena extends Phaser.Scene {
     });
     this.float(c.x, c.y - 60, '¡Cajas de ayuda!', '#9fe8ff');
   }
-  smokeScreen(o, a, rank) {   // from the ship: a huge smoke cloud over the reticle blinds and silences the enemy champions inside
+  smokeScreen(o, a, rank) {   // from the ship: a huge smoke cloud + purple zone over the reticle blinds and silences the enemy champions while they are inside
     if (this.net?.role === 'client') return;
     const c = o.bomber?.pt || { x: o.x, y: o.y }, T = rk(a.time, rank);
-    this.champs.filter(t => t.alive && t.team !== o.team && !t.away && eDist(t.x, t.y, c.x, c.y) <= a.radius).forEach(t => {
-      if (t.key === 'xeviche' && t.arepaBlocks()) return;
-      t.silenceT = Math.max(t.silenceT, T); t.blindT = Math.max(t.blindT, T); this.markSrc(t, 'blind'); this.float(t.x, t.y - t.def.height - 28, 'CEGADO', '#9be37a');
-    });
+    this.blindZone(o, c.x, c.y, a.radius, T, true);   // purple circle: every enemy champion inside is blinded and silenced while it stays in
     for (let i = 0; i < 9; i++) { const ang = Math.random() * 6.283, d = Math.sqrt(Math.random()) * a.radius * 0.8; this.smokePuff(c.x + Math.cos(ang) * d, Phaser.Math.Clamp(c.y + Math.sin(ang) * d * YR, WALK_Y0, WALK_Y1), 200 + Math.random() * 110, 5 + Math.random() * 2); }
-    this.showBanner({ title: 'CORTINA DE HUMO', sub: `${o.def.name} cubre la zona: los enemigos quedan ciegos y silenciados`, team: o.baseTeam, face: this.faceOf(o) }, 2200);
+    this.showBanner({ title: 'CORTINA DE HUMO', sub: `${o.def.name} cubre la zona: los campeones enemigos dentro quedan ciegos y silenciados`, team: o.baseTeam, face: this.faceOf(o) }, 2200);
   }
   updateSupport(dt) {
     this.smokes = (this.smokes || []).filter(m => {
       m.t -= dt; const k = Math.min(1, (m.T - m.t) / 0.6, m.t / 1.0), spr = m.spr;
-      spr.setAlpha(0.8 * Math.max(0, k)); if (spr.setFrame && spr.texture.key === 'st_smoke_cloud') spr.setFrame(Math.floor(this.time.now / 140) % (this.textures.get('st_smoke_cloud').frameTotal - 1)); else spr.setFillStyle(0x9ab08a, 0.35 * Math.max(0, k));
-      if (m.t <= 0) { spr.destroy(); return false; }
-      if (m.owner && this.net?.role !== 'client' && (m.tick -= dt) <= 0) { m.tick = 0.5; this.enemiesNear(m.owner.team, m.x, m.y, m.r).forEach(t => t.poison(m.dps, 1.2, m.owner, 'physical', 'smoke')); }
+      this.drawSmoke(m, Math.max(0, k)); spr.setAlpha(0.45 * Math.max(0, k)); if (spr.setFrame && spr.texture.key === 'st_smoke_cloud') spr.setFrame(Math.floor(this.time.now / 140) % (this.textures.get('st_smoke_cloud').frameTotal - 1)); else spr.setFillStyle(0x9ab08a, 0.2 * Math.max(0, k));
+      if (m.t <= 0) { spr.destroy(); m.g.destroy(); return false; }
+      if (m.owner && this.net?.role !== 'client' && (m.tick -= dt) <= 0) { m.tick = 0.5; this.enemiesNear(m.owner.team, m.x, m.y, m.r).forEach(t => {
+        t.poison(m.dps, 1.2, m.owner, 'physical', 'smoke');
+      }); }
       return true;
     });
     this.crates = (this.crates || []).filter(c => {
@@ -1427,10 +1560,31 @@ export class Arena extends Phaser.Scene {
       if (this.net?.role !== 'client') { this.castCtx = m.b.ctx || null; this.enemiesNear(m.b.owner.team, m.x, m.y, m.b.a.hit).forEach(t => { this.damage(m.b.owner, t, m.b.dmg, 'physical'); t.burn(m.b.dmg * 0.12, 3, m.b.owner, 'physical', 'bombardeo'); }); this.castCtx = null; }
       return false;
     });
+    // Xeviche's heart: heart over the lured champion + dashed pink path with arrows to where it walks (also online: `lure` comes in the snapshot)
+    const lg = (this.lureG ||= this.add.graphics().setDepth(60)); lg.clear();
+    for (const f of this.fighters) {
+      const L = f.lure, on = !!L && L.src && f.alive && !f.hiddenFor(this.player) && (this.inView(f.x, f.y, 100) || this.inView(L.src.x, L.src.y, 100));
+      if (!on) { f.lureHeart?.setVisible(false); continue; }
+      const hy = f.y - f.def.height - 34 + Math.sin(this.time.now / 180) * 3;
+      if (this.textures.exists('heart')) { f.lureHeart ||= this.add.image(0, 0, 'heart').setDepth(100002); f.lureHeart.setVisible(true).setScale(0.12).setPosition(f.x, hy); }
+      else { f.lureHeart ||= this.add.text(0, 0, '♥', { fontFamily: 'monospace', fontSize: '26px', color: '#ff3b8a', stroke: '#000', strokeThickness: 4 }).setOrigin(0.5).setDepth(100002); f.lureHeart.setVisible(true).setPosition(f.x, hy); }
+      const dx = L.src.x - f.x, dy = L.src.y - f.y, d = Math.hypot(dx, dy); if (d < 40) continue;
+      const ux = dx / d, uy = dy / d, ph = (this.time.now / 40) % 28;
+      lg.lineStyle(4, 0xff5aa8, 0.8);
+      for (let s = ph; s < d - 30; s += 28) lg.lineBetween(f.x + ux * s, f.y + uy * s, f.x + ux * Math.min(s + 14, d - 30), f.y + uy * Math.min(s + 14, d - 30));
+      lg.fillStyle(0xff8cc4, 0.95).fillTriangle(L.src.x - ux * 24 - uy * 9, L.src.y - uy * 24 + ux * 9, L.src.x - ux * 24 + uy * 9, L.src.y - uy * 24 - ux * 9, L.src.x - ux * 8, L.src.y - uy * 8);   // arrow head at Xeviche
+    }
+    // blinded champions: a crossed-out eye floats over the head (also online: blindT comes in the snapshot)
+    for (const f of this.fighters) {
+      const on = f.isChamp && f.blindT > 0 && f.alive && !f.away && !f.hiddenFor(this.player) && this.inView(f.x, f.y, 100) && this.textures.exists('blind_eye');
+      if (!on) { f.blindEye?.setVisible(false); continue; }
+      f.blindEye ||= this.add.image(0, 0, 'blind_eye').setDepth(100002);
+      f.blindEye.setVisible(true).setScale(0.8).setPosition(f.x + (f.lure ? 26 : 0), f.y - f.def.height - 46 + Math.sin(this.time.now / 220) * 3).setAlpha(f.blindT < 0.6 ? 0.55 : 1);
+    }
     // fist progress icon over every marked enemy (only Junior's team sees the marks of its own fighter)
     for (const f of this.fighters) {
       const mk = f.fist, on = !!mk && f.alive && !f.hiddenFor(this.player) && this.inView(f.x, f.y, 100); if (!on) { f.fistImg?.setVisible(false); continue; }
-      const fr = Math.min(3, mk.n);   // 1..3 hits drawn; the 4th hit stuns
+      const fr = Math.min(3, mk.n);   // 1..3 hits drawn; the 3rd one stuns
       if (this.textures.exists('fist_progress')) { f.fistImg ||= this.add.image(0, 0, 'fist_progress').setDepth(100002); f.fistImg.setVisible(true).setFrame(Math.min(3, fr)).setDisplaySize(34, 34).setPosition(f.x, f.y - f.def.height - (f.isChamp ? 72 : 36)); }
       else { f.fistImg ||= this.add.text(0, 0, '', { fontFamily: 'monospace', fontSize: '14px', color: '#ff9a4a', stroke: '#000', strokeThickness: 3 }).setOrigin(0.5).setDepth(100002); f.fistImg.setVisible(true).setText('✊'.repeat(0) + '●'.repeat(fr) + '○'.repeat(3 - fr)).setPosition(f.x, f.y - f.def.height - (f.isChamp ? 70 : 34)); }
     }
@@ -1461,6 +1615,7 @@ export class Arena extends Phaser.Scene {
     const raw = killer; killer = kk;
     if (v.isChamp) v.recap = this.buildRecap(v, kk, raw);
     if (kk?.isRage && this.net?.role !== 'client' && v.team !== kk.team) kk.addRage(kk.def.hen.rageKill[v.isChamp ? 'champ' : v.isTower ? 'tower' : 'minion']);   // a kill feeds Eliud's rage
+    if (kk?.key === 'diosa' && v.isChamp && v.team !== kk.team && this.net?.role !== 'client') kk.diosaStealth();   // Diosa's passive
     this.net?.onDie(v, killer);
     {
       const k0 = killer?.owner || killer, kn = k0?.def?.name || 'el mapa', kt = k0 ? k0.baseTeam : 1 - v.baseTeam;
@@ -1503,6 +1658,7 @@ export class Arena extends Phaser.Scene {
     // minions: the champion that lands the kill gets the gold and most of the XP; allied champions near the minion only get a small share of XP (no gold).
     // Hitting a minion without killing it earns nothing. Every other kill (champions, towers...) keeps sharing the XP between the nearby team.
     const near = this.fighters.filter(c => c.isChamp && c.alive && c.team === team && dist(c, v) <= 700);
+    if (v.isMinion && this.fighters.some(m => m.key === 'maduro' && m.alive && m.team === v.team && dist(m, v) <= 700)) r.gold = Math.round(r.gold * (1 - CHAMPIONS.maduro.passive.minion));   // Maduro's passive: his nearby minions are worth 10 % less gold to the rivals
     near.forEach(c => {
       const xp = v.isMinion ? (c === kc ? r.xp : Math.round(r.xp * MINION_XP_SHARE)) : r.xp;
       if (xp <= 0) return; c.gainXp(xp);
@@ -1778,6 +1934,7 @@ export class Arena extends Phaser.Scene {
   damage(src, target, raw, type, dot = false) {
     if (this.net?.role === 'client') return 0;   // online clients only show what the host reports
     if (!target.alive) return 0;
+    if (target.invulT > 0) return 0;   // Show principal: invulnerable
     if (!dot && src && src.team !== target.team && target.key === 'xeviche' && target.arepaBlocks()) return 0;   // Arepa reina pepiada: the shield swallows this hit
     if (target.isTower && !this.basicDmg) return 0;   // towers and nexus only take basic attacks
     if (!dot) this.audio.play(target.isNexus ? 'hit_heavy' : target.isTower ? 'hit_metal' : type === 'physical' ? 'hit_flesh' : 'debuff', { at: target, vol: target.isTower ? 0.5 : 0.55, gap: 90 });
@@ -1788,6 +1945,9 @@ export class Arena extends Phaser.Scene {
     if (target.key === 'luis' && src?.isChamp) { const hz = this.zones.find(z => z.kind === 'hack' && z.owner === target); if (hz && !hz.free.has(src)) { hz.free.add(src); src.silenceT = 0; this.float(src.x, src.y - src.def.height - 30, 'LIBRE', '#ffffff'); } }
     if (src?.key === 'julio' && target.ink && !dot && !this.inInk) this.explodeInk(src, target);
     let dmg = Math.max(1, raw * 100 / (100 + resist));
+    { const so = src?.owner || src; if (so?.key === 'maduro' && target.isChamp && target.team !== so.team && !dot) { target.devalT = so.def.passive.mark; target.devalBy = so; } }   // Maduro's passive mark
+    if (target.sShield && !dot && src && src.team !== target.team && this.sShieldBlock(target, dmg)) return 0;   // Escudo antimperialista: the first hit is absorbed
+    if (target.drT > 0) dmg *= 1 - target.drPct;   // Colectivo protector
     if (target.isChamp && target.pas?.size) {
       if (type === 'physical' && target.pas.has('chaleco_antibalas')) { dmg *= 1 - 0.15 * target.pas.get('chaleco_antibalas'); if (!dot && this.time.now - (target.blkT || 0) > 600) { target.blkT = this.time.now; this.vfx('block', target.x, target.cy, { scale: 1.8, alpha: 0.8 }); } }
       if (type === 'magic' && target.mshield > 0) { const ab = Math.min(target.mshield, dmg); target.mshield -= ab; dmg -= ab; this.vfx('shield', target.x, target.cy, { scale: 2, tint: 0x66e0ff, alpha: 0.7 }); if (target.mshield <= 0.5) { target.mshield = 0; target.mshieldCd = 10; } if (dmg <= 0) return 0; }
@@ -1812,6 +1972,11 @@ export class Arena extends Phaser.Scene {
     if (!dot) target.flash();
     if (dmg < 1e6) this.float(target.x + Phaser.Math.Between(-15, 15), target.y - target.def.height - 5, `${Math.round(dmg)}`,
       type === 'magic' ? '#c77dff' : type === 'physical' ? '#ffffff' : '#9be37a');
+    { const y = src?.owner || src;   // Yonaiker: the ship bar only fills by landing basic attacks on foot
+      if (y?.key === 'yonaiker' && y.def.charge && dmg > 0 && !dot && !y.bomber && !y.away && y.ranks.p3 && target.team !== y.team) {
+        const a = y.def.abilities.p3, gain = this.basicDmg ? rk(a.gainBasic, y.ranks.p3) : 0;
+        y.charge = Math.min(100, y.charge + gain);
+      } }
     this.net?.onDmg(src, target, dmg, type, dot);
     if (target.hp <= 0) { target.hp = 0; target.die(src); }
     return dmg;
@@ -1820,9 +1985,9 @@ export class Arena extends Phaser.Scene {
   /* ---------- death recap: who hit you, with what, for how much (last 10 s) ---------- */
   logDamage(src, target, dmg, type, dot) {
     const ctx = this.castCtx, atk = ctx?.f || src?.owner || src; if (!atk) return;
-    const ab = ctx?.f && ctx.k ? ctx.f.def.abilities?.[ctx.k] : null;
-    const label = ab ? ab.name : this.inPassive ? 'Objetos y pasivas' : this.basicDmg ? 'Ataque básico' : dot ? 'Veneno / quemadura' : 'Otros efectos';
-    const ev = (target.dmgEvents ||= []); ev.push({ t: this.gameT, atk, label, icon: ab ? 'icon_' + ab.icon : null, dmg, type });
+    const ab = dot === 'burn' || dot === 'poison' ? null : ctx?.f && ctx.k ? ctx.f.def.abilities?.[ctx.k] : null;   // DoT ticks ('burn' / 'poison') are listed on their own
+    const label = ab ? ab.name : dot === 'burn' ? 'Quemadura' : dot === 'poison' ? 'Veneno' : this.inPassive ? 'Objetos y pasivas' : this.basicDmg ? 'Ataque básico' : dot ? 'Fuego / efectos continuos' : 'Otros efectos';
+    const ev = (target.dmgEvents ||= []); ev.push({ t: this.gameT, atk, label, icon: ab ? 'icon_' + ab.icon : dot === 'burn' ? 'icon_burn' : dot === 'poison' ? 'icon_poison' : null, dmg, type });
     while (ev.length && this.gameT - ev[0].t > 12) ev.shift();
   }
   buildRecap(v, kk, raw) {   // entries: the killer first, then the champions that assisted (by damage); each with its abilities and damage
@@ -1868,12 +2033,12 @@ export class Arena extends Phaser.Scene {
     }
     if (o?.isChamp && o.pas?.size && this.basicDmg && target.team !== o.team && !target.isTower) {
       if (o.pas.has('bate_servidor')) { target.slow(0.2 * o.pas.get('bate_servidor'), 1.5); this.vfx('spark', target.x, target.cy, { scale: 2, tint: 0x66aaff }); }
-      if (o.pas.has('punio_acero') && (o.punchN = (o.punchN || 0) + 1) % (o.pas.get('punio_acero') < 1 ? 6 : 4) === 0) {
+      if (o.pas.has('punio_acero') && (o.punchN = (o.punchN || 0) + 1) % (o.pas.get('punio_acero') < 1 ? 5 : 3) === 0) {
         this.inPassive = true; this.damage(o, target, dmg * 0.5 * o.pas.get('punio_acero'), 'physical', true); this.inPassive = false;
         this.vfx('shockwave', target.x, target.y - 6, { scale: 2.2, below: true, tint: 0xff9a4a }); this.vfx('punch', target.x, target.cy, { scale: 4 }); this.float(target.x, target.y - target.def.height - 30, '¡DEMOLEDOR!', '#ff9a4a');
       }
     }
-    if (o?.key === 'junior' && this.basicDmg && !target.isTower && target.team !== o.team && !dot && target.alive) {   // fist progress: 3 hits fill the drawing, the 4th hit stuns
+    if (o?.key === 'junior' && this.basicDmg && !target.isTower && target.team !== o.team && !dot && target.alive) {   // fist progress: the 3rd hit fills the drawing and stuns
       const F = o.def.fist, m = (target.fist && target.fist.owner === o) ? target.fist : (target.fist = { owner: o, n: 0, t: F.reset }); m.t = F.reset; m.n++;
       if (m.n >= F.hits) {
         target.fist = null; this.inPassive = true; this.damage(o, target, o.atk * F.dmg, 'physical', true); this.inPassive = false;
@@ -2142,7 +2307,7 @@ export class Arena extends Phaser.Scene {
     }
     this.drawCamps(dt);
     this.drawYonaiker();
-    this.drawJunior(dt); this.updateHarem(dt); this.updateBomber(dt); this.updateSupport(dt);
+    this.drawJunior(dt); this.updateHarem(dt); this.updateBomber(dt); this.updateBomberMirror(dt); this.updateSupport(dt); this.updateBlindZones(dt);
     if (!this.bot) this.drawPassiveFx();
     if (this.rwGlow) { this.rwGlow.t -= dt; this.rwGlow.hg -= dt; if (this.rwGlow.t <= 0) this.rwGlow = null; }
     this.updateFog(dt);
@@ -2286,12 +2451,12 @@ export class Arena extends Phaser.Scene {
     const me = this.player;
     for (const f of this.fighters) {
       const champ = f.isChamp;
-      if (f.hiddenFor(me) || this.blindVis(f) <= 0) { f.bt && Object.values(f.bt).forEach(t => t.setVisible(false)); f.invIc?.setVisible(false); f.poisIc?.setVisible(false); f.burnIc?.setVisible(false); f.slowIc?.setVisible(false); f.woundIc?.setVisible(false); continue; }
+      if (f.hiddenFor(me) || this.blindVis(f) <= 0) { f.bt && Object.values(f.bt).forEach(t => t.setVisible(false)); f.invIc?.setVisible(false); f.poisIc?.setVisible(false); f.burnIc?.setVisible(false); f.slowIc?.setVisible(false); f.woundIc?.setVisible(false); f.lureIc?.setVisible(false); f.blindIc?.setVisible(false); f.blindEye?.setVisible(false); continue; }
       if (champ && !f.bt) {
         const mk = () => { const t = this.add.text(0, 0, '', { fontFamily: 'monospace', fontSize: '10px', fontStyle: 'bold', color: '#fff', stroke: '#000', strokeThickness: 3, resolution: 3 }).setOrigin(0.5).setDepth(100000); t.texture.setFilter(Phaser.Textures.FilterMode.LINEAR); return t; };
         f.bt = { hp: mk(), mp: mk(), name: mk(), lvl: mk() };
       }
-      if (!f.alive) { f.bt && Object.values(f.bt).forEach(t => t.setVisible(false)); f.invIc?.setVisible(false); f.poisIc?.setVisible(false); f.burnIc?.setVisible(false); continue; }
+      if (!f.alive) { f.bt && Object.values(f.bt).forEach(t => t.setVisible(false)); f.invIc?.setVisible(false); f.poisIc?.setVisible(false); f.burnIc?.setVisible(false); f.lureIc?.setVisible(false); f.blindIc?.setVisible(false); f.blindEye?.setVisible(false); continue; }
       const hx = f.x, hy = f.y - f.def.height;
       const w = champ ? 96 : f.isNexus ? 160 : f.isTower ? 90 : 36, h = champ ? 12 : f.isNexus ? 14 : f.isTower ? 9 : 6, x = hx - w / 2, mh = 8, xh = 4;
       const y = hy - (champ ? 38 : 14);
@@ -2318,7 +2483,7 @@ export class Arena extends Phaser.Scene {
       if (champ) {
         // second bar: mana (blue) or, for champions without mana, their own resource (Eliud: rage in orange, hen durability in gold)
         const cb = !!f.def.charge, rb = f.isRage, fr = cb ? f.charge / 100 : rb ? (f.hen ? f.henHp / f.henMax : f.rage / 100) : f.maxMana ? f.mana / f.maxMana : 0;
-        g.fillStyle(cb ? 0x0a2a24 : rb ? 0x3a1a0a : 0x12264a).fillRect(x, y + h + 2, w, mh).fillStyle(cb ? 0x4fe0c0 : rb ? (f.hen ? 0xffd23f : 0xff7a2a) : 0x3b8cff).fillRect(x, y + h + 2, w * Phaser.Math.Clamp(fr, 0, 1), mh);
+        g.fillStyle(cb ? 0x0a2a24 : rb ? 0x3a1a0a : f.def.farandula ? 0x3a0f26 : 0x12264a).fillRect(x, y + h + 2, w, mh).fillStyle(cb ? 0x4fe0c0 : rb ? (f.hen ? 0xffd23f : 0xff7a2a) : f.def.farandula ? 0xff4fa3 : 0x3b8cff).fillRect(x, y + h + 2, w * Phaser.Math.Clamp(fr, 0, 1), mh);
         if (f.ride) g.fillStyle(0x000000, 0.75).fillRect(x - 2, y + h + mh + 3, w + 4, 6).fillStyle(0xffffff).fillRect(x, y + h + mh + 4, w * Phaser.Math.Clamp(f.ride.t / f.ride.T, 0, 1), 3);   // bike lifetime
         if (f.flame) g.fillStyle(0x000000, 0.75).fillRect(x - 2, y + h + mh + 3, w + 4, 6).fillStyle(0xffffff).fillRect(x, y + h + mh + 4, w * Phaser.Math.Clamp(f.flame.t / f.flame.T, 0, 1), 3);   // flamethrower time left
         { // basic attack combo: a framed counter box next to the bars (hit 1 / 2 / 3); it disappears when the click window runs out
@@ -2343,7 +2508,9 @@ export class Arena extends Phaser.Scene {
       let sx = 8 + (f.poisoned ? 17 : 0);
       if (champ && f.burning) { const bi = (f.burnIc ||= this.add.image(0, 0, 'icon_burn').setDepth(100001).setDisplaySize(14, 14)); bi.setVisible(true).setPosition(x + sx, sy); sx += 17; } else f.burnIc?.setVisible(false);
       if (champ && f.slowed) { const si = (f.slowIc ||= this.add.image(0, 0, 'icon_slow').setDepth(100001).setDisplaySize(14, 14)); si.setVisible(true).setPosition(x + sx, sy); sx += 17; } else f.slowIc?.setVisible(false);
-      if (champ && f.woundT > 0) { const wi = (f.woundIc ||= this.add.image(0, 0, 'icon_wound').setDepth(100001).setDisplaySize(14, 14)); wi.setVisible(true).setPosition(x + sx, sy); } else f.woundIc?.setVisible(false);
+      if (champ && f.woundT > 0) { const wi = (f.woundIc ||= this.add.image(0, 0, 'icon_wound').setDepth(100001).setDisplaySize(14, 14)); wi.setVisible(true).setPosition(x + sx, sy); sx += 17; } else f.woundIc?.setVisible(false);
+      if (champ && f.blindT > 0) { const bl = (f.blindIc ||= this.add.image(0, 0, 'icon_blind').setDepth(100001).setDisplaySize(14, 14)); bl.setVisible(true).setPosition(x + sx, sy); sx += 17; } else f.blindIc?.setVisible(false);
+      if (champ && f.lure) { const li = (f.lureIc ||= this.add.image(0, 0, 'icon_charm').setDepth(100001).setDisplaySize(14, 14)); li.setVisible(true).setPosition(x + sx, sy); } else f.lureIc?.setVisible(false);   // hechizado (Xeviche's heart)
       if (champ && f.poisoned) { const pi = (f.poisIc ||= this.add.image(0, 0, 'icon_poison').setDepth(100001).setDisplaySize(14, 14)); pi.setVisible(true).setPosition(x + 8, sy); } else f.poisIc?.setVisible(false);   // poisoned: icon under the mana bar
       if (champ && f.arepaUp) { const ic = (f.invIc ||= this.add.image(0, 0, 'icon_invul').setDepth(100001).setDisplaySize(22, 22)); ic.setVisible(true).setPosition(x + w + 16, y + h / 2 + 4); } else f.invIc?.setVisible(false);   // invulnerable: yellow aura icon by the bars
       if (f.stunT > 0) g.fillStyle(0xffd23f).fillRect(x, y - 6, w * Math.min(1, f.stunT / 2), 3);

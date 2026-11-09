@@ -41,6 +41,10 @@ def main():
         for d in DIRS:
             for a, b in (("attack", "attack2"), ("attack2", "attack3")):
                 if f"{a}_{d}" in anims and f"{b}_{d}" in anims: anims[f"{b}_{d}"][0] = anims[f"{a}_{d}"][-1].copy()
+    # champions drawn only in 8 directions (no plain <anim>.png): the plain animation is the east view, so the engine's defaults (idle / walk frames, hasAnims) keep working
+    for ch, anims in atlas_frames.items():
+        for base in FRAMES:
+            if base not in anims and f"{base}_e" in anims: anims[base] = anims[f"{base}_e"]; manifest.setdefault(ch, {})[base] = manifest[ch][f"{base}_e"]
     # one texture atlas per character (trimmed, de-duplicated, packed) replaces the old one-sheet-per-animation files
     for ch, anims in atlas_frames.items():
         d = OUT / ch; d.mkdir(parents=True, exist_ok=True)

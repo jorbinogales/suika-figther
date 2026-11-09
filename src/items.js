@@ -101,7 +101,7 @@ export const PASSIVES = {
   exoesqueleto:        { name: 'Adrenalina de acero', desc: 'Con menos del 50 % de vida ganas un 20 % de ataque físico.' },
   moto_electrica:      { name: 'Carga estática',      desc: 'Tras moverte 2 s seguidos, tu siguiente ataque básico causa 40 de daño de IA extra.' },
   consola_overclock:   { name: 'Overclock',           desc: 'Cada vez que usas un poder recuperas el 8 % de tu maná máximo.' },
-  punio_acero:         { name: 'Golpe demoledor',     desc: 'Cada 4º ataque básico causa un 50 % de daño extra con una onda de choque.' },
+  punio_acero:         { name: 'Golpe demoledor',     desc: 'Cada 3er ataque básico causa un 50 % de daño extra con una onda de choque.' },
   bate_servidor:       { name: 'Sobrecarga',          desc: 'Tus ataques básicos ralentizan al objetivo un 20 % durante 1.5 s.' },
   garras_vampiricas:   { name: 'Sed de sangre',       desc: 'Con menos del 40 % de vida tu robo de vida se duplica (aura roja).' },
   tarjeta_grafica:     { name: 'Sobrecalentamiento',  desc: 'Tus ataques y habilidades dejan quemaduras a tus enemigos durante varios segundos (daño de IA que escala con tu poder de IA).' },

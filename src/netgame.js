@@ -15,6 +15,7 @@ import { PERM_KEYS } from './items.js';
 const SNAP = 1 / 60, SNAP_P = 1 / 30, INP = 1 / 60, KF_MS = 1000;   // server host: 60 snapshots/s; a player's browser hosting: 30 (his upload)
 const r1 = v => Math.round(v), r2 = v => Math.round(v * 100) / 100;
 const TYPES = ['physical', 'magic', 'true'];
+const BPH = ['', 'arrive', 'board', 'fly', 'land', 'leave'];   // Yonaiker's ship phases as sent in snapshots (o.bm = [phase, total time, elapsed])
 const TOP = ['m', 'g', 'ld', 'ctl', 'cp', 'wv', 'tr', 'sn'];   // snapshot fields besides the units: sent only when they change
 const STILL = { mx: 0, my: 0, run: false }, NONE = {};
 const JUMP = 220, DEAD = 3;   // px: a step between two snapshots longer than JUMP is a teleport (no sliding); own errors below DEAD are ignored
@@ -130,6 +131,8 @@ export class NetGame {
     if (f.shieldHp > 0) o.sd = [r1(f.shieldHp), f.shieldT > 1e6 ? 1e7 : r2(f.shieldT)]; if (f.speedT > 0) o.sp = [r2(f.speedBoost), r2(f.speedT)];
     if (f.slows.length) o.sw = f.slows.map(s => [r2(s.pct), r2(s.t)]);
     if (f.poisons.length) o.pn = r2(Math.max(...f.poisons.map(p => p.t)));
+    if (f.lure?.src) o.lr = [f.lure.src.nid, r2(f.lure.t)];   // Xeviche's heart: who the target walks to
+    if (f.fist?.owner) o.fs = [f.fist.owner.nid, f.fist.n, r2(f.fist.t)];   // Junior's fist counter over the target
     if (f.invis) o.iv = f.invis.t === Infinity ? -1 : r2(f.invis.t); if (f.ink) o.ik = r2(f.ink.t); if (f.away) o.aw = 1;
     if (this.w.control?.mode === 'remote' && this.w.control.target === f) o.ch = r2(this.w.control.t);   // shows 'controlled' on that player's screen
     if (f.recall) o.rc = r2(f.recall.t); if (f.protein) o.pr = r2(f.protein.t);
@@ -139,6 +142,7 @@ export class NetGame {
       o.pm = PERM_KEYS.map(k => f.perm[k] || 0); o.ms = f.mshield > 0 ? 1 : 0; o.mt = f.moveT > 2 ? 1 : 0;
       o.inv = f.inv.map(s => (s ? [s.id, r1(s.cd), s.charges] : 0)); o.dc = f.dashCharges; o.ss = f.setupStacks; o.rg = r1(f.rage);
       if (f.potions.length) o.po = f.potions.map(p => r2(p.t));
+      if (f.def.charge) o.cg = r1(f.charge); if (f.gun) o.gn = 1; if (f.sb) o.sb = r1(f.sb.t); if (f.bomber && !f.bomber.mirror) o.bm = [Math.max(0, BPH.indexOf(f.bomber.phase)), r1(f.bomber.T), r1(f.bomber.t)];   // Yonaiker: ship bar (only grows with hits) and machine gun switch
       if (f.hen) o.hen = [r1(f.henHp), r1(f.henMax)];
       if (f.skin !== f.key) o.sk = f.skin;
       if (f.buff) o.bf = [f.buff.t === Infinity ? -1 : r1(f.buff.t), f.buff.hpMult, f.buff.atkMult, f.buff.cdSpeed];
@@ -342,6 +346,7 @@ export class NetGame {
     f.shieldHp = o.sd ? o.sd[0] : 0; f.shieldT = o.sd ? o.sd[1] : 0; f.speedBoost = o.sp ? o.sp[0] : 0; f.speedT = o.sp ? o.sp[1] : 0;
     f.slows = (o.sw || []).map(a => ({ pct: a[0], t: a[1] }));
     f.poisons = o.pn ? [{ dps: 0, t: o.pn, tick: 0, src: f }] : [];
+    { const ls = o.lr && this.fighter(o.lr[0]); f.lure = ls ? { src: ls, t: o.lr[1] } : null; const fo = o.fs && this.fighter(o.fs[0]); f.fist = fo ? { owner: fo, n: o.fs[1], t: o.fs[2] } : null; }
     const ivT = o.iv < 0 ? Infinity : o.iv; f.invis = o.iv != null ? (f.invis ? Object.assign(f.invis, { t: ivT }) : { t: ivT, trail: 0.15 }) : null;   // keep the trail timer: resetting it every snapshot meant Luis' silhouettes never appeared
     f.ink = o.ik ? { t: o.ik, src: null } : null; f.away = !!o.aw;
     f.recall = o.rc != null ? { t: o.rc } : null; f.protein = o.pr != null ? { t: o.pr, tick: 0, hps: 0 } : null;
@@ -355,7 +360,14 @@ export class NetGame {
       const sig = JSON.stringify(o.inv); if (sig !== f.invSig) { f.invSig = sig; f.inv = o.inv.map(a => (a ? { id: a[0], cd: a[1], charges: a[2] } : null)); f.recomputeItems(); }
       else f.inv.forEach((sl, i) => { if (sl) sl.cd = o.inv[i][1]; });
       f.mshield = o.ms ? 1 : 0; f.moveT = o.mt ? 3 : 0; f.hp = f.hp;
-      f.dashCharges = o.dc; f.setupStacks = o.ss; f.rage = o.rg; f.potions = (o.po || []).map(t => ({ hp: 0, mana: 0, t, T: t }));
+      f.dashCharges = o.dc; f.setupStacks = o.ss; f.rage = o.rg; if (o.cg != null) f.charge = o.cg; f.gun = !!o.gn;
+      if (f.key === 'maduro') { if (o.sb) { if (!f.sb) f.setSB(o.sb); f.sb.t = o.sb; } else if (f.sb) f.setSB(0); }   // Súper Bigote: the host owns the timer
+      if (o.bm) {   // aboard Yonaiker's ship (the host runs it): keep a local mirror so the guest gets the reticle, the aerial view and the abilities that work aboard
+        const B = f.bomber?.mirror ? f.bomber : (f.bomber = { mirror: true, o: f, a: f.def.abilities.p3, rank: f.ranks.p3, pt: { x: f.x, y: f.y }, fire: false, cd: 0 }), ph = BPH[o.bm[0]];
+        if (B.phase !== ph) w.bomberMirrorPhase(B, ph);
+        B.T = o.bm[1]; B.t = o.bm[2]; B.rank = f.ranks.p3;
+      } else if (f.bomber?.mirror) { w.bomberMirrorPhase(f.bomber, null); f.bomber = null; }
+      f.potions = (o.po || []).map(t => ({ hp: 0, mana: 0, t, T: t }));
       if (o.hen) { f.hen = true; f.henHp = o.hen[0]; f.henMax = o.hen[1]; } else f.hen = false;
       f.buff = o.bf ? { t: o.bf[0] < 0 ? Infinity : o.bf[0] + 0.5, hpMult: o.bf[1], atkMult: o.bf[2], cdSpeed: o.bf[3] } : null;
       f.pkBuffs = Object.fromEntries((o.pk || []).map(([k, t, m, T]) => [k, { t: t + 0.3, m, T }]));

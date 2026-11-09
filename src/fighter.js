@@ -1,4 +1,4 @@
-import { COMBOS, LUNGES, COMBO_WINDOW, CHAMPIONS, ABILITY_KEYS, MAX_LEVEL, MAX_RANK, ULT_LEVELS, rk } from './data.js';
+import { maduroSB, COMBOS, LUNGES, COMBO_WINDOW, CHAMPIONS, ABILITY_KEYS, MAX_LEVEL, MAX_RANK, ULT_LEVELS, rk } from './data.js';
 import { ITEM_BY_ID, MINI_OF, SLOTS, sellValue, buyPlan, PERM_KEYS, PERM_BY_ID, PERM_COST, STAT_CAP } from './items.js';
 
 // World geometry: top-down map, one horizontal lane.
@@ -55,6 +55,7 @@ export class Fighter {
     this.nid = opts.nid ?? world.nidNext++; world.byNid?.set(this.nid, this); this.pid = null;   // network id (same on every client for champions and towers)
     this.key = key;
     this.def = CHAMPIONS[key] || BOT_DEFS[key] || UNIT_DEFS[key];
+    if (key === 'maduro') { this.defN = this.def; this.defSB = maduroSB(this.def); }   // normal / Súper Bigote kits (the transformation swaps this.def)
     this.isBot = !!this.def.isBot;
     this.isMinion = this.def.kind === 'minion'; this.isNexus = this.def.kind === 'nexus'; this.isTower = this.def.kind === 'tower' || this.isNexus;
     this.isChamp = !this.isBot && !this.isMinion && !this.isTower;
@@ -199,8 +200,8 @@ export class Fighter {
   get maxMana() { return this.def.rage ? 0 : this.def.stats.mana ? this.def.stats.mana + this.it.mana : 0; }
   get atk() { return (this.grow('atk') + this.it.atk) * (this.buff?.atkMult || 1) * (1 + this.pk('atk')) * (this.pas?.has('exoesqueleto') && this.hp < this.maxHp * 0.5 ? 1 + 0.2 * this.pas.get('exoesqueleto') : 1); }
   get ap() { return this.isBot ? this.botAp : (this.grow('ap') + this.it.ap) * (1 + this.pk('atk')); }
-  get armor() { return (this.def.stats.armor + this.it.armor) * (1 + this.pk('def')) + this.pk('def') * 30 + this.setupBonus('armorPer') + (this.hen ? this.def.hen.armor : 0); }
-  get mr() { return (this.def.stats.mr + this.it.mr) * (1 + this.pk('def')) + this.pk('def') * 30 + this.setupBonus('mrPer') + (this.hen ? this.def.hen.mr : 0); }
+  get armor() { return (this.sb ? this.sb.armor : 0) + (this.armorShredT > 0 ? 1 - this.armorShred : 1) * (this.def.stats.armor + this.it.armor) * (1 + this.pk('def')) + this.pk('def') * 30 + this.setupBonus('armorPer') + (this.hen ? this.def.hen.armor : 0); }
+  get mr() { return (this.sb ? this.sb.mr : 0) + (this.def.stats.mr + this.it.mr) * (1 + this.pk('def')) + this.pk('def') * 30 + this.setupBonus('mrPer') + (this.hen ? this.def.hen.mr : 0); }
   get atkRange() { const b = this.def.basic; return this.hen ? b.hen.reach : (b?.kind === 'melee' ? b.reach : this.def.stats.range); }
   get isRage() { return !!this.def.rage; }
   setupBonus(field) {
@@ -231,13 +232,14 @@ export class Fighter {
     this.running = false;
     this.deadT = 0;
     this.in = { mx: 0, my: 0, run: false };
-    this.flame = null; this.bomber = null; this.charge = 0; this.harem = null; this.lure = null; this.arepaGrace = 0; this.setupStacks = 0; this.setupHits = 0; this.rw = null; this.mshield = 0; this.mshieldCd = 0; this.backupCd = 0; this.moveT = 0; this.punchN = 0; this.combatT = 0; this.atkSlowT = 0; this.coreT = undefined;
+    this.flame?.spr?.destroy(); this.flame = null; this.bomber = null; this.charge = 0; this.harem = null; this.lure = null; this.gun = false; this.gunT = 0; this.arepaGrace = 0; this.setupStacks = 0; this.setupHits = 0; this.rw = null; this.mshield = 0; this.mshieldCd = 0; this.backupCd = 0; this.moveT = 0; this.punchN = 0; this.combatT = 0; this.atkSlowT = 0; this.coreT = undefined;
     this.cds = { p1: 0, p2: 0, p3: 0, ult: 0, basic: 0 };
     this.ink = null; this.inkDash = null; this.silenceT = 0; this.blindT = 0; this.shieldHp = 0; this.shieldT = 0; this.speedBoost = 0; this.speedT = 0; this.charmT = 0; this.team = this.baseTeam; this.malware = null;
     this.rage = 0; this.hen = false;
     this.dashCharges = this.key === 'jorbi' && this.ranks.p2 > 0 ? 3 : 0; this.dashTimers = []; this.dashV = null; this.castPoint = null;
     if (this.buff) { this.buff = null; this.setSkin(this.key); }
     this.hen = false; this.rage = 0; this.pkBuffs = {}; this.protein = null; this.pullTo = null; this.bike = null; this.ride = null;
+    this.qRe = null; this.cdrT = 0; this.invulT = 0; this.drT = 0; this.sShield = null; this.atkSlowT = 0; this.armorShredT = 0; this.devalT = 0; this.shove = null; this.pullMe = null; if (this.sb) this.setSB(0);
     if (this.skin !== this.key) this.setSkin(this.key);
   }
 
@@ -341,7 +343,7 @@ export class Fighter {
   tryCast(k) {
     const n = this.w.net;
     if (n?.role === 'client' && !n.replaying) return n.clientCast(this, k);
-    const ok = this._tryCast(k); if (ok) { this.setupHit(); if (this.pas.has('consola_overclock') && this.maxMana) { this.mana = Math.min(this.maxMana, this.mana + this.maxMana * 0.08 * this.pas.get('consola_overclock')); this.w.vfx('buff', this.x, this.cy, { scale: 2, tint: 0x3b8cff, alpha: 0.7 }); } if (this.pas.has('procesador_cuantico')) { this.speedBoost = Math.max(this.speedT > 0 ? this.speedBoost : 0, 0.25 * this.pas.get('procesador_cuantico')); this.speedT = Math.max(this.speedT, 2); this.w.vfx('run_dust', this.x, this.y - 6, { scale: 2.2, alpha: 0.8, below: true }); } if (n?.role === 'host') n.sendCast(this, k); } return ok;
+    const ok = this._tryCast(k); if (ok) { this.fIdle = 0; this.setupHit(); if (this.pas.has('consola_overclock') && this.maxMana) { this.mana = Math.min(this.maxMana, this.mana + this.maxMana * 0.08 * this.pas.get('consola_overclock')); this.w.vfx('buff', this.x, this.cy, { scale: 2, tint: 0x3b8cff, alpha: 0.7 }); } if (this.pas.has('procesador_cuantico')) { this.speedBoost = Math.max(this.speedT > 0 ? this.speedBoost : 0, 0.25 * this.pas.get('procesador_cuantico')); this.speedT = Math.max(this.speedT, 2); this.w.vfx('run_dust', this.x, this.y - 6, { scale: 2.2, alpha: 0.8, below: true }); } if (n?.role === 'host') n.sendCast(this, k); } return ok;
   }
   // basic attack combo: up to 3 chained hits (see COMBOS in data.js). Bots/minions/towers keep the single swing.
   // a basic attack may be started in the middle of the previous swing once that hit has landed (animation cancel): every click throws the next hit
@@ -363,7 +365,7 @@ export class Fighter {
     if (!(this.free || this.chaining()) || this.cds.basic > 0 || this.flame || this.ride || this.lure || this.bomber) {   // no basic attacks while the flamethrower is active
       return false;
     }
-    this.bufferT = 0;
+    this.bufferT = 0; this.fIdle = 0;   // attacking pauses the Farándula recharge
     this.cds.basic = this.def.stats.atkCd / (1 + this.pk('aspd') + this.it.aspd) / (this.atkSlowT > 0 ? 1 - this.atkSlow : 1);
     if (this.invis) this.breakInvis();
     if (this.isBot) { this.startAction('attack', 0.2, 0.4, () => this.basicDo(() => this.botAttack())); return true; }
@@ -407,7 +409,7 @@ export class Fighter {
       this.startDash(); return true;
     }
     if (!this.free || this.cds[k] > 0) return false;
-    const cost = rk(a.mana, rank);
+    const cost = this.key === 'diosa' && k === 'p1' && this.qRe ? 0 : rk(a.mana, rank);   // Diosa: the Q recast (backflip) is free
     if (this.mana < cost && !this.w.debugFree) return false;
     if (!this.w.debugFree) this.mana -= cost;
     this.cds[k] = this.w.debugFree ? 0.5 : rk(a.cd, rank);
@@ -456,10 +458,145 @@ export class Fighter {
     }
   }
 
+  // ---- Diosa Canales ----
+  diosaStealth() {   // passive: after killing a champion she vanishes for a few seconds, until she attacks or casts
+    this.invis = { t: this.def.passive.invis, trail: 0.15 }; this.w.vfx('summon', this.x, this.y - 10, { scale: 3, tint: 0xff4fa3 }); this.w.float(this.x, this.y - this.def.height - 34, 'Fuera de escena...', '#ff9ad0');
+  }
+  lookedAtBy(t) { const dx = this.x - t.x, dy = this.y - t.y, d = Math.hypot(dx, dy) || 1; return (t.ax * dx + t.ay * dy) / d > 0.25; }   // t is facing her
+  fireDiosa(k, a, rank) {
+    const w = this.w, byDist = (p, q) => Math.hypot(p.x - this.x, p.y - this.y) - Math.hypot(q.x - this.x, q.y - this.y);
+    if (k === 'p1' && this.qRe) {   // recast: backflip + a volley of kisses (AI damage, on-hit effects)
+      this.qRe = null; this.cds.p1 = rk(a.cd, rank);
+      const dmg = rk(a.kissDmg, rank) + this.ap * a.kissAp, ang0 = Math.atan2(this.ay, this.ax);
+      this.state = 'cast'; this.anim = 'power1'; this.stateT = 0; this.stateDur = 0.4; this.fired = true; this.dashV = { x: -this.ax * a.back / 0.3, y: -this.ay * a.back / 0.3 };
+      [-0.22, 0, 0.22].forEach((o, i) => w.after(i * 0.06, () => { if (this.alive) w.projectile(this, { ang: o, range: a.kissRange, speed: 780, dmg, type: 'magic', vfx: 'magic_missile', scale: 1.8, tint: 0xff4fa3, r: 20 }); }));
+      w.float(this.x, this.y - this.def.height - 30, '¡Muac!', '#ff9ad0');
+      return;
+    }
+    if (k === 'p1') {   // dash through enemies
+      const dmg = rk(a.dmg, rank) + this.atk * a.atkScale, dur = 0.22, pts = [{ x: this.x, y: this.y }, { x: this.x + this.ax * a.dist, y: this.y + this.ay * a.dist }];
+      this.state = 'cast'; this.anim = 'power1'; this.stateT = 0; this.stateDur = dur + 0.1; this.fired = true; this.dashV = { x: this.ax * a.dist / dur, y: this.ay * a.dist / dur };
+      let champ = false;
+      w.enemiesOf(this).filter(t => w.nearPath(pts, t.x, t.y, a.width / 2 + BODY_R * 0.6)).forEach(t => { w.damage(this, t, dmg, 'physical'); w.vfx('spark', t.x, t.cy, { scale: 3, tint: 0xff4fa3 }); if (t.isChamp) champ = true; });
+      for (let i = 0; i < 5; i++) w.vfx('spark', this.x + this.ax * a.dist * i / 5, this.y - 20, { scale: 1.8, tint: 0xff9ad0 });
+      if (champ) { this.qRe = { t: a.recast }; this.cds.p1 = a.recastCd; }
+    } else if (k === 'p2') {   // dance: charm the ones who look at her, slow the ones turned away
+      const sh = rk(a.shield, rank); let n = 0;
+      w.vfx('shockwave', this.x, this.y - 6, { scale: a.radius / 40, below: true, tint: 0xff4fa3 }); w.vfx('buff', this.x, this.cy, { scale: 3, tint: 0xff9ad0 });
+      w.float(this.x, this.y - this.def.height - 34, 'Mírame bien, que no me repito.', '#ff9ad0');
+      w.enemiesNear(this.team, this.x, this.y, a.radius).filter(t => t.isChamp).forEach(t => {
+        if (this.lookedAtBy(t)) t.lureTo(this, rk(a.charm, rank)); else t.slow(a.slow, a.slowTime);
+        n++; w.vfx('heal', t.x, t.cy - 20, { scale: 1.8, tint: 0xff4fa3 });
+      });
+      if (n) { this.shieldHp += sh * n; this.shieldT = Math.max(this.shieldT, a.shieldTime); w.vfx('shield', this.x, this.cy, { scale: 2.6, tint: 0xff9ad0, alpha: 0.7 }); }
+    } else if (k === 'p3') {   // stiletto: front = slow, back = execute (missing health)
+      const dmg = rk(a.dmg, rank) + this.atk * a.atkScale, pts = [{ x: this.x, y: this.y }, { x: this.x + this.ax * a.reach, y: this.y + this.ay * a.reach }];
+      const t = w.enemiesOf(this).filter(q => w.nearPath(pts, q.x, q.y, a.width / 2 + BODY_R * 0.6)).sort(byDist)[0];
+      w.vfx('punch', this.x + this.ax * a.reach * 0.7, this.y - 24, { scale: 3, tint: 0xff4fa3 });
+      if (t) {
+        const dx = t.x - this.x, dy = t.y - this.y, d = Math.hypot(dx, dy) || 1, behind = (t.ax * dx + t.ay * dy) / d > 0.3;   // his back is toward her
+        w.damage(this, t, dmg, 'physical');
+        if (behind) { w.damage(this, t, (t.maxHp - t.hp) * rk(a.backPct, rank), 'physical', true); w.float(t.x, t.y - t.def.height - 40, '¡POR LA ESPALDA!', '#ff4fa3'); w.vfx('shockwave', t.x, t.y - 6, { scale: 3, below: true, tint: 0xff4fa3 }); }
+        else t.slow(a.slow, a.slowTime);
+      }
+    } else {   // R: invulnerable on a stage of lights (NOT invisible) with a ring on the ground, then a flash of cameras that robs half of the gold of every champion in the zone
+      this.stunT = 0; this.silenceT = 0; this.rootT = 0; this.slows = []; this.poisons = []; this.blindT = 0; this.charmT = 0; this.lure = null;   // cleanse every control effect
+      this.invulT = 1.0; const cx = this.x, cy = this.y;
+      w.zoneDecal(cx, cy, a.radius, 0xff4fa3, 1.4); w.vfx('summon', cx, cy - 10, { scale: 4 }); w.vfx('levelup', cx, cy - 10, { scale: 5 }); w.float(cx, cy - this.def.height - 34, '¡Se prendió la farándula!', '#ffe27a');
+      w.after(1.0, () => {
+        if (!this.alive) return; this.invulT = 0;
+        w.vfx('shockwave', this.x, this.y - 6, { scale: a.radius / 25, below: true, tint: 0xffffff }); w.vfx('levelup', this.x, this.y, { scale: 8, tint: 0xffffff });
+        w.enemiesNear(this.team, this.x, this.y, a.radius).filter(t => t.isChamp).forEach(t => {
+          t.blindT = Math.max(t.blindT, a.blind);
+          const st = Math.floor(t.gold * a.steal); if (st > 0) { t.gold -= st; this.gold += st; w.float(t.x, t.y - t.def.height - 40, `-${st} oro`, '#ffd23f'); }
+        });
+        this.mana = this.maxMana; this.cdrT = a.cdrTime;
+      });
+    }
+  }
+
+  // ---- Maduro ----
+  setSB(t) {   // transform into Súper Bigote for t seconds, or back to normal (t = 0)
+    const on = t > 0, was = !!this.sb, still = !this.hasAnims && !this.dirFrames && this.spr;
+    if (on) {
+      this.sb = { t, armor: this.sb?.armor || 0, mr: this.sb?.mr || 0 };
+      if (!was) { this.def = this.defSB; this.comboStep = 0; this.setSkin('maduro_sb'); if (still && this.w.textures.exists('ref_superbigote')) this.spr.setTexture('ref_superbigote'); }
+    } else if (was) {
+      this.sb = null; this.def = this.defN; this.comboStep = 0; this.speedT = 0; this.speedBoost = 0; this.setSkin('maduro'); if (still) this.spr.setTexture('ref_maduro');
+    }
+  }
+  stealGold(n) {   // Maduro's passive: every 1000 gold stolen gives a permanent shield
+    const P = this.def.passive; this.gold += n; this.stolen = (this.stolen || 0) + n;
+    while (this.stolen >= ((this.stolenN || 0) + 1) * P.per) { this.stolenN = (this.stolenN || 0) + 1; this.shieldHp += P.shield; this.shieldT = Infinity; this.w.float(this.x, this.y - this.def.height - 34, `+${P.shield} escudo`, '#ffe27a'); this.w.vfx('shield', this.x, this.cy, { scale: 2.2, tint: 0xffe27a, alpha: 0.7 }); }
+  }
+  fireMaduro(k, a, rank) {
+    const w = this.w, sb = !!this.sb;
+    const line = L => [{ x: this.x, y: this.y }, { x: this.x + this.ax * L, y: this.y + this.ay * L }];
+    const byDist = (p, q) => Math.hypot(p.x - this.x, p.y - this.y) - Math.hypot(q.x - this.x, q.y - this.y);
+    if (k === 'ult') {   // Súper Bigote: global slow, speed, armour
+      this.setSB(a.time); this.sb.armor = rk(a.armor, rank); this.sb.mr = rk(a.mr, rank); this.speedBoost = a.speed; this.speedT = a.time;
+      w.vfx('shockwave', this.x, this.y - 6, { scale: 9, below: true, tint: 0xff4a3a }); w.vfx('levelup', this.x, this.y - 10, { scale: 5 }); w.vfx('buff', this.x, this.cy, { scale: 3.5, tint: 0xff4a3a });
+      w.enemiesOf(this).forEach(t => t.slow(a.slow, a.slowTime));
+      w.float(this.x, this.y - this.def.height - 50, '¡Con mi mano de hierro, destruiré el sabotaje enemigo!', '#ffe27a');
+      w.showBanner?.({ title: '¡APARICIÓN DE SÚPER BIGOTE!', sub: 'Los enemigos del mapa se ralentizan', team: this.baseTeam, face: w.faceOf?.(this) }, 2200);
+      return;
+    }
+    if (k === 'p1' && !sb) {   // megaphone: damage + silence along a line, the second champion is also slowed
+      const dmg = rk(a.dmg, rank) + this.ap * a.apScale, pts = line(a.length);
+      for (let i = 1; i <= 6; i++) w.vfx('shockwave', this.x + this.ax * a.length * i / 6, this.y + this.ay * a.length * i / 6 - 8, { scale: 1 + i * 0.35, tint: 0xffd23f, alpha: 0.8 });
+      let champs = 0;
+      w.enemiesOf(this).filter(t => w.nearPath(pts, t.x, t.y, a.width / 2 + BODY_R * 0.6)).sort(byDist).forEach(t => {
+        w.damage(this, t, dmg, 'magic'); t.silenceT = Math.max(t.silenceT, a.silence);
+        if (t.isChamp && ++champs === 2) t.slow(a.slowPct, a.slowTime);
+        w.vfx('spark', t.x, t.cy, { scale: 2.5, tint: 0xffd23f });
+      });
+    } else if (k === 'p1') {   // Puño de hierro: fly forward and smash the ground; the first champion hit is stunned
+      const dmg = rk(a.dmg, rank) + this.atk * a.atkScale, dur = 0.2, pts = line(a.dist + 70);
+      const tgt = w.enemiesOf(this).filter(t => t.isChamp && w.nearPath(pts, t.x, t.y, 38)).sort(byDist)[0];
+      const trav = tgt ? Math.max(0, Math.min(a.dist, Math.hypot(tgt.x - this.x, tgt.y - this.y) - 62)) : a.dist;
+      this.state = 'cast'; this.anim = 'power1'; this.stateT = 0; this.stateDur = dur + 0.2; this.fired = true; this.dashV = { x: this.ax * trav / dur, y: this.ay * trav / dur };
+      w.float(this.x, this.y - this.def.height - 34, '¡Toma dosis de patria!', '#ff7a5a');
+      w.after(dur, () => {
+        if (!this.alive) return; const ix = this.x + this.ax * 50, iy = this.y + this.ay * 50;
+        w.vfx('shockwave', ix, iy, { scale: 4, below: true, tint: 0xff7a5a }); w.vfx('punch', ix, iy - 20, { scale: 5 });
+        if (tgt?.alive) { w.damage(this, tgt, dmg, 'physical'); tgt.stun(a.stun); }
+        w.enemiesNear(this.team, ix, iy, a.radius).filter(t => t !== tgt).forEach(t => w.damage(this, t, dmg * a.splash, 'physical'));
+      });
+    } else if (k === 'p2' && !sb) {   // bodyguards: -x % damage taken, melee enemies nearby are hurt and pushed away
+      this.drT = rk(a.time, rank); this.drPct = rk(a.dr, rank); const dmg = rk(a.dmg, rank) + this.atk * a.atkScale;
+      for (let i = 0; i < 6; i++) w.vfx('summon', this.x + Math.cos(i * 1.047) * 70, this.y + Math.sin(i * 1.047) * 45 - 20, { scale: 1.6 });
+      w.vfx('shockwave', this.x, this.y - 6, { scale: 4, below: true, tint: 0x7ee0ff });
+      w.enemiesNear(this.team, this.x, this.y, a.radius).filter(t => t.def.basic?.kind === 'melee' || t.isMinion).forEach(t => {
+        w.damage(this, t, dmg, 'physical'); const dx = t.x - this.x, dy = t.y - this.y, d = Math.hypot(dx, dy) || 1; t.shove = { vx: dx / d * a.push / 0.2, vy: dy / d * a.push / 0.2, t: 0.2 };
+      });
+    } else if (k === 'p2') {   // Escudo antimperialista: blocks the first hit / CC, then bursts
+      this.sShield = { t: rk(a.time, rank), r: a.radius, mult: a.burst, base: a.base };
+      w.vfx('shield', this.x, this.cy, { scale: 3, tint: 0x66b0ff, alpha: 0.8 }); w.vfx('shockwave', this.x, this.y - 6, { scale: 3, below: true, tint: 0x66b0ff });
+    } else if (k === 'p3' && !sb) {   // empty supply box: enemies = Desabastecimiento, allies = speed (and they pay a little health)
+      const c = this.castPoint || w.aiPoint(this, a.range), T = rk(a.time, rank); this.castPoint = null;
+      w.zoneDecal(c.x, c.y, a.radius, 0xffd23f, 1.4); w.vfx('shockwave', c.x, c.y, { scale: 3, below: true, tint: 0xffd23f });
+      w.after(0.35, () => {
+        w.smokePuff(c.x, c.y, 190, 3);
+        w.enemiesNear(this.team, c.x, c.y, a.radius).forEach(t => { t.atkSlowT = Math.max(t.atkSlowT || 0, T); t.atkSlow = a.aspd; t.atkSlowSrc = 'supply'; if (t.isChamp) t.wound(a.heal, T); });
+        w.fighters.filter(f => f.isChamp && f.alive && f.team === this.team && f !== this && Math.hypot(f.x - c.x, f.y - c.y) <= a.radius).forEach(f => {
+          f.speedBoost = rk(a.ally, rank); f.speedT = a.allyTime; f.hp = Math.max(1, f.hp - f.maxHp * a.drain); w.float(f.x, f.y - f.def.height - 30, '¡Lealtad!', '#ffd23f');
+        });
+      });
+    } else {   // Mano de hierro: grabs the first enemy on the line, pulls him in and breaks his armour
+      const dmg = rk(a.dmg, rank) + this.atk * a.atkScale, pts = line(a.range);
+      const tgt = w.enemiesOf(this).filter(t => w.nearPath(pts, t.x, t.y, a.width / 2 + BODY_R * 0.6)).sort((p, q) => (q.isChamp ? 1 : 0) - (p.isChamp ? 1 : 0) || byDist(p, q))[0];
+      const end = tgt ? Math.hypot(tgt.x - this.x, tgt.y - this.y) : a.range;
+      for (let i = 1; i <= 8; i++) w.vfx('spark', this.x + this.ax * end * i / 8, this.y + this.ay * end * i / 8 - 14, { scale: 1.6, tint: 0xc0c8d8 });
+      if (tgt) { w.damage(this, tgt, dmg, 'physical'); tgt.armorShred = a.shred; tgt.armorShredT = a.shredTime; if (tgt.isChamp) tgt.pullMe = { by: this, t: 0.7 }; w.vfx('punch', tgt.x, tgt.cy, { scale: 4 }); }
+    }
+  }
+
   fireAbility(k, a, rank) {
     const w = this.w;
     w.audio.ability(this, k);
     switch (this.key + ':' + k) {
+      case 'diosa:p1': case 'diosa:p2': case 'diosa:p3': case 'diosa:ult': this.fireDiosa(k, a, rank); break;
+      case 'maduro:p1': case 'maduro:p2': case 'maduro:p3': case 'maduro:ult': this.fireMaduro(k, a, rank); break;
       case 'leandro:p1': {
         const dmg = rk(a.dmg, rank) + this.ap * a.apScale, stun = rk(a.stun, rank);
         const c = this.castPoint || w.aiPoint(this, a.range); this.castPoint = null;
@@ -572,8 +709,11 @@ export class Fighter {
         }
         break;
       }
-      case 'yonaiker:p2': { const c = this.castPoint || w.aiPoint(this, a.range); this.castPoint = null; w.smokeGrenade(this, c.x, c.y, a, rank); break; }
-      case 'yonaiker:p3': w.callCrates(this, a, rank); break;
+      case 'yonaiker:p1': this.gun = !this.gun; if (this.bomber) this.bomber.gunT = 0; w.float(this.x, this.y - this.def.height - 34, this.gun ? '¡AMETRALLADORA!' : 'Ametralladora apagada', '#ffd23f'); break;
+      case 'yonaiker:p2':
+        if (this.bomber) { this.cds.p2 = rk(a.crateCd, rank); w.callCrates(this, a, rank); }   // aboard the ship: supply crates on the reticle (own cooldown)
+        else { const c = this.castPoint || w.aiPoint(this, a.range); this.castPoint = null; w.smokeGrenade(this, c.x, c.y, a, rank); }
+        break;
       case 'yonaiker:ult': w.smokeScreen(this, a, rank); break;
       case 'junior:p1': w.anchorDrag(this, a, rank); break;   // lunge: Junior dashes forward carrying every enemy champion he reaches
       case 'junior:p2': {   // somersault dash, then a shield
@@ -612,9 +752,10 @@ export class Fighter {
               else if (type === 'virus') {
                 if (first) { w.damage(self, t, dmg * 0.35, 'magic'); t.poison(dmg * 0.65 / a.poisonTime, a.poisonTime, self); w.float(t.x, t.y - t.def.height - 28, 'SILENCIADO', '#c77dff'); }
                 t.silenceT = Math.max(t.silenceT, Math.max(0.9, rk(a.silence, rank) * 0.7)); w.markSrc(t, 'silence'); t.slow(rk(a.slow, rank), 1.2);
-              } else { if (first) w.float(t.x, t.y - t.def.height - 28, 'CEGADO', '#9be37a'); w.markSrc(t, 'blind'); t.blindT = Math.max(t.blindT, rk(a.blind, rank) * (first ? 1 : 0.6)); }
+              }   // worm: its blindness comes from the purple blind zone created below (only while they stand in it)
             };
             w.zones.push({ ctx: w.castCtx, kind: 'malware', owner: this, x, y, r: a.radius, t: life, type, col, apply, first: new Set(), cd: new Map(), decal: null, icon: null });
+            if (type === 'worm') w.blindZone(this, x, y, a.radius, life);
           } });
         break;
       }
@@ -663,7 +804,7 @@ export class Fighter {
         for (let i = 0; i < n; i++) w.after(i * a.gap, () => {
           if (!this.alive || this.stunT > 0) return;
           const obj = 'lego_' + (1 + (i % 4)), has = w.textures.exists(obj);
-          w.projectile(this, { ang: (Math.random() - 0.5) * 0.22, speed: a.speed, dmg, type: 'magic', obj: has ? obj : null, vfx: 'rock_throw', scale: has ? 0.16 : 2.4, tint: has ? null : [0xff3b30, 0x3b8cff, 0xffd23f, 0x5dff8a][i % 4], spin: true, r: 16, range: 640 });
+          w.projectile(this, { ang: (Math.random() - 0.5) * 0.22, speed: a.speed, dmg, type: 'magic', obj: has ? obj : null, vfx: 'rock_throw', scale: has ? 0.1 : 1.6, tint: has ? null : [0xff3b30, 0x3b8cff, 0xffd23f, 0x5dff8a][i % 4], spin: true, r: 11, range: 640 });
         });
         break;
       }
@@ -710,7 +851,7 @@ export class Fighter {
   }
 
   // Yonaiker: on foot only F works; aboard the ship F is off and Q / E / R work
-  abilityLocked(k) { if (this.key !== 'yonaiker') return false; const fly = this.bomber?.phase === 'fly'; return k === 'p2' ? fly : !fly; }
+  abilityLocked(k) { if (this.key !== 'yonaiker') return false; const fly = this.bomber?.phase === 'fly'; return k === 'p2' ? false : !fly; }   // F smoke (foot) / crates (aboard); Q gun, E missiles and R smoke screen only aboard the ship
 
   drawShield() {   // life shield: a white holographic light rising from the ground circle, fading out toward the top (stacked ellipses: curved, no hard edges)
     const w = this.w, on = this.shieldHp > 0 && this.alive && !this.hiddenFor(w.player);
@@ -778,11 +919,15 @@ export class Fighter {
   /* ---------- status ---------- */
   stun(t) {
     if (!this.alive || this.isTower || this.arepaBlocks()) return;
+    if (this.invulT > 0) return;
+    if (this.sShield && this.w.sShieldBlock(this, 0)) return;
     this.stunT = Math.max(this.stunT, t); this.state = 'stun'; this.pending = null; this.w.markSrc(this, 'stun');
     this.w.audio.play('stun', { at: this, vol: 0.8 });
   }
   slow(pct, t) {
-    if (this.isTower || this.arepaBlocks()) return; this.slows.push({ pct, t }); this.w.markSrc(this, 'slow'); }
+    if (this.isTower || this.arepaBlocks()) return;
+    if (this.invulT > 0) return;
+    if (this.sShield && this.w.sShieldBlock(this, 0)) return; this.slows.push({ pct, t }); this.w.markSrc(this, 'slow'); }
   poison(dps, t, src, type, key) {   // `key` = refreshed instead of stacked (smoke clouds)
     if (this.isTower) return;
     const q = key && this.poisons.find(p => p.key === key && p.src === src); if (q) { q.t = Math.max(q.t, t); q.dps = Math.max(q.dps, dps); return; }
@@ -800,9 +945,18 @@ export class Fighter {
     if (this.rootT > 0) add('root', 'Atrapado', this.rootT, true, 'No puedes moverte, pero sí atacar y usar poderes.', { icon: 'icon_yonaiker_p2', name: 'Trampa invisible', by: 'Yonaiker' });
     if (this.stunT > 0) add('stun', 'Aturdido', this.stunT, true, 'No puedes moverte, atacar ni usar poderes.');
     if (this.silenceT > 0) add('silence', 'Silenciado', this.silenceT, true, 'No puedes usar poderes.');
-    if (this.blindT > 0) add('blind', 'Cegado', this.blindT, true, 'Tu visión se reduce a una zona pequeña a tu alrededor.');
-    if (this.lure) add('lure', 'Hechizado', this.lure.t, true, 'Caminas hacia Xeviche y no puedes atacar ni usar poderes.');
+    if (this.blindT > 0) add('blind', 'Cegado', this.blindT, true, 'Tu visión se reduce a una zona pequeña a tu alrededor. Recuperas la vista al salir del círculo morado.', { icon: 'icon_blind', name: 'Cegado', tint: 0xb070ff });
+    if (this.lure) add('lure', 'Hechizado', this.lure.t, true, 'Caminas hacia Xeviche y no puedes atacar ni usar poderes.', { icon: 'icon_charm', name: 'Hechizado', by: this.lure.src?.def?.name || 'Xeviche', tint: 0xff5a9a });
     if (this.charmT > 0) add('charm', 'Controlado', this.charmT, true, 'Luchas para el enemigo y no puedes usar poderes.');
+    if (this.invulT > 0) add('invul2', 'Invulnerable', this.invulT, false, 'Ningún daño ni control de masas te afecta.', { tint: 0xffd23f });
+    if (this.cdrT > 0) add('cdr', 'Show principal', this.cdrT, false, 'Tus habilidades se recargan el doble de rápido.', { tint: 0xff4fa3 });
+    if (this.qRe) add('qre', 'Pose de portada', this.qRe.t, false, 'Pulsa Q otra vez: voltereta hacia atrás y ráfaga de besos.', { tint: 0xff4fa3 });
+    if (this.sb) add('sb', 'Súper Bigote', this.sb.t, false, 'Más velocidad y armadura; tus poderes son ofensivos y tus ataques son puñetazos.', { tint: 0xff4a3a });
+    if (this.drT > 0) add('dr', 'Colectivo protector', this.drT, false, `Recibes un ${Math.round(this.drPct * 100)} % menos de daño.`, { tint: 0x7ee0ff });
+    if (this.sShield) add('sshield', 'Escudo antimperialista', this.sShield.t, false, 'Bloquea el primer ataque o control de masas que te golpee.', { tint: 0x66b0ff });
+    if (this.atkSlowT > 0 && this.atkSlowSrc === 'supply') add('supply', 'Desabastecimiento', this.atkSlowT, true, 'Menos velocidad de ataque y de curación.', { tint: 0xffb040 });
+    if (this.armorShredT > 0) add('shred', 'Armadura rota', this.armorShredT, true, `Tu armadura se reduce un ${Math.round(this.armorShred * 100)} %.`, { tint: 0xc0c8d8 });
+    if (this.devalT > 0) add('deval', 'Devaluación', this.devalT, true, 'Maduro te roba un 5 % del oro que ganas.', { tint: 0xffd23f });
     if (this.woundT > 0) add('wound', 'Herida', this.woundT, true, `Recibes un ${Math.round(this.woundPct * 100)} % menos de curación, regeneración y robo de vida.`, { icon: 'icon_wound', name: 'Herida', tint: 0xff5a5a });
     if (this.slows.length) add('slow', 'Ralentizado', Math.max(...this.slows.map(s => s.t)), true, 'Te mueves más lento.', { icon: 'icon_slow', name: 'Ralentización', tint: 0x7ee0ff });
     if (this.poisons.some(p => p.burn)) add('burn', 'Quemado', Math.max(...this.poisons.filter(p => p.burn).map(p => p.t)), true, 'Recibes daño de fuego cada medio segundo.', { icon: 'icon_burn', name: 'Quemadura', by: (() => { const s = this.poisons.find(p => p.burn)?.src; return (s?.owner || s)?.def?.name || ''; })(), tint: 0xff5a2a });
@@ -836,6 +990,7 @@ export class Fighter {
     this.alive = false; this.state = 'dead';
     this.stateT = 0; this.deadT = 0; this.pending = null; this.stunT = 0;
     this.slows = []; this.poisons = [];
+    if (this.flame) { this.flame.spr?.destroy(); this.flame = null; }   // Junior dying mid-flamethrower: the jet disappears with him
     this.playAnim('death', 0.9);
     {
       const au = this.w.audio, big = this.isNexus ? 'nexus_destroy' : this.isTower ? 'explosion_big' : null;
@@ -924,7 +1079,7 @@ export class Fighter {
       this.hp = Math.min(this.maxHp, this.hp + this.it.hpRegen * dt * this.healMult);
       if (this.maxMana) this.mana = Math.min(this.maxMana, this.mana + this.it.manaRegen * dt);
       this.gold += dt * 3.2;
-      if (w.inBase(this)) { this.hp = Math.min(this.maxHp, this.hp + this.maxHp * 0.10 * dt); if (this.maxMana) this.mana = Math.min(this.maxMana, this.mana + this.maxMana * 0.10 * dt); }
+      if (w.inBase(this)) { this.hp = Math.min(this.maxHp, this.hp + this.maxHp * 0.10 * dt); if (this.maxMana && !this.def.farandula) this.mana = Math.min(this.maxMana, this.mana + this.maxMana * 0.10 * dt); }
     }
     if (this.recall) { if ((this.recall.t -= dt) <= 0) { this.recall = null; w.vfx('summon', this.x, this.y - 10, { scale: 4 }); this.x = this.spawn.x; this.y = this.spawn.y; w.vfx('summon', this.x, this.y - 10, { scale: 4 }); w.audio.play('ui_open', { at: this, gap: 0 }); } else if (this.stunT > 0) this.recall = null; }
     if (this.protein) {   // healing over time; any damage breaks it (see world.damage)
@@ -936,6 +1091,23 @@ export class Fighter {
     if (this.isRage && !this.hen && this.rage > 0) { this.rageIdle = (this.rageIdle || 0) + dt; if (this.rageIdle > 2) this.rage = Math.max(0, this.rage - dt * 6); }   // no fighting for 2 s: rage drains
     if (this.hunted && (this.hunted.t -= dt) <= 0) this.hunted = null;
     if (this.silenceT > 0) this.silenceT -= dt;
+    if (this.def.farandula) {   // Farándula: always starts full, every ability spends it, and it recharges fast while she neither attacks nor casts
+      if (!this._fInit) { this._fInit = true; this.mana = this.maxMana; }
+      this.fIdle = (this.fIdle || 0) + dt; if (this.fIdle > 0.7 && this.alive) this.mana = Math.min(this.maxMana, this.mana + this.maxMana * 0.6 * dt);
+    }
+    if (this.invulT > 0) this.invulT -= dt;
+    if (this.cdrT > 0) { this.cdrT -= dt; for (const k of ['p1', 'p2', 'p3']) if (this.cds[k] > 0) this.cds[k] = Math.max(0, this.cds[k] - dt); }   // Show principal: abilities recharge twice as fast
+    if (this.qRe && (this.qRe.t -= dt) <= 0) { this.qRe = null; this.cds.p1 = Math.max(this.cds.p1, rk(this.def.abilities.p1.cd, this.ranks.p1 || 1)); }   // the recast window closed: the full cooldown starts
+    if (this.drT > 0) this.drT -= dt; if (this.armorShredT > 0) this.armorShredT -= dt;
+    if (this.sShield && (this.sShield.t -= dt) <= 0) { this.sShield = null; this.w.float(this.x, this.y - this.def.height - 30, 'Escudo agotado', '#c0c8d8'); }
+    if (this.sb && (this.sb.t -= dt) <= 0) { this.setSB(0); this.w.vfx('summon', this.x, this.y - 10, { scale: 3 }); this.w.float(this.x, this.y - this.def.height - 30, 'Maduro', '#ffe27a'); }
+    if (this.devalT > 0) {   // Maduro's passive: while marked, 5 % of every gold this champion earns goes to Maduro
+      this.devalT -= dt; const d = this.gold - (this.goldPrev ?? this.gold), by = this.devalBy;
+      if (d > 0 && by?.alive !== undefined && by.key === 'maduro') { const st = d * by.def.passive.steal; this.gold -= st; by.stealGold(st); }
+      this.goldPrev = this.gold;
+    } else this.goldPrev = null;
+    if (this.shove) { const sv = this.shove; sv.t -= dt; if (!this.dashStep(sv.vx * dt, sv.vy * dt) || sv.t <= 0) this.shove = null; }
+    if (this.pullMe) { const pm = this.pullMe, by = pm.by, dx = by.x + by.ax * 62 - this.x, dy = by.y + by.ay * 62 - this.y, dd = Math.hypot(dx, dy) || 1; pm.t -= dt; this.carriedT = 0.12; if (dd < 14 || pm.t <= 0 || !by.alive || !this.dashStep(dx / dd * 1100 * dt, dy / dd * 1100 * dt)) this.pullMe = null; }
     if (this.blindT > 0) this.blindT -= dt;
     if (this.speedT > 0 && (this.speedT -= dt) <= 0) this.speedBoost = 0;
     if (this.shieldT > 0 && (this.shieldT -= dt) <= 0) this.shieldHp = 0;
@@ -954,7 +1126,7 @@ export class Fighter {
     if (this.woundT > 0) this.woundT -= dt;
     this.poisons = this.poisons.filter(p => {
       p.t -= dt; p.tick += dt;
-      if (p.tick >= 0.5) { p.tick -= 0.5; w.damage(p.src, this, p.dps * 0.5, p.type || 'true', true); if (p.burn && Math.random() < 0.35) w.vfx('burning_ground', this.x + (Math.random() - 0.5) * 30, this.y - 6, { scale: 1.4, alpha: 0.8, below: true }); }
+      if (p.tick >= 0.5) { p.tick -= 0.5; w.damage(p.src, this, p.dps * 0.5, p.type || 'true', p.burn ? 'burn' : 'poison'); if (p.burn && Math.random() < 0.35) w.vfx('burning_ground', this.x + (Math.random() - 0.5) * 30, this.y - 6, { scale: 1.4, alpha: 0.8, below: true }); }
       return p.t > 0 && this.alive;
     });
     if (!this.alive) return;
@@ -999,9 +1171,8 @@ export class Fighter {
       return;
     }
 
-    if (this.def.charge && this.ranks.p1 && this.alive && !this.bomber && !this.away && this.w.net?.role !== 'client') {   // Yonaiker: the charge bar fills; full -> the ship comes for him
-      const a = this.def.abilities.p1; this.charge = Math.min(100, this.charge + dt * 100 / rk(a.chargeTime, this.ranks.p1));
-      if (this.charge >= 100 && this.free) this.w.startBomber(this, a, this.ranks.p1);
+    if (this.def.charge && this.ranks.p3 && this.alive && !this.bomber && !this.away && this.w.net?.role !== 'client') {   // Yonaiker: the bar does not fill by itself (only by landing hits, see World.damage); full -> the ship comes for him
+      if (this.charge >= 100 && this.free) this.w.startBomber(this, this.def.abilities.p3, this.ranks.p3);
     }
     if (this.holdPose && (this.state !== 'idle' || (w2g(this) - (this.comboEnd || 0) > COMBO_WINDOW))) { this.holdPose = false; if (this.state === 'idle' && this.alive) this.playAnim('idle'); }
     if (this.bufferT > 0) { this.bufferT -= dt; if ((this.free || this.chaining()) && this.cds.basic <= 0) { this.bufferT = 0; this.tryBasic(); } }
@@ -1141,7 +1312,7 @@ export class Fighter {
     const face = this.turn && (this.state === 'walk' || this.state === 'run') ? this.turn : this.facing;   // while walking away from the aim the sprite faces its walking direction
     spr.setFlipX(this.isTower ? false : this.hasAnims && this.dirArt ? this.dirMirror : face < 0);
     if (this.key === 'junior' && this.dashV && this.dashShield && this.state === 'cast') spr.setAngle((this.stateT / (this.stateDur || 0.38)) * 360 * (face < 0 ? -1 : 1)); else if (this.key === 'junior' && spr.angle) spr.setAngle(0);
-    if (this.isChamp && this.alive && this.state !== 'dead') { if (this.charmT > 0) spr.setTint(0xffe9a0); else if (this.silenceT > 0) spr.setTint(0xd9b0ff); else if (this.poisoned) spr.setTint(0x9dffa0); else if (!this.flashing) spr.clearTint(); }   // poisoned: green filter
+    if (this.isChamp && this.alive && this.state !== 'dead') { if (this.charmT > 0) spr.setTint(0xffe9a0); else if (this.silenceT > 0) spr.setTint(0xd9b0ff); else if (this.lure) spr.setTint(0xff9ccb); else if (this.poisoned) spr.setTint(0x9dffa0); else if (!this.flashing) spr.clearTint(); }   // poisoned: green filter
     this.drawPoison(); this.drawShield(); this.drawStun();
     spr.setDepth(this.y).setAlpha(this.alive ? 1 : this.isTower && !this.dirFrames ? 0.35 : 0.92);
     if (this.ring) {
