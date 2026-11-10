@@ -1,0 +1,25 @@
+// two real clients in one room: host simulates, client sees it; client moves, casts and buys
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader', '--mute-audio', '--autoplay-policy=no-user-gesture-required'], defaultViewport: { width: 1280, height: 720 } });
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const mk = async name => { const c = await b.createBrowserContext(); const p = await c.newPage(); p.on('pageerror', e => console.log(`[${name} pageerror]`, e.message)); p.on('console', m => { if (m.type() === 'error' && !/404/.test(m.text())) console.log(`[${name} console]`, m.text()); }); await p.goto('http://localhost:5199/', { waitUntil: 'load' }); await sleep(9000); return p; };
+const uid = Date.now().toString(36).slice(-4);
+const A = await mk('A'), B = await mk('B');
+const reg = async (p, n) => { await p.click('[data-tab=register]'); await p.type('input[name=name]', n); await p.type('input[name=email]', `${n}@t.com`); await p.type('input[name=password]', 'secreto1'); await p.click('button[type=submit]'); await sleep(1500); };
+await reg(A, 'ana' + uid); await reg(B, 'beto' + uid);
+await A.click('[data-a=create]'); await sleep(1200);
+const code = await A.$eval('.code', e => e.textContent);
+await B.click('[data-a=joinbox]'); await sleep(300); await B.type('#code', code); await B.keyboard.press('Enter'); await sleep(1500);
+const jc = (p, q) => p.evaluate(`document.querySelector('${q}').click()`);
+await sleep(800); await jc(A, '.cc[data-k=maduro]'); await sleep(600); await jc(B, '.cc[data-k=luis]'); await sleep(800);
+await jc(B, '[data-a=ready]'); await sleep(600);
+await jc(A, '[data-a=start]'); await sleep(3000); for (const p of [A, B]) await p.waitForFunction('window.__arena?.player && window.__arena.fighters?.length', { timeout: 120000 }); await sleep(4000);
+const st = p => p.evaluate(`(() => { const a = window.__arena, me = a.player, o = a.champs.find(c => c !== me); const cr = a.fighters.find(f => f.key === 'crate'); return JSON.stringify({ role: a.net?.role, me: me.key, crate: !!cr, crateLife: cr && [cr.life, cr.life0, cr.spawnT, cr.spawnMax], poisoned: a.champs.map(c => c.key + ':' + c.poisoned), recall: a.champs.map(c => c.key + ':' + !!c.recall + '/' + !!c.recallFx), roaches: a.fighters.filter(f => f.key === 'roach').length, guards: a.fighters.filter(f => f.key === 'bodyguard').length, poisonG: !!a.champs.find(c => c.poisonG?.visible), crateG: a.crateG?.visible }); })()`);
+await A.evaluate(`window.__arena.net.op('spend', 'p3')`); await sleep(1500);
+await A.evaluate(`(() => { const a = window.__arena, p = a.player, e = a.champs.find(c => c !== p); p.castPoint = { x: e.x, y: e.y }; p.cds.p3 = 0; p.mana = p.maxMana; p.tryCast('p3'); })()`);
+console.log('dbg', await A.evaluate(`JSON.stringify({ranks: window.__arena.player.ranks, pts: window.__arena.player.points, mana: window.__arena.player.mana, cds: window.__arena.player.cds})`)); await sleep(6000);
+console.log('A', await st(A)); console.log('B', await st(B));
+await A.evaluate(`window.__arena.net.op('recall')`); await sleep(2500);
+console.log('A', await st(A)); console.log('B', await st(B));
+await B.screenshot({ path: 'D:/mycowork/game/shot_net_B.png' }); await A.screenshot({ path: 'D:/mycowork/game/shot_net_A.png' });
+await b.close();

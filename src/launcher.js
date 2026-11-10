@@ -4,7 +4,7 @@ import { net, BOT } from './net.js';
 import { STAT_STYLE, statCss, scaleRows, rowStat, pct } from './stats.js';
 import { CHAMPIONS, CLASSES, CLASS_TABS, classLabel, ABILITY_KEYS } from './data.js';
 import { ITEM_BY_ID } from './items.js';
-import { vol, saveVol } from './audio.js';
+import { vol, saveVol, gv } from './audio.js';
 import { bootScreen } from './bootscreen.js';
 
 // Launcher: login / register, news, room buttons, lobby with champion pick and the loading screen.
@@ -19,12 +19,19 @@ const cache = {};
 // navigation sounds: the same 24-bit set the training menu always used (ui_select / ui_confirm...) from assets/sfx; [file, volume]
 const UI_SND = { ui_click: ['ui_select_0.wav', 0.9], ui_tab: ['ui_select_1.wav', 0.9], ui_confirm: ['ui_confirm_0.wav', 0.9], ui_back: ['ui_back_0.wav', 0.8], ui_error: ['ui_error_0.wav', 0.8],
   ui_open: ['ui_open_0.wav', 0.8], ui_start: ['levelup_0.wav', 0.9], ui_join: ['ui_confirm_0.wav', 0.8] };
-const snd = n => { const u = UI_SND[n]; if (!u) return; try { const a = (cache[n] ||= new window.Audio(`assets/sfx/${u[0]}`)).cloneNode(); a.volume = Math.min(1, vol.sfx * u[1]); a.play().catch(() => {}); } catch (e) { /* ignore */ } };
+let VOICES = null;   // assets/voice/voices.json: which voice lines exist (generated with tools/gen_voices.py)
+const voiceSelect = () => {   // MOBA style: the champion says its line when the player locks it in
+  const k = screen === 'practice' ? prac.me : picked; if (!k) return;
+  (VOICES ? Promise.resolve(VOICES) : fetch('assets/voice/voices.json').then(r => r.json()).then(j => (VOICES = j)).catch(() => (VOICES = {}))).then(v => {
+    const sel = (v[k] || []).filter(e => e.startsWith('select_')); if (!sel.length) return; try { const a = new window.Audio(`assets/voice/${k}/${sel[Math.random() * sel.length | 0]}.mp3?${Date.now()}`); a.volume = Math.min(1, gv(vol.champ)); a.play().catch(() => {}); } catch (e) { /* ignore */ }
+  });
+};
+const snd = n => { const u = UI_SND[n]; if (!u) return; try { const a = (cache[n] ||= new window.Audio(`assets/sfx/${u[0]}`)).cloneNode(); a.volume = Math.min(1, gv(vol.sfx) * u[1]); a.play().catch(() => {}); } catch (e) { /* ignore */ } };
 let music = null, musicWanted = false;
 const startMusic = () => {
   musicWanted = true;
   if (!music) { music = new window.Audio('assets/menu/music_launcher.wav'); music.loop = true; }
-  music.volume = Math.min(1, vol.music); music.play().catch(() => {});   // blocked until the first click: retried on the first gesture
+  music.volume = Math.min(1, gv(vol.music)); music.play().catch(() => {});   // blocked until the first click: retried on the first gesture
 };
 const stopMusic = () => { musicWanted = false; if (music) { let v = music.volume; const iv = setInterval(() => { v -= 0.06; if (v <= 0) { clearInterval(iv); music.pause(); } else music.volume = v; }, 60); } };
 
@@ -116,6 +123,8 @@ const scaleHtml = (ab, st) => {   // [stat icon] (value at rank 1 -> rank 3) in 
     return `<div class="scl"><b>${r.label}</b> ${r.parts.map(p => si(p.stat)).join('')}<span style="color:${col};font-weight:700">(${Math.round(r.total)} → ${Math.round(r3[i].total)})</span>${f ? `<small>${f}</small>` : ''}</div>`; }).join('');
 };
 const abilityStrip = d => `<div class="abis">${d.passive ? `<div class="abi" data-tip="${esc(`<b>[P] ${d.passive.name} · pasiva</b><br>${d.passive.desc}`)}"><img src="assets/icons/${esc(d.passive.icon)}.png?v=${BUILD}" alt=""><span>P</span></div>` : ''}${ABILITY_KEYS.map((a, i) => { const ab = d.abilities[a], sc = scaleHtml(ab, d.stats); return `<div class="abi" data-tip="${esc(`<b>[${'QFER'[i]}] ${ab.name}${ab.passive ? ' · pasiva' : ''}</b><br>${ab.desc}${sc ? `<div class="scb"><em>Escala (nivel 1 → nivel 3 de la habilidad)</em>${sc}</div>` : ''}`)}"><img src="assets/icons/${esc(ab.icon)}.png?v=${BUILD}" alt=""><span>${'QFER'[i]}</span></div>`; }).join('')}</div>`;
+// champions with two versions per ability: the second versions are listed too
+const altStrip = d => !d.alt ? '' : `<div class="abis alts">${ABILITY_KEYS.map((a, i) => { const ab = d.alt[a]; return ab ? `<div class="abi alt" data-tip="${esc(`<b>[${'QFER'[i]}] ${ab.name} · 2ª versión</b><br>${ab.desc}`)}"><img src="assets/icons/${esc(ab.icon)}.png?v=${BUILD}" alt=""><span>${'QFER'[i]}</span></div>` : ''; }).join('')}</div>`;
 const refresh = () => (screen === 'practice' ? practiceScreen() : lobbyScreen());
 
 function lobbyScreen() {
@@ -135,7 +144,7 @@ function lobbyScreen() {
       ${champTabs()}
       ${champGrid(sel, k => pl.some(p => p.champ === k && p.id !== net.user.id))}
 </div>
-      <div class="panel info">${abilityStrip(d)}<button class="btn go" data-a="lock">Seleccionar</button></div>`}</div>
+      <div class="panel info">${abilityStrip(d)}${altStrip(d)}<button class="btn go" data-a="lock">Seleccionar</button></div>`}</div>
     <div class="col"><div class="panel chat"><h2>CHAT</h2><div class="log" id="log"></div><input class="fld" id="chatin" maxlength="200" placeholder="Escribe y pulsa Enter" autocomplete="off"></div>
       <div class="panel"><div class="row" style="margin-bottom:10px"><button class="btn ${me?.ready ? 'warn' : 'go'}" data-a="ready">${me?.ready ? 'Cancelar listo' : 'Estoy listo'}</button><button class="btn ghost" data-a="leave">Salir</button></div>
       ${host ? `<button class="btn go" style="width:100%" data-a="start" ${allPicked ? '' : 'disabled'}>Iniciar partida${allReady ? '' : ' (hay jugadores sin marcar listo)'}</button>` : '<div style="text-align:center;color:var(--mut)">Esperando a que el anfitrión inicie la partida...</div>'}
@@ -168,11 +177,11 @@ function practiceScreen() {
       ${champTabs()}
       ${champGrid(prac.me)}
 </div>
-      <div class="panel info">${abilityStrip(d)}<button class="btn go" data-a="lock">Seleccionar</button></div>`}</div>
+      <div class="panel info">${abilityStrip(d)}${altStrip(d)}<button class="btn go" data-a="lock">Seleccionar</button></div>`}</div>
     <div class="col"><div class="panel"><h2>JUGAR</h2><div class="acts">
         <button class="btn big go" data-a="pplay">Jugar partida<small>${prac.mode} vs ${prac.mode} contra la IA, con oleadas, torres y nexos.</small></button>
         <button class="btn big" data-a="ptrain">Zona de entrenamiento<small>Nivel 12, sin costo de maná y un muñeco para practicar.</small></button></div></div>
-      <div class="panel"><h2>CONTROLES</h2><div style="font-size:15px;line-height:1.5;color:var(--tx)">WASD mover · Shift correr · clic o J atacar<br>Q F E R poderes (clic para lanzar) · Ctrl + tecla sube el poder<br>B tienda en la base · 1-6 usar objetos · Esc menú</div></div></div></div></div>`;
+      <div class="panel"><h2>CONTROLES</h2><div style="font-size:15px;line-height:1.5;color:var(--tx)">WASD mover · Shift correr · clic o J atacar<br>Q F E R poderes (clic para lanzar) · Ctrl + tecla sube el poder<br>B volver a la base · P tienda · 1-6 usar objetos · Esc menú</div></div></div></div></div>`;
   if (!first && $('#champs', view)) $('#champs', view).parentElement.scrollTop = keep;
 }
 function practiceStart(training) {
@@ -256,7 +265,7 @@ function onNet(m) {
 const actions = {
   logout() { net.logout(); chat = []; loginScreen(); },
   practice() { snd('ui_confirm'); locked = false; practiceScreen(); },
-  lock() { snd('ui_confirm'); locked = true; fxNext = true; refresh(); },
+  lock() { snd('ui_confirm'); voiceSelect(); locked = true; fxNext = true; refresh(); },
   unlock() { locked = false; refresh(); },
   pback() { snd('ui_back'); route(); },
   pmode(el) { prac.mode = +el.dataset.m; practiceScreen(); },
@@ -295,7 +304,7 @@ export class Launcher extends Phaser.Scene {
       if (c && net.room) { picked = c.dataset.k; snd('ui_tab'); net.send('pick_champ', { key: picked }); lobbyScreen(); }
       else if (e.target.closest('.btn') && !e.target.closest('[data-m],[data-tab]')) snd('ui_click');
     });
-    root.addEventListener('input', e => { const k = e.target.dataset?.vol; if (!k) return; vol[k] = e.target.value / 100; saveVol(); e.target.style.setProperty('--v', e.target.value + '%'); const pc = $('#pc-' + k, root); if (pc) pc.textContent = e.target.value + '%'; if (k === 'music' && music) music.volume = Math.min(1, vol.music); });
+    root.addEventListener('input', e => { const k = e.target.dataset?.vol; if (!k) return; vol[k] = e.target.value / 100; saveVol(); e.target.style.setProperty('--v', e.target.value + '%'); const pc = $('#pc-' + k, root); if (pc) pc.textContent = e.target.value + '%'; if (k === 'music' && music) music.volume = Math.min(1, gv(vol.music)); });
     startMusic(); document.addEventListener('pointerdown', () => { if (musicWanted && music?.paused) music.play().catch(() => {}); }, { once: true });
     this.events.once('shutdown', () => { unsub?.(); root.remove(); root = null; stopMusic(); });
     net.restore().then(() => route());

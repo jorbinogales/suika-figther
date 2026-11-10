@@ -1,5 +1,112 @@
 [
   {
+    "id": "0.9.40",
+    "date": "2026-11-10",
+    "version": "0.9.40",
+    "title": "Mapa más grande y curvo, torres con círculo, arbustos y carga por partida",
+    "tag": "MEJORA",
+    "changes": [],
+    "items": [
+      "El mapa es mucho más grande (unas 2.3 veces el tamaño anterior en cada dirección) y los 3 carriles son curvos y más anchos. El bosque entre carriles es más denso ",
+      "Carga más ligera: al abrir el juego solo se carga lo necesario para la interfaz. En la pantalla de carga de la partida se cargan los sprites, habilidades y sonidos de los campeones que participan, y el mapa.",
+      "Cada carril tiene 2 torres por equipo: la primera, la más cercana a la base, queda en el punto medio entre donde estaban las dos anteriores; la segunda se acercó al río. La interior es inmune mientras viva la exterior.",
+      "Se eliminaron los campamentos neutrales con sus banderas de refuerzo. Sus claros son ahora caminos de tierra entre los carriles, más cerca de la base (entre las dos torres), y el río es caminable a lo largo de todo su recorrido, así que también une los carriles.",
+      "Arbustos: matorrales sobre un suelo del mismo color y textura que el arbusto, justo del tamaño de cada uno, en las orillas de los carriles (algunos cerca del río, ninguno dentro del agua). Se mueven cuando alguien se desplaza dentro de ellos. Un campeón dentro es invisible para el equipo contrario, salvo que ataque o lance un poder, o que un enemigo se acerque; los aliados lo ven semitransparente.",
+      "El círculo desde el que se puede atacar una torre es su propio círculo de ataque (320), el mismo que se dibuja bajo ella: hay que estar dentro para dañarla.",
+      "Banderas: cada torre lleva una bandera; cuando la torre cae, su bandera no desaparece sino que el equipo enemigo puede capturarla y desde ella salen refuerzos. Además hay 2 banderas neutrales para capturar en el centro del río, en el extremo superior y en el inferior del mapa.",
+      "Subcaminos en el bosque: senderos estrechos y sinuosos de hierba, sin árboles y del mismo terreno que el bosque; cada uno une un carril con el siguiente (siempre con salida).",
+      "Ya no se ve a través de las zonas no transitables: el bosque bloquea la visión de los campeones.",
+      "Tecla B: vuelves a la base tras 10 s, con líneas blancas que suben al cielo desde un círculo en el suelo (cada vez más rápido); el campeón solo se deforma en el último segundo, desaparece rápido y reaparece en la base con las líneas bajando, (se cancela si recibes daño o si vuelves a pulsarla). La tienda pasa a la tecla P (o el botón TIENDA) y funciona dentro del círculo de curación de la base, que ahora es más grande. Las torres ya no curan ni tienen círculo de curación.",
+      "Torres: se quitó el círculo azul extra; solo queda el círculo de ataque (el mismo desde el que se puede dañar a la torre). Los súbditos básicos hacen 12 de daño de ataque.",
+      "Voces de los campeones: cada uno tiene una voz única de ElevenLabs con diálogos expresivos en español neutro. Hay hasta 3 frases distintas por habilidad (se elige una al azar, son frases características, no el nombre del poder), además de frases al seleccionar, al morir y al encontrarse con un campeón enemigo; Maduro y Diosa también hablan al atacar.",
+      "Los campeones aparecen al empezar, reaparecen al morir y regresan con B siempre junto al nexo, dentro del círculo de curación y tienda de la base principal.",
+      "Las torres exteriores (las más lejanas a la base) se movieron más adelante, más cerca del río.",
+      "Filtraciones: la arena virtual es más grande (radio 480). Cuando termina, Leandro vuelve a donde estaba antes de activarla y el enemigo también; si murió dentro, su cuerpo aparece en su posición original.",
+      "Maduro rediseñado. Q (Decreto presidencial): nivel 2 con ondas de un amarillo intenso que además aturden; nivel 3 con ondas rojas, aturdimiento más largo, mucho más daño y manchas rojas que quedan en el suelo.",
+      "Maduro, W (Colectivo protector): ahora invoca guardaespaldas permanentes. Aparecen 2 al instante y se suma uno nuevo cada 15 s (más rápido con cada nivel) hasta el máximo (5, 6 o 7). Siguen y rodean a Maduro, atacan con daño físico a los enemigos cercanos, tienen vida y pueden morir. Al subir de nivel ganan daño y vida.",
+      "Maduro, E (La cesta básica): lanza una caja en arco que queda en el mapa 1 minuto con su propia vida. Suelta cucarachas que atacan al objetivo más cercano y el área alrededor envenena a los enemigos. Con cada nivel la caja tiene más vida y los bichos son más grandes, con más vida y más armadura.",
+      "Maduro, R (Súper Bigote): al transformarse lanza una onda expansiva que empuja hacia atrás a todos los que están cerca (aliados incluidos, sin daño) y daña a los enemigos. Nivel 1 onda blanca, nivel 2 azul (empuja más lejos), nivel 3 roja (empuja aún más y hace mucho más daño).",
+      "Maduro: eliminada la pasiva Devaluación (ya no roba oro ni reduce el oro de los súbditos).",
+      "Maduro, E: la caja ahora se crea con un temporizador del juego en lugar de una animación, para que aparezca también en partidas multijugador. Las barras de la caja, el tamaño y la vida de las cucarachas y los guardaespaldas se sincronizan con los demás jugadores. Guardaespaldas y cucarachas usan sus sprites animados (caminar, atacar, morir)."
+    ]
+  },
+  {
+    "id": "0.9.39",
+    "date": "2026-11-10",
+    "version": "0.9.39",
+    "title": "Leandro: secadora con confirmación, escenario virtual y cauchos que botan",
+    "tag": "MEJORA",
+    "changes": [
+      {
+        "k": "champ",
+        "id": "leandro",
+        "d": "rework",
+        "t": "Secadora con zona de apuntado (jalar / repeler), escenario virtual en Filtraciones y cauchos que botan hacia delante con 3 niveles"
+      }
+    ],
+    "items": [
+      "Poder de la secadora (F): ya no es instantáneo, se apunta y se confirma. La zona muestra flechas hacia Leandro y color celeste para JALAR; manteniendo Mayús cambia a flechas hacia fuera y color naranja para REPELER.",
+      "Filtraciones (R): la jaula crea un escenario virtual tecnológico. Quien está dentro solo ve esa arena y el resto del mapa queda totalmente oscuro; quien está fuera no ve el terreno de la arena.",
+      "Lanzamiento de cauchos (E): los cauchos botan 3 veces siempre hacia delante. Nivel 1: normales. Nivel 2: al caer rompen el suelo y aturden un instante. Nivel 3: cauchos en llamas que además dejan fuego.",
+      "Peine (Q): Leandro cambia a su apariencia con el peine mientras dura el poder. Las animaciones definitivas están en camino.",
+      "Peine: cada golpe lanza una onda de energía en media luna hacia delante (estilo Getsuga Tenshō, de corto alcance) que atraviesa a los enemigos.",
+      "Filtraciones: un círculo de datos rodea a Leandro desde el 3er cuadro de la activación; al usarla se cancela la animación. Cauchos: la zona de apuntado ya no tiene círculo delimitador, solo muestra donde rebotará cada caucho.",
+      "Peine: la onda es más angosta y corta (solo un poco al frente de Leandro).",
+      "La ventana de elección de poder muestra a Leandro ejecutando cada versión en una animación en bucle, con el icono del poder debajo. Mientras no elijas, el poder aparece con un signo de interrogación (no atenuado).",
+      "Zoom por defecto un 20 % más lejano (mínimo 0.96, máximo 1.4 con la rueda).",
+      "Ventana de elección de poder: sin borde en el icono y con descripciones breves. Filtraciones: mientras la ventana de elección está abierta, Leandro mantiene en bucle la animación de activación desde el 3er cuadro (los cuadros 1 y 2 solo se ven al activarla).",
+      "Filtraciones: mientras eliges al campeón objetivo, cada enemigo tiene un icono de celda sobre la cabeza (el que está bajo el cursor se resalta).",
+      "Peine (Q): nivel 1 solo ataques básicos directos; nivel 2 activa las ondas; nivel 3 las ondas son rojas y hacen más daño.",
+      "Lanzamiento de cauchos: los cauchos sobrevuelan las zonas no caminables (bosque, acantilados) y pueden caer sobre ellas.",
+      "El río es poco profundo: el agua es transparente y deja ver el suelo y piedrecitas del fondo, con curvas suaves y orillas de pasto. Ya no tiene animación de corriente.",
+      "Peine: la onda tiene un diseño más detallado y animado (cuerpo luminoso con núcleo blanco, destellos interiores, estela de velocidad y chispas), en versión turquesa y roja.",
+      "Leandro: la secadora (F) tiene corto alcance al inicio y gana alcance con cada nivel (260 → 420 → 580). La Q escala en espacio: el cactus abarca una zona de radio 90 → 110 → 130 y el peine un alcance de 110 → 145 → 175 (con su onda), siendo el nivel máximo el tamaño que tenían antes.",
+      "Leandro: los pergaminos (F) escalan en alcance (más cortos que antes: 320, 440 y 560 según el nivel). Los 4 cauchos (E) tienen vida y desaparecen al agotarla: empiezan más pequeños y frágiles y en el nivel máximo tienen el tamaño de antes y mucha más vida; los 4 cauchos son siempre del mismo tamaño según el nivel.",
+      "Cauchos (E): los 4 son del mismo tamaño y están más separados; cada uno muestra su vida y debajo una barra blanca con el tiempo que le queda. Bots de IA voy (R): ya no desaparecen si Leandro muere, se enfurecen (tono rojo, más velocidad de ataque y de movimiento) y persiguen a los campeones enemigos. Bajo su vida tienen una barra blanca con el tiempo que les queda.",
+      "Zona de entrenamiento: botón ☠ MORIR para probar la muerte y los efectos del campeón; al morir se convierte en ↺ REVIVIR."
+    ]
+  },
+  {
+    "id": "0.9.38",
+    "date": "2026-11-10",
+    "version": "0.9.38",
+    "title": "Leandro: segunda rama de habilidades",
+    "tag": "NUEVO",
+    "changes": [
+      {
+        "k": "champ",
+        "id": "leandro",
+        "d": "rework",
+        "t": "Cada habilidad (Q, F, E, R) tiene ahora dos versiones; se elige una al aprenderla"
+      }
+    ],
+    "items": [
+      "Al aprender una habilidad de Leandro se abre una ventana con las dos versiones: descripción, enfriamiento, maná y el sprite del efecto. La elección vale para toda la partida.",
+      "Q Poder del peine: equipa un peine y pelea cuerpo a cuerpo; cada golpe barre un área corta al frente con daño de IA.",
+      "F Poder de la secadora: instantánea. F jala a los enemigos de la línea; Mayús + F los impulsa. Causan daño de IA y no pueden escapar mientras son arrastrados.",
+      "E Lanzamiento de cauchos: la cámara se aleja y lanzas 4 cauchos muy lejos; cada uno rebota 2 veces en línea recta con daño de IA.",
+      "R Filtraciones: 1ª activación revela a los campeones enemigos; 2ª activación te teletransporta junto a uno y crea una jaula virtual que encierra solo a los dos.",
+      "Los iconos y objetos de la rama nueva son provisionales; Codex los dibujará."
+    ]
+  },
+  {
+    "id": "0.9.37",
+    "date": "2026-11-10",
+    "version": "0.9.37",
+    "title": "Nuevo mapa de 3 carriles, muros, río y zoom con la rueda",
+    "tag": "NUEVO",
+    "changes": [],
+    "items": [
+      "Zoom con la rueda del ratón: la vista por defecto está un 20 % más cerca y ya no se puede alejar más; se puede acercar hasta un 40 % más.",
+      "El mapa se rehizo con 3 carriles rectos (superior, central e inferior) por donde avanzan los súbditos en cada oleada.",
+      "En cada carril y para cada equipo hay un muro delante de la torre: el enemigo no puede cruzarlo, pero tu equipo sí. La torre es inmune hasta que cae su muro.",
+      "Detrás de cada torre hay dos banderas de equipo: los súbditos salen de la bandera de adelante mientras la torre siga en pie; si cae, salen de la de atrás, junto a la base.",
+      "Los campamentos de refuerzos quedaron a los lados de los carriles, entre uno y otro, y sus súbditos siguen el carril al que pertenecen.",
+      "Un río cruza el mapa de arriba abajo por el centro; todas las unidades pueden caminar sobre él.",
+      "Los muros usan por ahora un dibujo provisional; Codex dibujará los definitivos."
+    ]
+  },
+  {
     "id": "0.9.36",
     "date": "2026-11-06",
     "version": "0.9.36",

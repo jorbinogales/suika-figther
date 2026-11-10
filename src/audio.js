@@ -1,7 +1,9 @@
 // Sound manager. Files come from tools/build_sfx.py -> public/assets/sfx/sfx.json (name -> [files]).
 // Usage: scene.audio.play('punch', { at: fighter }) ; scene.audio.ability(fighter, 'p1') ; scene.audio.music('music_game')
 const LS = 'devbrawl_vol';
-export const vol = (() => { let v = { sfx: 0.8, music: 0.45, voice: 0.9, ui: 1 /* ui = HUD size factor 0.5-1 */ }; try { Object.assign(v, JSON.parse(localStorage.getItem(LS) || '{}')); } catch (e) { /* ignore */ } return v; })();
+// slider value (0-1) -> gain. Loudness is perceived logarithmically, so a linear gain made the sliders barely audible: squared, a drop to 50 % is clearly quieter (25 % of the power)
+export const gv = v => v * v;
+export const vol = (() => { let v = { sfx: 0.9, music: 0.7, voice: 1, champ: 1, ui: 1 /* ui = HUD size factor 0.5-1 */, ver: 2 }; try { const s = JSON.parse(localStorage.getItem(LS) || '{}'); if (s.ver === 2) Object.assign(v, s); else if (s.ui != null) v.ui = s.ui; } catch (e) { /* ignore */ } return v; })();
 export const saveVol = () => { try { localStorage.setItem(LS, JSON.stringify(vol)); } catch (e) { /* ignore */ } };
 
 // basic attacks of non-champion units (champions use their own unique sound 'atk_<champion>')
@@ -28,7 +30,7 @@ export class Audio {
     const list = this.keys(name); if (!list || !list.length) return;
     const now = this.s.time.now;
     if (now - (this.last[name] || 0) < (o.gap ?? 60)) return;   // throttle repeated sounds
-    const g = this.gain(o.at) * (o.vol ?? 1) * vol.sfx; if (g < 0.02) return;
+    const g = this.gain(o.at) * (o.vol ?? 1) * gv(vol.sfx); if (g < 0.004) return;
     this.last[name] = now;
     const k = 'sfx_' + list[Math.random() * list.length | 0];
     if (!this.s.cache.audio.exists(k)) return;
@@ -36,9 +38,21 @@ export class Audio {
   }
 
   // every ability has its own sound(s) ('a_<champion>_<key>'): all layers of that entry play together
-  ability(f, key) { this.playAll(`a_${f.key}_${key}`, { at: f, vol: 0.95, gap: 0 }); }
+  ability(f, key) {
+    this.playAll(`a_${f.key}_${key}`, { at: f, vol: 0.95, gap: 0 });
+    if (f.isChamp) this.line(f, f.sb ? 'sb_' + key : f.branch?.[key] ? key + 'b' : key);   // the champion also shouts the name of the power
+  }
+  // champion voice lines (tools/gen_voices.py): 'select' is played by the launcher; here ability / death / meet. Only champions of the match are loaded; missing files are skipped
+  line(f, ev, o = {}) {   // returns true when a line starts playing; every event has up to 3 variants (<event>_1..3), one is picked at random
+    const vs = [1, 2, 3].map(n => `vo_${f.key}_${ev}_${n}`).filter(k => this.s.cache.audio.exists(k)); if (!vs.length) return false;
+    const now = this.s.time.now, g = this.gain(o.at === undefined ? f : o.at) * gv(vol.champ); if (g < 0.003) return false;
+    if (ev !== 'death' && now - (this.lastLine || 0) < 900) return false;   // never a flood of voices
+    const gk = f.key + ev; if (now - ((this.lineAt ||= {})[gk] || 0) < (o.gap ?? 700)) return false;
+    this.lineAt[gk] = this.lastLine = now; this.s.sound.play(vs[Math.random() * vs.length | 0], { volume: Math.min(1, g) }); return true;
+  }
   // champion basic attack (julio alternates slow/fast, jorbi's crit and eliud's hen lance have their own)
   basic(f, heavy) {
+    if (f.isChamp && Math.random() < 0.2) this.line(f, 'atk', { gap: 4000 });   // now and then the champion says a phrase while attacking
     const n = f.key === 'julio' ? (f.anim === 'attack2' ? 'atk_julio_fast' : 'atk_julio_slow') : f.key === 'jorbi' && heavy ? 'atk_jorbi_crit' : f.key === 'eliud' && f.hen ? 'atk_eliud_hen' : 'atk_' + f.key;
     this.playAll(n, { at: f, vol: 0.9 });
   }
@@ -61,7 +75,7 @@ export class Audio {
     this.vBusy = true;
     let dur = 2200;
     if (key && this.s.cache.audio.exists(key)) {
-      const sn = this.s.sound.add(key, { volume: Math.min(1, vol.voice) });
+      const sn = this.s.sound.add(key, { volume: Math.min(1, gv(vol.voice)) });
       sn.once('complete', done); sn.once('stop', done); sn.play(); this.curV = sn; dur = (sn.duration || 2) * 1000;
     } else {
       if (it.fallback) this.playAll(it.fallback, { vol: 1, gap: 0 });
@@ -75,7 +89,7 @@ export class Audio {
   playAll(name, o = {}) {
     const list = this.keys(name); if (!list || !list.length) return;
     const now = this.s.time.now; if (now - (this.last[name] || 0) < (o.gap ?? 60)) return; this.last[name] = now;
-    const g = this.gain(o.at) * (o.vol ?? 1) * vol.sfx; if (g < 0.02) return;
+    const g = this.gain(o.at) * (o.vol ?? 1) * gv(vol.sfx); if (g < 0.004) return;
     list.forEach((f, i) => { const k = 'sfx_' + f; if (this.s.cache.audio.exists(k)) this.s.sound.play(k, { volume: Math.min(1, g * (i ? 0.75 : 1)) }); });
   }
 
@@ -84,8 +98,8 @@ export class Audio {
     this.stopMusic();
     const list = this.keys(name); if (!list) return;
     const k = 'sfx_' + list[0]; if (!this.s.cache.audio.exists(k)) return;
-    this.cur = this.s.sound.add(k, { loop: true, volume: vol.music }); this.curName = name; this.cur.play();
+    this.cur = this.s.sound.add(k, { loop: true, volume: gv(vol.music) }); this.curName = name; this.cur.play();
   }
   stopMusic() { this.cur?.stop(); this.cur?.destroy(); this.cur = null; this.curName = null; }
-  refresh() { this.cur?.setVolume(vol.music); this.curV?.setVolume?.(Math.min(1, vol.voice)); }
+  refresh() { this.cur?.setVolume(gv(vol.music)); this.curV?.setVolume?.(Math.min(1, gv(vol.voice))); }
 }

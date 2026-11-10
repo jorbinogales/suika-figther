@@ -4,9 +4,10 @@ import { ITEM_BY_ID, MINI_OF, SLOTS, sellValue, buyPlan, PERM_KEYS, PERM_BY_ID, 
 // World geometry: top-down map, one horizontal lane.
 import { WORLD_W, WORLD_H, CAMPS, isWalk } from './mapdata.js';
 export { WORLD_W, WORLD_H, CAMPS };
-export const LANE_Y0 = 630, LANE_Y1 = 870;                 // middle lane (ARAM): the only open lane, minions walk it
+export const LANE_Y0 = WORLD_H / 2 - 120, LANE_Y1 = WORLD_H / 2 + 120;                 // middle lane (ARAM): the only open lane, minions walk it
 export const LANES = [{ id: 'mid', y0: LANE_Y0, y1: LANE_Y1 }];
 export const WALK_Y0 = 70, WALK_Y1 = WORLD_H - 70;
+export const towerCircle = t => (t.isNexus ? 210 : (t.def?.stats?.range || 320));   // a tower's own attack circle: structures can only be hit by attackers standing inside it (world units)
 export const BODY_R = 28;               // ground radius used for hits
 
 // Bot definitions (Leandro's ult).
@@ -15,6 +16,9 @@ export const BOT_DEFS = {
   minigun: { name: 'Torreta minigun', isBot: true, bot: 'ranged', phys: true, rapid: true, static: true, ref: 'minigun', stats: { hp: 300, mana: 0, atk: 0, ap: 0, armor: 22, mr: 12, speed: 0, run: 0, range: 440, atkCd: 0.14 }, height: 80 },
   fence: { name: 'Reja', isBot: true, bot: 'wall', static: true, ref: 'fence_h', radius: 20, stats: { hp: 420, mana: 0, atk: 0, ap: 0, armor: 30, mr: 30, speed: 0, run: 0, range: 0, atkCd: 9 }, height: 40 },
   drone: { name: 'Dron', isBot: true, bot: 'ranged', fly: true, stats: { hp: 160, mana: 0, atk: 0, ap: 0, armor: 10, mr: 10, speed: 230, run: 230, range: 340, atkCd: 0.8 }, height: 90 },
+  bodyguard: { name: 'Guardaespaldas', isBot: true, bot: 'melee', guard: true, phys: true, ref: 'bodyguard', stats: { hp: 260, mana: 0, atk: 0, ap: 0, armor: 25, mr: 15, speed: 175, run: 215, range: 70, atkCd: 0.9 }, height: 100 },   // Maduro's permanent escorts
+  crate: { name: 'Cesta', isBot: true, bot: 'crate', phys: true, ref: 'empty_box', radius: 34, stats: { hp: 220, mana: 0, atk: 0, ap: 0, armor: 10, mr: 0, speed: 0, run: 0, range: 0, atkCd: 9 }, height: 60 },   // Maduro's box: lasts a minute, spawns bugs and poisons the area
+  roach: { name: 'Cucaracha', isBot: true, bot: 'melee', phys: true, ref: 'roach', stats: { hp: 60, mana: 0, atk: 0, ap: 0, armor: 5, mr: 0, speed: 190, run: 190, range: 46, atkCd: 0.7 }, height: 62 },
   bot_melee:  { name: 'Bot', isBot: true, bot: 'melee',  stats: { hp: 140, mana: 0, atk: 0, ap: 0, armor: 10, mr: 10, speed: 170, run: 170, range: 70,  atkCd: 0.8 }, height: 100 },
   bot_ranged: { name: 'Bot', isBot: true, bot: 'ranged', stats: { hp: 90,  mana: 0, atk: 0, ap: 0, armor: 5,  mr: 5,  speed: 150, run: 150, range: 340, atkCd: 1.0 }, height: 100 },
 };
@@ -31,11 +35,11 @@ const DIR_SRC = { e: ['e', false], se: ['se', false], s: ['s', false], ne: ['ne'
 const w2g = f => f.w.gameT || 0;
 
 export const UNIT_DEFS = {
-  minion_blue_melee:  mkMinion('minion_blue_melee', 'Soldado', 110, { hp: 320, armor: 15, speed: 105, range: 70, atkCd: 1.0 }, { type: 'melee', dmg: 4.8, dmgType: 'physical', reach: 80 }, { gold: 20, xp: 28 }),
-  minion_blue_ranged: mkMinion('minion_blue_ranged', 'Fusilero', 110, { hp: 220, armor: 8, speed: 105, range: 300, atkCd: 1.1 }, { type: 'ranged', dmg: 4.2, dmgType: 'physical', proj: { vfx: 'bullet_tracer', speed: 560, scale: 1.3, r: 10 } }, { gold: 16, xp: 22 }),
+  minion_blue_melee:  mkMinion('minion_blue_melee', 'Soldado', 110, { hp: 320, armor: 15, speed: 105, range: 70, atkCd: 1.0 }, { type: 'melee', dmg: 12, dmgType: 'physical', reach: 80 }, { gold: 20, xp: 28 }),
+  minion_blue_ranged: mkMinion('minion_blue_ranged', 'Fusilero', 110, { hp: 220, armor: 8, speed: 105, range: 300, atkCd: 1.1 }, { type: 'ranged', dmg: 12, dmgType: 'physical', proj: { vfx: 'bullet_tracer', speed: 560, scale: 1.3, r: 10 } }, { gold: 16, xp: 22 }),
   minion_blue_tank:   mkMinion('minion_blue_tank', 'Tanque de guerra', 124, { hp: 500, armor: 20, mr: 20, speed: 85, range: 360, atkCd: 2.0 }, { type: 'ranged', dmg: 13.5, dmgType: 'physical', proj: { vfx: 'cannonball', speed: 420, scale: 2.2, r: 16 } }, { gold: 50, xp: 70 }),
-  minion_red_melee:   mkMinion('minion_red_melee', 'Robot', 110, { hp: 320, armor: 15, speed: 105, range: 70, atkCd: 1.0 }, { type: 'melee', dmg: 4.8, dmgType: 'physical', reach: 80 }, { gold: 20, xp: 28 }),
-  minion_red_ranged:  mkMinion('minion_red_ranged', 'Robot artillero', 110, { hp: 220, armor: 8, speed: 105, range: 300, atkCd: 1.1 }, { type: 'ranged', dmg: 4.2, dmgType: 'magic', proj: { vfx: 'plasma_shot', speed: 520, scale: 1.3, r: 10, tint: 0xff6a5a } }, { gold: 16, xp: 22 }),
+  minion_red_melee:   mkMinion('minion_red_melee', 'Robot', 110, { hp: 320, armor: 15, speed: 105, range: 70, atkCd: 1.0 }, { type: 'melee', dmg: 12, dmgType: 'physical', reach: 80 }, { gold: 20, xp: 28 }),
+  minion_red_ranged:  mkMinion('minion_red_ranged', 'Robot artillero', 110, { hp: 220, armor: 8, speed: 105, range: 300, atkCd: 1.1 }, { type: 'ranged', dmg: 12, dmgType: 'magic', proj: { vfx: 'plasma_shot', speed: 520, scale: 1.3, r: 10, tint: 0xff6a5a } }, { gold: 16, xp: 22 }),
   minion_red_auto:    mkMinion('minion_red_auto', 'Autómata', 150, { hp: 550, armor: 20, mr: 20, speed: 80, range: 95, atkCd: 1.4 }, { type: 'melee', dmg: 16.5, dmgType: 'physical', reach: 105 }, { gold: 50, xp: 70 }),
   nexus_blue: { kind: 'nexus', name: 'Nexo militar', ref: 'nexus_blue', tex: 'nexus_blue', height: 280, radius: 95, reward: { gold: 0, xp: 0 },
     stats: { hp: 6000, mana: 0, atk: 0, ap: 0, armor: 60, mr: 60, speed: 0, run: 0, range: 0, atkCd: 9 } },
@@ -66,13 +70,15 @@ export class Fighter {
     this.spawn = { x, y };
     this.owner = opts.owner || null;       // bots: the champion that summoned them
     this.ai = !!opts.ai; this.antivirus = !!opts.antivirus; this.lastTarget = null; this.invis = null; this.away = false;
-    this.life = opts.life ?? Infinity;
+    this.life = opts.life ?? Infinity; this.life0 = this.life; this.enraged = false;
     this.botAp = opts.botAp || 0; this.hpMult = opts.hpMult || 1;   // summoned bots: health multiplier (Leandro's ult scales it with his AI power)
     this.slot = opts.slot || { x: 0, y: 0 };
     this.ax = team === 0 ? 1 : -1; this.ay = 0;   // aim (unit vector on the ground)
     this.level = 1;
     this.points = this.isChamp ? 1 : 0;
     this.ranks = { p1: 0, p2: 0, p3: 0, ult: 0 };
+    this.branch = {};   // ability slot -> 1 when the second branch (def.alt) was chosen
+    this.comb = null; this.leakRe = null; this.revealT = 0;
     this.setupStacks = 0;
     this.basicCount = 0;
     this.kills = 0; this.deaths = 0; this.assists = 0;
@@ -167,7 +173,17 @@ export class Fighter {
   }
 
   /* ---------- geometry ---------- */
-  hiddenFor(me) { return this.away || this.fogHidden || ((this.invis || (this.antivirus && this.owner?.invis)) && this.baseTeam !== me.baseTeam); }
+  startRecall() {   // B: go back to the base after 4 s (taking damage cancels it; pressing it again cancels it too)
+    if (!this.alive || !this.isChamp) return;
+    if (this.recall) { this.recall = null; this.w.float(this.x, this.y - this.def.height - 34, 'Teletransporte cancelado', '#ff9a7a'); return; }
+    if (this.w.inBase(this)) return;
+    this.recall = { t: 10, T: 10 }; this.w.float(this.x, this.y - this.def.height - 34, 'Volviendo a la base...', '#7ee0ff'); this.w.vfx('summon', this.x, this.y - 10, { scale: 3, tint: 0x7ee0ff });
+  }
+  hiddenInBush(viewerTeam) {   // inside a bush: invisible to the other team unless it attacked / cast a moment ago or an enemy stands next to the bush
+    if (!this.inBush || this.brRevealT > 0) return false;
+    return !this.w.fighters.some(e => e.alive && !e.away && e.baseTeam === viewerTeam && Math.hypot(e.x - this.x, e.y - this.y) < 200);
+  }
+  hiddenFor(me) { return this.away || this.fogHidden || (this.baseTeam !== me.baseTeam && this.hiddenInBush(me.baseTeam)) || ((this.invis || (this.antivirus && this.owner?.invis)) && this.baseTeam !== me.baseTeam); }
   breakInvis() { if (this.invis) { this.invis = null; if (this.isBot) { this.w.vfx('run_dust', this.x, this.y - 6, { scale: 3, alpha: 0.9, below: true }); this.w.vfx('summon', this.x, this.y - 10, { scale: 2 }); return; } if (this.key === 'luis') this.stab = 2.5; this.w.float(this.x, this.y - this.def.height - 30, 'visible', '#9be37a'); } }
   tryMove(nx, ny) {   // forest (trees / bushes) is impassable: slide along walls
     if (isWalk(nx, this.y)) this.x = nx;
@@ -178,7 +194,7 @@ export class Fighter {
     const n = Math.max(1, Math.ceil(Math.hypot(dx, dy) / 8)), sx = dx / n, sy = dy / n;
     for (let i = 0; i < n; i++) {
       const ox = this.x, oy = this.y; this.tryMove(clamp(this.x + sx, 60, WORLD_W - 60), clamp(this.y + sy, WALK_Y0, WALK_Y1));
-      if (this.w.solidAt(this.x, this.y) || (this.x === ox && this.y === oy)) { this.x = ox; this.y = oy; return false; }
+      if (this.w.solidAt(this.x, this.y, this.team) || (this.x === ox && this.y === oy)) { this.x = ox; this.y = oy; return false; }
     }
     return true;
   }
@@ -202,7 +218,13 @@ export class Fighter {
   get ap() { return this.isBot ? this.botAp : (this.grow('ap') + this.it.ap) * (1 + this.pk('atk')); }
   get armor() { return (this.sb ? this.sb.armor : 0) + (this.armorShredT > 0 ? 1 - this.armorShred : 1) * (this.def.stats.armor + this.it.armor) * (1 + this.pk('def')) + this.pk('def') * 30 + this.setupBonus('armorPer') + (this.hen ? this.def.hen.armor : 0); }
   get mr() { return (this.sb ? this.sb.mr : 0) + (this.def.stats.mr + this.it.mr) * (1 + this.pk('def')) + this.pk('def') * 30 + this.setupBonus('mrPer') + (this.hen ? this.def.hen.mr : 0); }
-  get atkRange() { const b = this.def.basic; return this.hen ? b.hen.reach : (b?.kind === 'melee' ? b.reach : this.def.stats.range); }
+  get atkRange() { const b = this.def.basic; return this.hen ? b.hen.reach : this.comb ? this.comb.reach : (b?.kind === 'melee' ? b.reach : this.def.stats.range); }
+  // basic attack in use: Eliud's hen form and Leandro's comb turn it into a melee swing
+  get basicDef() {
+    if (this.hen) return { ...this.def.basic, ...this.def.basic.hen };
+    if (this.comb) { const a = this.def.abilities.p1; return { ...this.def.basic, kind: 'melee', type: 'magic', reach: rk(a.reach, this.ranks.p1 || 1), base: rk(a.dmg, this.ranks.p1 || 1), atkScale: 0, apScale: a.apScale, vfx: 'spark', wave: (this.ranks.p1 || 1) >= 2, waveRed: (this.ranks.p1 || 1) >= 3, waveMult: (this.ranks.p1 || 1) >= 3 ? 1.15 : 0.7 }; }  // rank 1: plain melee hits; rank 2: crescent waves; rank 3: red waves with more damage
+    return this.def.basic;
+  }
   get isRage() { return !!this.def.rage; }
   setupBonus(field) {
     if (this.key !== 'xeviche' || !this.def.abilities.p3.interval || !this.ranks.p3) return 0;
@@ -217,7 +239,7 @@ export class Fighter {
   }
   get speed() {
     const base = this.running ? this.def.stats.run : this.def.stats.speed;
-    return base * (1 - this.slows.reduce((m, s) => Math.max(m, s.pct), 0)) * (1 + (this.speedT > 0 ? this.speedBoost : 0) + this.it.speed + (this.moveT > 2 ? 0.15 * (this.pas.get('botas_hipersonicas') || 0) : 0)) * (this.hen ? 1 + this.def.hen.speed : 1) * (this.lure ? 0.45 : 1);   // the giant hen runs faster
+    return base * (this.enraged ? 1.4 : 1) * (1 - this.slows.reduce((m, s) => Math.max(m, s.pct), 0)) * (1 + (this.speedT > 0 ? this.speedBoost : 0) + this.it.speed + (this.moveT > 2 ? 0.15 * (this.pas.get('botas_hipersonicas') || 0) : 0)) * (this.hen ? 1 + this.def.hen.speed : 1) * (this.lure ? 0.45 : 1);   // the giant hen runs faster
   }
 
   /* ---------- lifecycle ---------- */
@@ -239,7 +261,7 @@ export class Fighter {
     this.dashCharges = this.key === 'jorbi' && this.ranks.p2 > 0 ? 3 : 0; this.dashTimers = []; this.dashV = null; this.castPoint = null;
     if (this.buff) { this.buff = null; this.setSkin(this.key); }
     this.hen = false; this.rage = 0; this.pkBuffs = {}; this.protein = null; this.pullTo = null; this.bike = null; this.ride = null;
-    this.qRe = null; this.cdrT = 0; this.invulT = 0; this.drT = 0; this.sShield = null; this.atkSlowT = 0; this.armorShredT = 0; this.devalT = 0; this.shove = null; this.pullMe = null; if (this.sb) this.setSB(0);
+    this.qRe = null; this.cdrT = 0; this.invulT = 0; this.drT = 0; this.sShield = null; this.atkSlowT = 0; this.armorShredT = 0; this.devalT = 0; this.shove = null; this.pullMe = null; this.comb = null; this.leakRe = null; this.revealT = 0; if (this.sb) this.setSB(0);
     if (this.skin !== this.key) this.setSkin(this.key);
   }
 
@@ -313,9 +335,14 @@ export class Fighter {
     return k !== 'ult' || this.level >= ULT_LEVELS[this.ranks.ult];
   }
 
-  spend(k) {
-    if (this.w.net?.role === 'client') return this.canSpend(k) && this.w.net.op('spend', k);
+  setBranch(k, b) {   // idempotent: swaps the ability of slot k for its second-branch version
+    if (!this.def.alt?.[k] || (this.branch[k] || 0) === b) return;
+    this.branch[k] = b; this.def = { ...this.def, abilities: { ...this.def.abilities, [k]: b ? this.def.alt[k] : (CHAMPIONS[this.key].abilities[k]) } };
+  }
+  spend(k, b = 0) {
+    if (this.w.net?.role === 'client') return this.canSpend(k) && this.w.net.op('spend', b ? k + ':1' : k);
     if (!this.canSpend(k)) return false;
+    if (!this.ranks[k] && this.def.alt?.[k]) this.setBranch(k, b ? 1 : 0);   // the choice is made when the ability is first learned
     this.ranks[k]++; this.points--;
     this.w.audio.play('ui_upgrade', { gap: 0 });
     if (this.key === 'jorbi' && k === 'p2' && this.ranks.p2 === 1) this.dashCharges = 3;
@@ -348,13 +375,13 @@ export class Fighter {
   // basic attack combo: up to 3 chained hits (see COMBOS in data.js). Bots/minions/towers keep the single swing.
   // a basic attack may be started in the middle of the previous swing once that hit has landed (animation cancel): every click throws the next hit
   chaining() { return this.alive && this.stunT <= 0 && !this.rw && this.state === 'cast' && /^attack/.test(this.anim || '') && this.fired && !this.dashV; }
-  comboCfg() { const b = this.def.basic, c = COMBOS[this.key] || (b.kind === 'melee' ? COMBOS.jorbi : COMBOS.axel); return c; }
+  comboCfg() { const b = this.basicDef, c = (this.comb ? COMBOS.jorbi : COMBOS[this.key]) || (b.kind === 'melee' ? COMBOS.jorbi : COMBOS.axel); return c; }
   // damage the NEXT basic attack (the next hit of the combo) would deal to `t`, after armour / magic resistance (used by the last-hit indicator)
   nextBasicDmg(t) {
-    const b = this.hen ? { ...this.def.basic, ...this.def.basic.hen } : this.def.basic, C = this.comboCfg(), w = this.w;
+    const b = this.basicDef, C = this.comboCfg(), w = this.w;
     const inWin = this.comboStep > 0 && this.comboStep < C.length && (w.gameT || 0) - (this.comboEnd || 0) <= COMBO_WINDOW, cs = C[inWin ? this.comboStep : 0];
     let raw;
-    if (b.kind === 'melee') raw = (b.base + this.atk * b.atkScale) * cs.dmg * (this.key === 'jorbi' && cs.fin && this.ranks.p3 > 0 ? rk(this.def.abilities.p3.critMult, this.ranks.p3) : 1);
+    if (b.kind === 'melee') raw = (b.base + this.atk * (b.atkScale || 0) + this.ap * (b.apScale || 0)) * cs.dmg * (this.key === 'jorbi' && cs.fin && this.ranks.p3 > 0 ? rk(this.def.abilities.p3.critMult, this.ranks.p3) : 1);
     else if (b.obj || !b.every3) raw = ((b.alt || (b.apScale != null && b.atkScale == null) ? b.base + this.ap * b.apScale : b.base + this.atk * b.atkScale) * cs.dmg) * (cs.shots || 1);
     else raw = (b.base + this.ap * b.apScale) * (cs.fin ? b.every3.mult * (cs.finMult || 1) : cs.dmg) * (cs.shots || 1);
     const res = b.type === 'physical' ? t.armor : b.type === 'magic' ? t.mr : 0;
@@ -365,16 +392,16 @@ export class Fighter {
     if (!(this.free || this.chaining()) || this.cds.basic > 0 || this.flame || this.ride || this.lure || this.bomber) {   // no basic attacks while the flamethrower is active
       return false;
     }
-    this.bufferT = 0; this.fIdle = 0;   // attacking pauses the Farándula recharge
-    this.cds.basic = this.def.stats.atkCd / (1 + this.pk('aspd') + this.it.aspd) / (this.atkSlowT > 0 ? 1 - this.atkSlow : 1);
+    this.bufferT = 0; this.fIdle = 0; this.brRevealT = 1.6;   // attacking pauses the Farándula recharge; attacking from a bush gives away the position
+    this.cds.basic = (this.comb?.atkCd || this.def.stats.atkCd) * (this.enraged ? 0.6 : 1) / (1 + this.pk('aspd') + this.it.aspd) / (this.atkSlowT > 0 ? 1 - this.atkSlow : 1);
     if (this.invis) this.breakInvis();
     if (this.isBot) { this.startAction('attack', 0.2, 0.4, () => this.basicDo(() => this.botAttack())); return true; }
     if (this.isMinion || this.isTower) { this.startAction('attack', 0.15, 0.35, () => this.basicDo(() => this.unitAttack())); return true; }
-    const b = this.hen ? { ...this.def.basic, ...this.def.basic.hen } : this.def.basic, C = this.comboCfg();
+    const b = this.basicDef, C = this.comboCfg();
     this.basicCount++;
     const t = w.gameT || 0, baseCd = this.cds.basic, fs = this.forceStep; this.forceStep = 0;
     // attack + move toward the aim = a single attack with a forward impulse and its own animation (not a combo hit)
-    const mv = Math.hypot(this.in?.mx || 0, this.in?.my || 0), LG = LUNGES[this.key] || (b.kind === 'melee' ? LUNGES.jorbi : LUNGES.axel);
+    const mv = Math.hypot(this.in?.mx || 0, this.in?.my || 0), LG = (this.comb ? LUNGES.jorbi : LUNGES[this.key]) || (b.kind === 'melee' ? LUNGES.jorbi : LUNGES.axel);
     if (fs === -1 || (!fs && mv > 0 && this.rootT <= 0 && (this.runT || 0) >= LUNGE_RUN_T && (this.in.mx * this.ax + this.in.my * this.ay) / mv > 0.35)) {
       let wind = (b.windup || 0.2) * LG.w, dur = (b.dur || 0.45) * LG.t; if (b.alt) { this.basicSpeed = b.slow.speed; wind = b.slow.windup * LG.w; dur = b.slow.dur * LG.t; }
       const cd = Math.max(baseCd * LG.cd, wind + 0.06), td = Math.max(0.14, wind + 0.04), cs = { anim: 'lunge', dmg: LG.dmg, reachAdd: LG.reachAdd || 0, obj: LG.obj, scale: LG.scale || 1, speed: LG.speed || 1, lungeAtk: true };
@@ -409,27 +436,31 @@ export class Fighter {
       this.startDash(); return true;
     }
     if (!this.free || this.cds[k] > 0) return false;
-    const cost = this.key === 'diosa' && k === 'p1' && this.qRe ? 0 : rk(a.mana, rank);   // Diosa: the Q recast (backflip) is free
+    const cost = (this.key === 'diosa' && k === 'p1' && this.qRe) || (this.leakRe && k === 'ult') ? 0 : rk(a.mana, rank);   // Diosa: the Q recast (backflip) is free
     if (this.mana < cost && !this.w.debugFree) return false;
     if (!this.w.debugFree) this.mana -= cost;
-    this.cds[k] = this.w.debugFree ? 0.5 : rk(a.cd, rank);
+    this.cds[k] = this.w.debugFree ? 0.5 : rk(a.cd, rank); this.brRevealT = 1.6;   // casting from a bush reveals the position
     if (location.hash) console.log('dbg cast', k, rank);
     if (this.invis && !(this.key === 'luis' && k === 'p2')) this.breakInvis();
     const map = { p1: 'power1', p2: 'power2', p3: 'power3', ult: 'ult' };
+    if (this.key === 'leandro' && a.v) { const nm = a.v === 'comb' ? 'power1b' : a.v === 'dryer' ? (this.castPoint?.x === 1 ? 'power2b_push' : 'power2b_pull') : a.v === 'throw' ? 'power3b' : 'ultb'; if (this.w.anims.exists('leandro_' + nm)) map[k] = nm; }   // branch-B cast animations (fall back to the normal ones until drawn)
     if (this.key === 'axel' && k === 'p1') { this.malware = ['virus', 'trojan', 'worm'][Math.random() * 3 | 0]; map.p1 = 'power1_' + this.malware; }
-    this.startAction(map[k], a.windup, a.dur, () => { this.w.castCtx = { f: this, k }; this.fireAbility(k, a, rank); this.w.castCtx = null; });
+    const re = this.key === 'leandro' && a.v === 'leak' && this.leakRe;   // 2nd activation of Filtraciones: no animation, it cancels the activation pose
+    this.startAction(re ? 'idle' : map[k], re ? 0.05 : a.windup, re ? 0.25 : a.dur, () => { this.w.castCtx = { f: this, k }; this.fireAbility(k, a, rank); this.w.castCtx = null; });
     return true;
   }
 
   /* ---------- effects (champion specific) ---------- */
   fireBasic(heavy = false, cs = null) {
-    const b = this.hen ? { ...this.def.basic, ...this.def.basic.hen } : this.def.basic, w = this.w; cs ||= { dmg: 1 };
+    const b = this.basicDef, w = this.w; cs ||= { dmg: 1 };
     w.audio.basic(this, heavy);
     if (b.kind === 'melee') {
-      let dmg = (b.base + this.atk * b.atkScale) * cs.dmg;
+      let dmg = (b.base + this.atk * (b.atkScale || 0) + this.ap * (b.apScale || 0)) * cs.dmg;
       const crit = heavy && this.key === 'jorbi' && this.ranks.p3 > 0;
       if (crit) dmg *= rk(this.def.abilities.p3.critMult, this.ranks.p3);   // jorbi's passive turns the finisher into a critical hit; junior's 3rd punch gets its stun from the fist counter
-      w.meleeHits(this, b.reach + (cs.reachAdd || 0)).forEach(t => {
+      const hitNow = w.meleeHits(this, b.reach + (cs.reachAdd || 0));
+      if (b.wave) w.projectile(this, { animFx: b.waveRed ? 'comb_wave_fx_red' : 'comb_wave_fx', pierce: true, hits: new Set(hitNow), scale: heavy ? 1.3 : 1.05, range: b.reach + 55, speed: 620, dmg: dmg * (b.waveMult || 0.7), type: 'magic', r: 26, basic: true });   // the comb throws a crescent wave with every swing (short range, pierces)
+      hitNow.forEach(t => {
         w.damage(this, t, dmg, b.type); this.addRage(this.def.hen?.rageHit || 0);
         if (this.key === 'luis' && this.stab > 0 && t.isChamp && (t.ax * (this.x - t.x) + t.ay * (this.y - t.y)) < 0) {   // backstab after leaving invisibility: critical AI damage
           this.stab = 0; w.damage(this, t, 60 + this.ap * 2.2, 'magic'); w.float(t.x, t.y - t.def.height - 46, '¡APUÑALADA!', '#33ff88');  w.vfx('spark', t.x, t.cy, { scale: 5, tint: 0x33ff88 });
@@ -458,6 +489,66 @@ export class Fighter {
     }
   }
 
+  // ---- Leandro, second branch: comb / hair dryer / tire throw / leaks ----
+  fireLeandroB(k, a, rank) {
+    const w = this.w, dmg = (a.dmg ? rk(a.dmg, rank) : 0) + this.ap * (a.apScale || 0);
+    if (a.v === 'comb') {
+      this.comb = { t: rk(a.time, rank), atkCd: a.atkCd, reach: rk(a.reach, rank) };
+      w.vfx('summon', this.x, this.y - 10, { scale: 3, tint: 0x66ffcc }); w.float(this.x, this.y - this.def.height - 30, '¡Poder del peine!', '#9fffd8');
+    } else if (a.v === 'dryer') {
+      const push = this.castPoint?.x === 1; this.castPoint = null;
+      const px = -this.ay, py = this.ax, L = rk(a.length, rank);
+      for (let i = 1; i <= 7; i++) w.after(i * 0.03, () => w.vfx('run_dust', this.x + this.ax * L * i / 7, this.y + this.ay * L * i / 7 - 10, { scale: 3 + i * 0.25, alpha: 0.85 }));
+      w.enemiesOf(this).forEach(t => {
+        if (t.isTower || t.def?.static) return;
+        const rx = t.x - this.x, ry = t.y - this.y, along = rx * this.ax + ry * this.ay, side = Math.abs(rx * px + ry * py);
+        if (along < 0 || along > L || side > a.width / 2 + t.br * 0.6) return;
+        w.damage(this, t, dmg, 'magic'); t.carriedT = a.hold;   // cannot act (nor escape) while dragged
+        if (push) t.shove = { vx: this.ax * a.speed, vy: this.ay * a.speed, t: a.hold }; else t.pullMe = { by: this, t: a.hold + 0.15 };
+      });
+      w.float(this.x, this.y - this.def.height - 30, push ? '¡Impulso!' : '¡Jalón!', '#ff9ad0');
+    } else if (a.v === 'throw') {
+      const c = this.castPoint || { x: this.x + this.ax * a.range * 0.6, y: this.y + this.ay * a.range * 0.6 }; this.castPoint = null;
+      w.throwTires(this, c, a, dmg);
+    } else if (a.v === 'leak') {
+      if (this.leakRe) {   // 2nd activation: teleport next to the chosen enemy and lock both of you in a virtual cage
+        const t = w.pickTarget(this, 1e6, this.castPoint || { x: this.x, y: this.y }); this.castPoint = null;
+        this.leakRe = null; this.cds.ult = rk(a.cd, rank);
+        if (!t) return;
+        w.vfx('summon', this.x, this.y - 10, { scale: 4, tint: 0x66ffcc });
+        const origin = { x: this.x, y: this.y }, tOrigin = { x: t.x, y: t.y };   // where both were before the cage
+        const side = this.team === 0 ? -1 : 1; let nx = t.x + side * 90, ny = t.y; if (!isWalk(nx, ny)) { nx = t.x - side * 90; if (!isWalk(nx, ny)) { nx = t.x; ny = t.y + 60; } }
+        this.x = nx; this.y = ny; this.ax = -side; this.ay = 0;
+        w.vfx('summon', this.x, this.y - 10, { scale: 4, tint: 0x66ffcc }); w.makeCage(this, t, a.radius, rk(a.cage, rank), origin, tOrigin);
+        w.float(this.x, this.y - this.def.height - 30, '¡Jaula virtual!', '#66ffcc');
+      } else {   // 1st activation: leak where the enemy champions are
+        const T = rk(a.reveal, rank);
+        w.fighters.forEach(e => { if (e.alive && e.isChamp && e.team !== this.team) { e.revealT = T; e.revealBy = this.team; e.revealSight = a.sight; } });
+        this.leakRe = { t: a.recast }; this.cds.ult = 0;
+        w.vfx('summon', this.x, this.y - 10, { scale: 3, tint: 0x66ffcc }); w.float(this.x, this.y - this.def.height - 30, '¡Filtración!', '#66ffcc');
+      }
+    }
+  }
+
+  // ---- Maduro: bodyguards (W) ----
+  guardTick(dt) {   // one more bodyguard every `interval` seconds until the cap; they are permanent
+    if (this.w.net?.role === 'client') return;
+    const a = CHAMPIONS.maduro.abilities.p2, r = this.ranks.p2; this.guards = (this.guards || []).filter(g => g.alive && !g.dispose);
+    const dmg = rk(a.dmg, r) + this.atk * a.atkScale, hp = rk(a.hp, r);
+    this.guards.forEach((q, i) => { const t = i / this.guards.length * Math.PI * 2; q.slot = { x: Math.cos(t) * 95, y: Math.sin(t) * 62 }; });   // evenly spread around Maduro, also after a loss
+    this.guards.forEach(g => { g.botAp = dmg; if (g.def.stats.hp !== hp) { g.hp += hp - g.def.stats.hp; g.def = { ...g.def, stats: { ...g.def.stats, hp } }; } });   // upgrades also improve the ones already out
+    if (this.guards.length >= rk(a.cap, r)) { this.guardT = rk(a.interval, r); return; }
+    if ((this.guardT = (this.guardT ?? rk(a.interval, r)) - dt) <= 0) { this.spawnGuard(); this.guardT = rk(a.interval, r); }
+  }
+  spawnGuard() {
+    const w = this.w; if (w.net?.role === 'client') return false;
+    const a = CHAMPIONS.maduro.abilities.p2, r = this.ranks.p2 || 1; this.guards = (this.guards || []).filter(g => g.alive && !g.dispose);
+    if (this.guards.length >= rk(a.cap, r)) return false;
+    const ang = Math.random() * 6.283, g = new Fighter(w, 'bodyguard', this.team, this.x + Math.cos(ang) * 70, this.y + Math.sin(ang) * 45, { ai: true, owner: this, botAp: rk(a.dmg, r) + this.atk * a.atkScale });
+    g.def = { ...g.def, stats: { ...g.def.stats, hp: rk(a.hp, r) } }; g.hp = g.maxHp; g.ax = this.ax; g.ay = this.ay; w.fighters.push(g); this.guards.push(g);
+    this.guards.forEach((q, i) => { const t = i / this.guards.length * Math.PI * 2; q.slot = { x: Math.cos(t) * 95, y: Math.sin(t) * 62 }; });   // always surrounding Maduro
+    w.vfx('summon', g.x, g.y - 10, { scale: 2.4 }); return true;
+  }
   // ---- Diosa Canales ----
   diosaStealth() {   // passive: after killing a champion she vanishes for a few seconds, until she attacks or casts
     this.invis = { t: this.def.passive.invis, trail: 0.15 }; this.w.vfx('summon', this.x, this.y - 10, { scale: 3, tint: 0xff4fa3 }); this.w.float(this.x, this.y - this.def.height - 34, 'Fuera de escena...', '#ff9ad0');
@@ -525,30 +616,34 @@ export class Fighter {
       this.sb = null; this.def = this.defN; this.comboStep = 0; this.speedT = 0; this.speedBoost = 0; this.setSkin('maduro'); if (still) this.spr.setTexture('ref_maduro');
     }
   }
-  stealGold(n) {   // Maduro's passive: every 1000 gold stolen gives a permanent shield
-    const P = this.def.passive; this.gold += n; this.stolen = (this.stolen || 0) + n;
-    while (this.stolen >= ((this.stolenN || 0) + 1) * P.per) { this.stolenN = (this.stolenN || 0) + 1; this.shieldHp += P.shield; this.shieldT = Infinity; this.w.float(this.x, this.y - this.def.height - 34, `+${P.shield} escudo`, '#ffe27a'); this.w.vfx('shield', this.x, this.cy, { scale: 2.2, tint: 0xffe27a, alpha: 0.7 }); }
-  }
   fireMaduro(k, a, rank) {
     const w = this.w, sb = !!this.sb;
     const line = L => [{ x: this.x, y: this.y }, { x: this.x + this.ax * L, y: this.y + this.ay * L }];
     const byDist = (p, q) => Math.hypot(p.x - this.x, p.y - this.y) - Math.hypot(q.x - this.x, q.y - this.y);
     if (k === 'ult') {   // Súper Bigote: global slow, speed, armour
       this.setSB(a.time); this.sb.armor = rk(a.armor, rank); this.sb.mr = rk(a.mr, rank); this.speedBoost = a.speed; this.speedT = a.time;
-      w.vfx('shockwave', this.x, this.y - 6, { scale: 9, below: true, tint: 0xff4a3a }); w.vfx('levelup', this.x, this.y - 10, { scale: 5 }); w.vfx('buff', this.x, this.cy, { scale: 3.5, tint: 0xff4a3a });
-      w.enemiesOf(this).forEach(t => t.slow(a.slow, a.slowTime));
+      const R = rk(a.radius, rank), P = rk(a.push, rank), D = rk(a.dmg, rank) + this.ap * a.apScale, col = [0xffffff, 0x4aa3ff, 0xff3a3a][Math.min(2, rank - 1)];   // white / blue / red shockwave
+      for (let i = 0; i < 4; i++) w.after(i * 0.06, () => w.vfx('shockwave', this.x, this.y - 6, { scale: R / 40 * (0.55 + i * 0.25), below: true, tint: col }));
+      w.vfx('levelup', this.x, this.y - 10, { scale: 5 }); w.vfx('buff', this.x, this.cy, { scale: 3.5, tint: col }); w.zoneDecal(this.x, this.y, R, col, 0.9);
+      w.fighters.forEach(t => {   // everybody around is pushed back (allies too, without damage)
+        if (t === this || !t.alive || t.away || t.isTower || t.def?.static || t.def?.bot === 'crate') return;
+        const dx = t.x - this.x, dy = t.y - this.y, d = Math.hypot(dx, dy) || 1; if (d > R) return;
+        const amt = P * (t.isChamp ? 1 : 0.6) * (1 - 0.35 * d / R); t.shove = { vx: dx / d * amt / 0.3, vy: dy / d * amt / 0.3, t: 0.3 }; t.carriedT = Math.max(t.carriedT || 0, 0.3);
+        if (t.team !== this.team) { w.damage(this, t, D, 'magic'); w.vfx('spark', t.x, t.cy, { scale: 3, tint: col }); }
+      });
       w.float(this.x, this.y - this.def.height - 50, '¡Con mi mano de hierro, destruiré el sabotaje enemigo!', '#ffe27a');
-      w.showBanner?.({ title: '¡APARICIÓN DE SÚPER BIGOTE!', sub: 'Los enemigos del mapa se ralentizan', team: this.baseTeam, face: w.faceOf?.(this) }, 2200);
+      w.showBanner?.({ title: '¡APARICIÓN DE SÚPER BIGOTE!', sub: 'La onda expansiva empuja a todos hacia atrás', team: this.baseTeam, face: w.faceOf?.(this) }, 2200);
       return;
     }
-    if (k === 'p1' && !sb) {   // megaphone: damage + silence along a line, the second champion is also slowed
-      const dmg = rk(a.dmg, rank) + this.ap * a.apScale, pts = line(a.length);
-      for (let i = 1; i <= 6; i++) w.vfx('shockwave', this.x + this.ax * a.length * i / 6, this.y + this.ay * a.length * i / 6 - 8, { scale: 1 + i * 0.35, tint: 0xffd23f, alpha: 0.8 });
+    if (k === 'p1' && !sb) {   // megaphone: damage + silence along a line (+ stun from rank 2); the waves are pale yellow / intense yellow / red
+      const dmg = rk(a.dmg, rank) + this.ap * a.apScale, pts = line(a.length), col = [0xfff0b0, 0xffd000, 0xff2a2a][Math.min(2, rank - 1)], stun = rk(a.stun, rank);
+      for (let i = 1; i <= 6; i++) w.vfx('shockwave', this.x + this.ax * a.length * i / 6, this.y + this.ay * a.length * i / 6 - 8, { scale: 1 + i * 0.35, tint: col, alpha: 0.9 });
+      if (rank >= 3) for (let i = 1; i <= 8; i++) w.addStain(this.x + this.ax * a.length * i / 8, this.y + this.ay * a.length * i / 8, 38 + (i % 3) * 10, a.stainTime);   // red stains on the ground
       let champs = 0;
       w.enemiesOf(this).filter(t => w.nearPath(pts, t.x, t.y, a.width / 2 + BODY_R * 0.6)).sort(byDist).forEach(t => {
-        w.damage(this, t, dmg, 'magic'); t.silenceT = Math.max(t.silenceT, a.silence);
+        w.damage(this, t, dmg, 'magic'); t.silenceT = Math.max(t.silenceT, a.silence); if (stun > 0 && !t.isTower && !t.def?.static) t.stun(stun);
         if (t.isChamp && ++champs === 2) t.slow(a.slowPct, a.slowTime);
-        w.vfx('spark', t.x, t.cy, { scale: 2.5, tint: 0xffd23f });
+        w.vfx('spark', t.x, t.cy, { scale: 2.5, tint: col });
       });
     } else if (k === 'p1') {   // Puño de hierro: fly forward and smash the ground; the first champion hit is stunned
       const dmg = rk(a.dmg, rank) + this.atk * a.atkScale, dur = 0.2, pts = line(a.dist + 70);
@@ -562,26 +657,14 @@ export class Fighter {
         if (tgt?.alive) { w.damage(this, tgt, dmg, 'physical'); tgt.stun(a.stun); }
         w.enemiesNear(this.team, ix, iy, a.radius).filter(t => t !== tgt).forEach(t => w.damage(this, t, dmg * a.splash, 'physical'));
       });
-    } else if (k === 'p2' && !sb) {   // bodyguards: -x % damage taken, melee enemies nearby are hurt and pushed away
-      this.drT = rk(a.time, rank); this.drPct = rk(a.dr, rank); const dmg = rk(a.dmg, rank) + this.atk * a.atkScale;
-      for (let i = 0; i < 6; i++) w.vfx('summon', this.x + Math.cos(i * 1.047) * 70, this.y + Math.sin(i * 1.047) * 45 - 20, { scale: 1.6 });
+    } else if (k === 'p2' && !sb) {   // bodyguards: 2 appear instantly, more come over time up to the cap (see guardTick)
+      for (let i = 0; i < a.initial; i++) this.spawnGuard(); this.guardT = rk(a.interval, rank);
       w.vfx('shockwave', this.x, this.y - 6, { scale: 4, below: true, tint: 0x7ee0ff });
-      w.enemiesNear(this.team, this.x, this.y, a.radius).filter(t => t.def.basic?.kind === 'melee' || t.isMinion).forEach(t => {
-        w.damage(this, t, dmg, 'physical'); const dx = t.x - this.x, dy = t.y - this.y, d = Math.hypot(dx, dy) || 1; t.shove = { vx: dx / d * a.push / 0.2, vy: dy / d * a.push / 0.2, t: 0.2 };
-      });
     } else if (k === 'p2') {   // Escudo antimperialista: blocks the first hit / CC, then bursts
       this.sShield = { t: rk(a.time, rank), r: a.radius, mult: a.burst, base: a.base };
       w.vfx('shield', this.x, this.cy, { scale: 3, tint: 0x66b0ff, alpha: 0.8 }); w.vfx('shockwave', this.x, this.y - 6, { scale: 3, below: true, tint: 0x66b0ff });
-    } else if (k === 'p3' && !sb) {   // empty supply box: enemies = Desabastecimiento, allies = speed (and they pay a little health)
-      const c = this.castPoint || w.aiPoint(this, a.range), T = rk(a.time, rank); this.castPoint = null;
-      w.zoneDecal(c.x, c.y, a.radius, 0xffd23f, 1.4); w.vfx('shockwave', c.x, c.y, { scale: 3, below: true, tint: 0xffd23f });
-      w.after(0.35, () => {
-        w.smokePuff(c.x, c.y, 190, 3);
-        w.enemiesNear(this.team, c.x, c.y, a.radius).forEach(t => { t.atkSlowT = Math.max(t.atkSlowT || 0, T); t.atkSlow = a.aspd; t.atkSlowSrc = 'supply'; if (t.isChamp) t.wound(a.heal, T); });
-        w.fighters.filter(f => f.isChamp && f.alive && f.team === this.team && f !== this && Math.hypot(f.x - c.x, f.y - c.y) <= a.radius).forEach(f => {
-          f.speedBoost = rk(a.ally, rank); f.speedT = a.allyTime; f.hp = Math.max(1, f.hp - f.maxHp * a.drain); w.float(f.x, f.y - f.def.height - 30, '¡Lealtad!', '#ffd23f');
-        });
-      });
+    } else if (k === 'p3' && !sb) {   // the box is thrown, lands and stays on the map (see World.throwBox)
+      const c = this.castPoint || w.aiPoint(this, a.range); this.castPoint = null; w.throwBox(this, c, a, rank);
     } else {   // Mano de hierro: grabs the first enemy on the line, pulls him in and breaks his armour
       const dmg = rk(a.dmg, rank) + this.atk * a.atkScale, pts = line(a.range);
       const tgt = w.enemiesOf(this).filter(t => w.nearPath(pts, t.x, t.y, a.width / 2 + BODY_R * 0.6)).sort((p, q) => (q.isChamp ? 1 : 0) - (p.isChamp ? 1 : 0) || byDist(p, q))[0];
@@ -594,15 +677,17 @@ export class Fighter {
   fireAbility(k, a, rank) {
     const w = this.w;
     w.audio.ability(this, k);
+    if (this.key === 'leandro' && a.v) return this.fireLeandroB(k, a, rank);
     switch (this.key + ':' + k) {
       case 'diosa:p1': case 'diosa:p2': case 'diosa:p3': case 'diosa:ult': this.fireDiosa(k, a, rank); break;
       case 'maduro:p1': case 'maduro:p2': case 'maduro:p3': case 'maduro:ult': this.fireMaduro(k, a, rank); break;
       case 'leandro:p1': {
         const dmg = rk(a.dmg, rank) + this.ap * a.apScale, stun = rk(a.stun, rank);
         const c = this.castPoint || w.aiPoint(this, a.range); this.castPoint = null;
-        w.zoneDecal(c.x, c.y, a.radius, 0x7dff5a, 1.6);
-        w.cacti(c.x, c.y, a.radius);
-        w.after(0.25, () => w.enemiesNear(this.team, c.x, c.y, a.radius).forEach(t => { w.damage(this, t, dmg, 'magic'); t.stun(stun); }));
+        const rad = rk(a.radius, rank);   // the zone grows with the level
+        w.zoneDecal(c.x, c.y, rad, 0x7dff5a, 1.6);
+        w.cacti(c.x, c.y, rad);
+        w.after(0.25, () => w.enemiesNear(this.team, c.x, c.y, rad).forEach(t => { w.damage(this, t, dmg, 'magic'); t.stun(stun); }));
         break;
       }
       case 'leandro:p2': {   // contracts fan out toward the front; each one that hits an enemy infects the area around it
@@ -610,7 +695,7 @@ export class Fighter {
         for (let i = 0; i < n; i++) {
           const ang = n > 1 ? (i / (n - 1) - 0.5) * a.spread : 0;
           w.projectile(this, {
-            ang, speed: a.speed, dmg, type: 'magic', obj: 'contract', spin: true, scale: 0.13, r: 18,
+            ang, speed: a.speed, range: rk(a.reach, rank), dmg, type: 'magic', obj: 'contract', spin: true, scale: 0.13, r: 18,
             onImpact: (x, y) => w.infectZone(this, x, y, rad, life, total),
           });
         }
@@ -620,7 +705,7 @@ export class Fighter {
         {
         const c = this.castPoint || { x: this.x + this.ax * a.offset, y: this.y + this.ay * a.offset };
         this.castPoint = null;
-        w.tires(this, c.x, c.y, rk(a.life, rank));
+        w.tires(this, c.x, c.y, rk(a.life, rank), rk(a.size, rank), rk(a.hp, rank));
       }
         break;
       case 'leandro:ult': {
@@ -840,8 +925,8 @@ export class Fighter {
     if (!t) return;
     this.setAim(t.x - this.x, t.y - this.y);
     if (this.def.bot === 'melee') {
-      this.w.damage(this, t, this.botAp, 'magic');
-      this.w.vfx('spark', t.x, t.cy, { scale: 2.5 });
+      this.w.damage(this, t, this.botAp, this.def.phys ? 'physical' : 'magic');
+      this.w.vfx('spark', t.x, t.cy, { scale: this.def.guard ? 2.2 : 1.6, tint: this.def.guard ? 0xffffff : 0xb8e06a });
     } else {
       if (this.def.static) { this.fireT = this.def.rapid ? 0.3 : 0.45; if (!this.def.rapid) this.w.vfx('spark', this.x + this.ax * (this.def.height * 0.55), this.y - this.def.height * 0.55, { scale: 1.8, tint: 0x9ff0ff }); }   // muzzle flash + the 'firing' picture for a moment
       if (this.def.rapid) { const sp = (Math.random() - 0.5) * 0.06, c = Math.cos(sp), sn = Math.sin(sp), ox = this.ax, oy = this.ay; this.ax = ox * c - oy * sn; this.ay = ox * sn + oy * c; this.w.projectile(this, { range: this.def.stats.range + 60, speed: 1100, dmg: this.botAp, type: 'physical', vfx: 'bullet_tracer', scale: 1.0, r: 8 }); this.ax = ox; this.ay = oy; }
@@ -956,7 +1041,6 @@ export class Fighter {
     if (this.sShield) add('sshield', 'Escudo antimperialista', this.sShield.t, false, 'Bloquea el primer ataque o control de masas que te golpee.', { tint: 0x66b0ff });
     if (this.atkSlowT > 0 && this.atkSlowSrc === 'supply') add('supply', 'Desabastecimiento', this.atkSlowT, true, 'Menos velocidad de ataque y de curación.', { tint: 0xffb040 });
     if (this.armorShredT > 0) add('shred', 'Armadura rota', this.armorShredT, true, `Tu armadura se reduce un ${Math.round(this.armorShred * 100)} %.`, { tint: 0xc0c8d8 });
-    if (this.devalT > 0) add('deval', 'Devaluación', this.devalT, true, 'Maduro te roba un 5 % del oro que ganas.', { tint: 0xffd23f });
     if (this.woundT > 0) add('wound', 'Herida', this.woundT, true, `Recibes un ${Math.round(this.woundPct * 100)} % menos de curación, regeneración y robo de vida.`, { icon: 'icon_wound', name: 'Herida', tint: 0xff5a5a });
     if (this.slows.length) add('slow', 'Ralentizado', Math.max(...this.slows.map(s => s.t)), true, 'Te mueves más lento.', { icon: 'icon_slow', name: 'Ralentización', tint: 0x7ee0ff });
     if (this.poisons.some(p => p.burn)) add('burn', 'Quemado', Math.max(...this.poisons.filter(p => p.burn).map(p => p.t)), true, 'Recibes daño de fuego cada medio segundo.', { icon: 'icon_burn', name: 'Quemadura', by: (() => { const s = this.poisons.find(p => p.burn)?.src; return (s?.owner || s)?.def?.name || ''; })(), tint: 0xff5a2a });
@@ -993,6 +1077,7 @@ export class Fighter {
     if (this.flame) { this.flame.spr?.destroy(); this.flame = null; }   // Junior dying mid-flamethrower: the jet disappears with him
     this.playAnim('death', 0.9);
     {
+      if (this.isChamp) this.w.audio.line(this, 'death');
       const au = this.w.audio, big = this.isNexus ? 'nexus_destroy' : this.isTower ? 'explosion_big' : null;
       if (big) au.play(big, { at: this, vol: 1, gap: 0 });
       else if (this.isChamp) au.play('champ_death', { at: this, vol: 0.9, gap: 0 });
@@ -1047,7 +1132,9 @@ export class Fighter {
     }
     if (this.isBot) {
       this.life -= dt;
-      if (this.life <= 0 || (this.owner && !this.owner.alive)) { this.dispose = true; return; }
+      if (this.life <= 0) { this.dispose = true; return; }
+      if (this.owner && !this.owner.alive && this.key.startsWith('bot_') && !this.enraged) { this.enraged = true; this.w.vfx('shockwave', this.x, this.y - 6, { scale: 2.2, below: true, tint: 0xff3b3b }); this.w.float(this.x, this.y - this.def.height - 20, '¡FURIA!', '#ff5a5a'); }   // Leandro's bots do not vanish when he dies: they go berserk (red, faster attacks and movement)
+      else if (this.owner && !this.owner.alive && !this.key.startsWith('bot_')) { this.dispose = true; return; }
     }
     if (this.rw) {   // being rewound by Jorbi's ultimate: slide back along the recorded path
       const rw = this.rw; rw.t += dt;
@@ -1081,7 +1168,11 @@ export class Fighter {
       this.gold += dt * 3.2;
       if (w.inBase(this)) { this.hp = Math.min(this.maxHp, this.hp + this.maxHp * 0.10 * dt); if (this.maxMana && !this.def.farandula) this.mana = Math.min(this.maxMana, this.mana + this.maxMana * 0.10 * dt); }
     }
-    if (this.recall) { if ((this.recall.t -= dt) <= 0) { this.recall = null; w.vfx('summon', this.x, this.y - 10, { scale: 4 }); this.x = this.spawn.x; this.y = this.spawn.y; w.vfx('summon', this.x, this.y - 10, { scale: 4 }); w.audio.play('ui_open', { at: this, gap: 0 }); } else if (this.stunT > 0) this.recall = null; }
+    if (this.recall) { const R = this.recall; if ((R.t -= dt) <= 0) { this.recall = null; this.recallFx = { phase: 'out', t: 0.25 }; w.audio.play('ui_open', { at: this, gap: 0 }); } else if (this.stunT > 0) this.recall = null; }
+    if (this.recallFx) {   // return to base: the champion is stretched into the sky and vanishes, then rebuilds at the base with the same wave coming back down
+      const F = this.recallFx; F.t -= dt; this.carriedT = Math.max(this.carriedT || 0, 0.15); this.invulT = Math.max(this.invulT || 0, 0.15);
+      if (F.t <= 0) { if (F.phase === 'out') { this.x = this.spawn.x; this.y = this.spawn.y; this.recallFx = { phase: 'in', t: 0.4 }; w.audio.play('ui_open', { at: this, gap: 0 }); } else this.recallFx = null; }
+    }
     if (this.protein) {   // healing over time; any damage breaks it (see world.damage)
       this.protein.t -= dt; this.protein.tick += dt;
       if (this.protein.t <= 0) this.protein = null;
@@ -1097,15 +1188,16 @@ export class Fighter {
     }
     if (this.invulT > 0) this.invulT -= dt;
     if (this.cdrT > 0) { this.cdrT -= dt; for (const k of ['p1', 'p2', 'p3']) if (this.cds[k] > 0) this.cds[k] = Math.max(0, this.cds[k] - dt); }   // Show principal: abilities recharge twice as fast
+    if (this.key === 'leandro' && !!this.leakRe !== !!this._lkw) { this._lkw = !!this.leakRe; if (this.state === 'idle' && this.hasAnims) this.playAnim('idle'); }
+    if (this.key === 'leandro') { const want = this.comb ? 'leandro_comb' : 'leandro'; if (this.skin !== want) this.setSkin(want); }   // comb in hand while the power lasts
+    if (this.comb && (this.comb.t -= dt) <= 0) { this.comb = null; this.w.float(this.x, this.y - this.def.height - 30, 'Peine guardado', '#9fffd8'); }
+    if (this.key === 'maduro' && this.alive && this.ranks.p2 > 0) this.guardTick(dt);
+    if (this.revealT > 0) this.revealT -= dt; if (this.brRevealT > 0) this.brRevealT -= dt;
+    if (this.leakRe && (this.leakRe.t -= dt) <= 0) { this.leakRe = null; this.cds.ult = rk(this.def.abilities.ult.cd, this.ranks.ult || 1); }   // the 2nd activation window closed: the full cooldown starts
     if (this.qRe && (this.qRe.t -= dt) <= 0) { this.qRe = null; this.cds.p1 = Math.max(this.cds.p1, rk(this.def.abilities.p1.cd, this.ranks.p1 || 1)); }   // the recast window closed: the full cooldown starts
     if (this.drT > 0) this.drT -= dt; if (this.armorShredT > 0) this.armorShredT -= dt;
     if (this.sShield && (this.sShield.t -= dt) <= 0) { this.sShield = null; this.w.float(this.x, this.y - this.def.height - 30, 'Escudo agotado', '#c0c8d8'); }
     if (this.sb && (this.sb.t -= dt) <= 0) { this.setSB(0); this.w.vfx('summon', this.x, this.y - 10, { scale: 3 }); this.w.float(this.x, this.y - this.def.height - 30, 'Maduro', '#ffe27a'); }
-    if (this.devalT > 0) {   // Maduro's passive: while marked, 5 % of every gold this champion earns goes to Maduro
-      this.devalT -= dt; const d = this.gold - (this.goldPrev ?? this.gold), by = this.devalBy;
-      if (d > 0 && by?.alive !== undefined && by.key === 'maduro') { const st = d * by.def.passive.steal; this.gold -= st; by.stealGold(st); }
-      this.goldPrev = this.gold;
-    } else this.goldPrev = null;
     if (this.shove) { const sv = this.shove; sv.t -= dt; if (!this.dashStep(sv.vx * dt, sv.vy * dt) || sv.t <= 0) this.shove = null; }
     if (this.pullMe) { const pm = this.pullMe, by = pm.by, dx = by.x + by.ax * 62 - this.x, dy = by.y + by.ay * 62 - this.y, dd = Math.hypot(dx, dy) || 1; pm.t -= dt; this.carriedT = 0.12; if (dd < 14 || pm.t <= 0 || !by.alive || !this.dashStep(dx / dd * 1100 * dt, dy / dd * 1100 * dt)) this.pullMe = null; }
     if (this.blindT > 0) this.blindT -= dt;
@@ -1120,7 +1212,7 @@ export class Fighter {
     if (this.key === 'jorbi') this.cds.p2 = this.dashCharges > 0 || !this.dashTimers.length ? 0 : Math.min(...this.dashTimers);
     if (this.buff && (this.buff.t -= dt) <= 0) this.endBuff();
     if (this.maxMana) this.mana = Math.min(this.maxMana, this.mana + dt * (w.debugFree ? 99 : 0.5));
-    if (!this.isTower) this.hp = Math.min(this.maxHp, this.hp + dt * this.maxHp * 0.004);   // structures never regenerate
+    if (!this.isTower && !this.def.lane) this.hp = Math.min(this.maxHp, this.hp + dt * this.maxHp * 0.004);   // structures never regenerate
     if (this.isChamp && this.ai && this.retreat && Math.hypot(this.x - this.spawn.x, this.y - this.spawn.y) < 260) { this.hp = Math.min(this.maxHp, this.hp + dt * this.maxHp * 0.07); this.mana = Math.min(this.maxMana, this.mana + dt * this.maxMana * 0.05); }   // base fountain for retreating AI
     this.slows = this.slows.filter(s => (s.t -= dt) > 0);
     if (this.woundT > 0) this.woundT -= dt;
@@ -1241,7 +1333,7 @@ export class Fighter {
     if (this.isChamp) this.ring = s.add.ellipse(this.x, this.y, this.def.height * 0.85, this.def.height * 0.34, 0xffffff, 0.1).setStrokeStyle(3, 0xffffff, 0.85);
   }
 
-  tintBot() { if (this.antivirus && this.hasAnims) return; if (this.antivirus) { this.spr.setTint(0xa0ffc0); return; } if (this.isBot && !this.hasAnims) this.spr.setTint(this.team === 0 ? 0xb8fff0 : 0xffb8a8); }
+  tintBot() { if (this.def.guard || this.def.bot === 'crate' || this.key === 'roach') return; if (this.antivirus && this.hasAnims) return; if (this.antivirus) { this.spr.setTint(0xa0ffc0); return; } if (this.isBot && !this.hasAnims) this.spr.setTint(this.team === 0 ? 0xb8fff0 : 0xffb8a8); }
 
   // direction the sprite faces: where it walks while moving, else where it aims. Sector changes need to pass the sector edge by a margin (no flicker on the diagonals).
   curDir() {
@@ -1255,6 +1347,7 @@ export class Fighter {
 
   playAnim(name, dur, reverse = false, keep = false) {
     if (!this.hasAnims) return;
+    if (name === 'idle' && this.key === 'leandro' && this.leakRe && this.w.anims.exists('leandro_ultb_loop')) name = 'ultb_loop';   // while the Filtraciones window is open Leandro keeps the activation pose cycling (frames 3+)
     const held = this.flame && (name === 'idle' || name === 'walk' || name === 'run');   // flamethrower stays in his hands while it is active
     if (held) name = 'power3';
     const d = this.curDir(), [sfx, mir] = DIR_SRC[d];
@@ -1285,13 +1378,21 @@ export class Fighter {
     if (!me || this.outlined) return;
     this.outlined = true;
     if (this.ring) return;   // champions already have their ring (buildSprite)
-    const col = this.team === me.baseTeam ? 0x3b82f6 : 0xff3b3b, wd = this.isTower ? (this.def.radius || 40) * 2.1 : this.def.height * 0.6;
-    this.ring = this.w.add.ellipse(this.x, this.y, wd, wd * (this.isTower ? 0.5 : 0.4), col, 0.14).setStrokeStyle(2, col, 0.75);
+    if (this.isTower && !this.isNexus) return;   // towers: only the attack-range ring of drawTowerRanges (no second blue circle)
+    const col = this.team === me.baseTeam ? 0x3b82f6 : 0xff3b3b, wd = this.isTower ? towerCircle(this) * 2 : this.def.height * 0.6;
+    this.ring = this.w.add.ellipse(this.x, this.y, wd, wd * (this.isTower ? 0.75 : 0.4), col, this.isTower ? 0.08 : 0.14).setStrokeStyle(this.isTower ? 3 : 2, col, this.isTower ? 0.9 : 0.75);
   }
 
   // blinded player: only units inside the (blurred) vision area can be seen
+  recallDeform() {   // 0..1: how much the champion is stretched while returning to the base
+    if (this.recall) { const k = Math.max(0, 1 - this.recall.t); return k * k * 0.5; }   // the stretch only shows in the last second
+    const F = this.recallFx; if (!F) return 0;
+    return F.phase === 'out' ? 0.5 + 0.5 * (1 - F.t / 0.25) : F.t / 0.4;
+  }
   render(time) {
+    if (this._rb) { this.spr.setScale(this._rb[0], this._rb[1]); this._rb = null; }   // undo last frame's stretch before the normal render
     this.renderInner(time);
+    { const D = this.recallDeform(); if (D > 0 && this.alive) { const spr = this.spr; this._rb = [spr.scaleX, spr.scaleY]; spr.setScale(spr.scaleX * (1 - 0.55 * D), spr.scaleY * (1 + 2.2 * D)); const F = this.recallFx; spr.setAlpha(spr.alpha * (!F ? 1 : F.phase === 'out' ? Math.max(0, 1 - (D - 0.5) * 2) : 1 - D)); if (F) this.shadow.setAlpha(this.shadow.alpha * (F.phase === 'out' ? Math.max(0, 1 - (D - 0.5) * 2) : 1 - D)); } }
     if (this.drop) {   // falls from above (the sprite is lifted by the remaining height) and appears once it is released
       const d = this.drop, p = Math.max(0, Math.min(1, d.t / d.dur)), lift = d.slide ? Math.sin(p * Math.PI) * 60 + d.h * (1 - p) : d.h * (1 - p * p);
       this.spr.y -= lift; this.spr.setAlpha(d.t < 0 ? 0 : 1); this.shadow.setAlpha(d.t < 0 ? 0 : 0.15 + 0.3 * p).setScale(this.def.height / 32 * 0.8 * (0.5 + 0.5 * p), this.def.height / 32 * 0.4 * (0.5 + 0.5 * p));
@@ -1315,6 +1416,7 @@ export class Fighter {
     if (this.isChamp && this.alive && this.state !== 'dead') { if (this.charmT > 0) spr.setTint(0xffe9a0); else if (this.silenceT > 0) spr.setTint(0xd9b0ff); else if (this.lure) spr.setTint(0xff9ccb); else if (this.poisoned) spr.setTint(0x9dffa0); else if (!this.flashing) spr.clearTint(); }   // poisoned: green filter
     this.drawPoison(); this.drawShield(); this.drawStun();
     spr.setDepth(this.y).setAlpha(this.alive ? 1 : this.isTower && !this.dirFrames ? 0.35 : 0.92);
+    if (this.enraged && this.alive) spr.setTint(0xff4a4a);
     if (this.ring) {
       const me = this.w.player, col = this === me ? 0x3ddc84 : this.team === me.baseTeam ? 0x3b82f6 : 0xff3b3b, sel = this.w.selected === this;
       this.ring.setPosition(this.x, this.y).setDepth(this.y - 3).setVisible(this.alive && !this.hiddenFor(me));
@@ -1323,6 +1425,7 @@ export class Fighter {
     }
     this.shadow.setPosition(this.x, this.y).setDepth(this.y - 1).setAlpha(this.alive ? 0.45 : 0.25);
     if (this.away || this.fogHidden || this.invis || (this.antivirus && this.owner?.invis)) { const hid = this.hiddenFor(this.w.player), al = hid ? 0 : 0.4; spr.setAlpha(al); this.shadow.setAlpha(al * 0.45); }
+    if (this.inBush && !this.away && !this.fogHidden && !this.invis) { const pw = this.w.pc || this.w.player, hid = this.hiddenFor(pw), al = hid ? 0 : this.baseTeam === pw.baseTeam ? 0.6 : 1; spr.setAlpha(al); this.shadow.setAlpha(al * 0.45); }   // bush: invisible to the other team, see-through for allies
     if (this.isTower && !this.alive) { spr.setPosition(this.x, this.y).setAlpha(1).setDepth(this.y - 4); return; }   // wreck/rubble stays on the ground
     if (this.dirFrames) {   // tower: pick the sprite that points where it shoots
       if (!this.alive) { spr.setPosition(this.x, this.y).setAlpha(1).setDepth(this.y - 4); return; }   // wreck/rubble stays on the ground
@@ -1343,7 +1446,7 @@ export class Fighter {
       const W = this.w, nm = this.def.ref;
       if (this.def.bot === 'wall') {   // the fence: one long straight image laid on the ground (top-down)
         const key = this.def.vert ? 'fence_v' : 'fence_h'; if (W.textures.exists(key) && spr.texture.key !== key) spr.setTexture(key);
-        if (W.textures.exists(key)) { const L = this.def.len || 300; const k = (L + 40) / (this.def.vert ? spr.height : spr.width); spr.setOrigin(0.5, 0.5).setScale(k).setPosition(this.x, this.y).setDepth(this.y - 6).setFlipX(false); }
+        if (W.textures.exists(key)) { const L = this.def.len || 300; const k = (L + 40) / (this.def.vert ? spr.height : spr.width); spr.setOrigin(0.5, 0.5).setScale(k).setPosition(this.x, this.y).setDepth(this.y - 6).setFlipX(false); if (this.def.tint) spr.setTint(this.def.tint); }
         return;
       }
       const st = this.def.anim || nm, fireKey = 'st_' + st + '_fire', idleKey = 'st_' + st + '_idle';

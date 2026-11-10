@@ -1,25 +1,20 @@
-// Walkability map (ARAM-style): one open middle lane + two winding forest paths (north / south) + the two bases.
-// Everything else is dense forest (trees and bushes): impassable.
-export const WORLD_W = 3200, WORLD_H = 1500, CELL = 64;
+// Walkability map: three CURVED lanes (top / middle / bottom) joined by the two bases; a river crosses the map and can only be forded where it meets a lane.
+// Everything else is dense forest (trees and bushes): impassable, except the camp clearings between the lanes.
+export const F = 1.3;   // map scale (all the numbers below were designed for F = 1)
+export const WORLD_W = Math.round(5760 * F / 64) * 64, WORLD_H = Math.round(2700 * F / 64) * 64, CELL = 64;
 export const GW = Math.ceil(WORLD_W / CELL), GH = Math.ceil(WORLD_H / CELL);
-export const MID = { y0: 600, y1: 912 };                      // walkable band of the middle lane
-// Camps sit beside the routes; their entrances face the path instead of occupying it.
-export const CAMP_SITES = [
-  { x: 1010, y: 150, entryX: 1010, entryY: 300 },
-  { x: 1650, y: 175, entryX: 1650, entryY: 430 },
-  { x: 2300, y: 150, entryX: 2300, entryY: 300 },
-  // bottom camps: exact vertical mirror of the top ones (same x, so the middle one is centred like the top middle one)
-  { x: 1010, y: WORLD_H - 150, entryX: 1010, entryY: WORLD_H - 300 },
-  { x: 1650, y: WORLD_H - 175, entryX: 1650, entryY: WORLD_H - 430 },
-  { x: 2300, y: WORLD_H - 150, entryX: 2300, entryY: WORLD_H - 300 },
-];
-export const CAMPS = CAMP_SITES.map(({ x, y }) => [x, y]);
-
-// irregular forest paths: [x, y, radius]
-export const LANE_NORTH = [[700, 650, 90], [640, 540, 70], [770, 440, 85], [900, 385, 70], [1010, 300, 78], [1180, 245, 66], [1330, 305, 78], [1470, 395, 68],
-  [1650, 430, 78], [1800, 355, 72], [1960, 262, 64], [2120, 248, 82], [2300, 300, 78], [2430, 425, 74], [2575, 520, 70], [2520, 650, 90]];
-export const LANE_SOUTH = [[820, 860, 90], [750, 985, 72], [890, 1085, 82], [1010, 1190, 78], [1175, 1262, 66], [1335, 1205, 80], [1500, 1112, 70],
-  [1650, 1070, 78], [1835, 1150, 70], [1990, 1255, 84], [2150, 1285, 64], [2300, 1200, 78], [2405, 1090, 76], [2335, 960, 70], [2450, 870, 90]];
+export const LANE_HALF = 200;      // half width of a lane
+export const BASE_X = 285 * F, BASE_Y = WORLD_H / 2;
+const CX = WORLD_W / 2;
+// lane centre lines y(x), mirror-symmetric around the middle of the map (only cosines)
+export const laneYAt = (li, x) => { const u = (x - CX) / F; return F * (li === 0 ? 540 + 90 * Math.cos(u / 570) + 33 * Math.cos(u / 210) : li === 1 ? 1350 - 90 * Math.cos(u / 630) - 27 * Math.cos(u / 255) : 2205 - 90 * Math.cos(u / 570) - 33 * Math.cos(u / 210)); };
+export const RIVER = { x0: CX - 270 * F, x1: CX + 270 * F, y0: 135 * F, y1: WORLD_H - 135 * F };  // river through the centre of the map (bounds)
+export const riverOffset = y => F * (Math.sin(y / (180 * F)) * 51 + Math.sin(y / (80 * F)) * 12);   // smooth meander
+// towers per team and lane: [outer, inner] x for the BLUE team (red mirrors them); the inner one is the last tower of the lane and heals allies
+export const TOWER_XS = [2300 * F, 1252 * F];   // [outer, inner]
+// No neutral camps: their old clearings are now open paths that connect the lanes (x for the BLUE half; red mirrors them)
+export const CAMP_SITES = [], CAMPS = [];
+export const CONNECTORS = [[0, 1, 1600 * F], [1, 2, 1600 * F]].flatMap(([a, b, x]) => [[a, b, x], [a, b, WORLD_W - x]]);
 
 export const walk = new Uint8Array(GW * GH);
 const circle = (cx, cy, r) => {
@@ -33,19 +28,31 @@ const poly = pts => {
     for (let s = 0; s <= steps; s++) { const t = s / steps; circle(ax + (bx - ax) * t, ay + (by - ay) * t, ar + (br - ar) * t); }
   }
 };
-for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) { const cy = j * CELL + CELL / 2; if (cy >= MID.y0 && cy <= MID.y1) walk[j * GW + i] = 1; }
-circle(190, 756, 270); circle(WORLD_W - 190, 756, 270);   // bases
-const wide = pts => pts.map(([x, y, r]) => [x, y, r + 22]);   // routes are a little wider so minions never scrape the trees
-poly(wide(LANE_NORTH)); poly(wide(LANE_SOUTH));
-// A central opening through the lower forest connects the lane to the southern route.
-poly([[WORLD_W / 2, MID.y1 - 32, 90], [WORLD_W / 2, 1100, 90]]);
-// ...and a matching one through the upper forest toward the northern route.
-poly([[WORLD_W / 2, MID.y0 + 32, 90], [WORLD_W / 2, 430, 90]]);
-CAMP_SITES.forEach(({ x, y, entryX, entryY }) => {
-  poly([[entryX, entryY, 64], [x, y, 64]]);
-  circle(x, y, 118);
-});
+for (let li = 0; li < 3; li++) for (let x = 0; x <= WORLD_W; x += 32) circle(x, laneYAt(li, x), LANE_HALF);
+for (let y = RIVER.y0; y <= RIVER.y1; y += 16) circle(CX + riverOffset(y), y, 100 * F);   // the shallow river is walkable along its whole length (it joins the lanes)
+circle(BASE_X, BASE_Y, 450 * F); circle(WORLD_W - BASE_X, BASE_Y, 450 * F);   // bases
+for (const sx of [1, -1]) for (const li of [0, 2]) {   // curved ramps from each base up / down to the outer lanes
+  const X = x => sx === 1 ? x : WORLD_W - x, sy = li === 0 ? -1 : 1;
+  poly([[X(360 * F), BASE_Y + sy * 240 * F, 170 * F], [X(495 * F), BASE_Y + sy * 495 * F, 170 * F], [X(630 * F), laneYAt(li, 630 * F) - sy * 120 * F, LANE_HALF], [X(960 * F), laneYAt(li, 960 * F), LANE_HALF]]);
+}
+CONNECTORS.forEach(([a, b, x]) => poly([[x, laneYAt(a, x), 120 * F], [x, (laneYAt(a, x) + laneYAt(b, x)) / 2, 100 * F], [x, laneYAt(b, x), 120 * F]]));   // paths between lanes
 
+
+// Small trails through the forest: narrow, walkable, no trees, drawn with the same grass as the forest floor (not dirt). Each one winds from a lane to the next lane (always with an exit at both ends).
+export const grass = new Uint8Array(GW * GH);
+const carveGrass = (cx, cy, r) => {
+  for (let j = Math.max(0, Math.floor((cy - r) / CELL)); j <= Math.min(GH - 1, Math.floor((cy + r) / CELL)); j++)
+    for (let i = Math.max(0, Math.floor((cx - r) / CELL)); i <= Math.min(GW - 1, Math.floor((cx + r) / CELL)); i++)
+      if (Math.hypot(i * CELL + CELL / 2 - cx, j * CELL + CELL / 2 - cy) <= r && !walk[j * GW + i]) { walk[j * GW + i] = 1; grass[j * GW + i] = 1; }
+};
+{
+  let k = 0;
+  for (const [a, b] of [[0, 1], [1, 2]]) for (const fx of [0.22, 0.36, 0.64, 0.78]) {
+    const x0 = fx * WORLD_W, ph = (k++) * 1.7, pts = [];
+    for (let t = 0; t <= 1.0001; t += 1 / 40) { const x = x0 + Math.sin(t * Math.PI * 2.2 + ph) * 140 * F * Math.sin(t * Math.PI), ya = laneYAt(a, x) + LANE_HALF - 60, yb = laneYAt(b, x) - LANE_HALF + 60; pts.push([x, ya + (yb - ya) * t]); }
+    for (let n = 1; n < pts.length; n++) { const [ax, ay] = pts[n - 1], [bx, by] = pts[n], st = Math.ceil(Math.hypot(bx - ax, by - ay) / 12); for (let q = 0; q <= st; q++) carveGrass(ax + (bx - ax) * q / st, ay + (by - ay) * q / st, 46); }
+  }
+}
 
 export const cellWalk = (i, j) => i >= 0 && j >= 0 && i < GW && j < GH && walk[j * GW + i] === 1;
 // Collision uses the same smoothed field that paints the dirt (see world.js buildMap), so you can walk exactly where the ground looks like path
@@ -63,3 +70,15 @@ export const walkField = (x, y) => {
 };
 // walkable where the cell grid says so OR where the ground is painted as path (never blocks anything that used to be open)
 export const isWalk = (x, y) => x >= 0 && y >= 0 && x < WORLD_W && y < WORLD_H && (cellWalk(Math.floor(x / CELL), Math.floor(y / CELL)) || walkField(x, y) >= 0.46);
+
+const smoothG = new Float32Array(GW * GH);
+for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) {
+  let t = 0, w = 0;
+  for (let dj = -2; dj <= 2; dj++) for (let di = -2; di <= 2; di++) { const wt = 1 / (1 + di * di + dj * dj), x = i + di, y = j + dj; t += (x >= 0 && y >= 0 && x < GW && y < GH && grass[y * GW + x] ? 1 : 0) * wt; w += wt; }
+  smoothG[j * GW + i] = t / w;
+}
+const sg = (i, j) => smoothG[Math.max(0, Math.min(GH - 1, j)) * GW + Math.max(0, Math.min(GW - 1, i))];
+export const grassField = (x, y) => {
+  const gx = x / CELL - 0.5, gy = y / CELL - 0.5, i = Math.floor(gx), j = Math.floor(gy), fx = gx - i, fy = gy - j;
+  return (sg(i, j) * (1 - fx) + sg(i + 1, j) * fx) * (1 - fy) + (sg(i, j + 1) * (1 - fx) + sg(i + 1, j + 1) * fx) * fy;
+};

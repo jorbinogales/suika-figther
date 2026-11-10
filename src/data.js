@@ -27,18 +27,33 @@ export const CHAMPIONS = {
     basic: { kind: 'projectile', dmg: 0, apScale: 0.55, base: 14, type: 'magic', speed: 560, vfx: 'magic_missile',
              every3: { mult: 2.4, scale: 1.8 }, windup: 0.22, dur: 0.45 },
     abilities: {
-      p1: { name: 'Fiebre de cactus', icon: 'leandro_p1', cd: [10, 9, 8], mana: [40, 45, 50], windup: 0.35, dur: 0.6,
-            desc: 'Cactus aparecen en una zona a tu elección (dentro de su alcance), causan daño de IA (escala fuerte con tu poder IA) y stunean a los enemigos.',
-            stun: [0.8, 1.0, 1.2], radius: 130, range: 360, dmg: [30, 50, 70], apScale: 0.7 },
-      p2: { name: 'Lanzamiento de contrato', icon: 'leandro_p2', cd: [8, 7, 6], mana: [35, 40, 45], windup: 0.35, dur: 0.6,
-            desc: 'Lanza varios contratos hacia el frente en abanico: se van alejando y separando más. Al impactar a un enemigo infectan el área a su alrededor (zona verde) y envenenan a todos los que estén dentro. El veneno causa la mitad del daño del impacto. El daño escala con tu poder de IA.',
-            speed: 480, count: [3, 4, 5], spread: 0.75, areaRadius: [95, 110, 125], areaLife: [3, 3.5, 4], poisonRatio: 0.5, dmg: [20, 35, 50], apScale: 0.6 },
-      p3: { name: '4 Cauchos', icon: 'leandro_p3', cd: [14, 13, 12], mana: [50, 50, 50], windup: 0.3, dur: 0.55,
-            desc: 'Muro de 4 cauchos al frente: bloquea cualquier proyectil.',
-            life: [4, 5, 6], offset: 110 },
-      ult: { name: 'IA voy', icon: 'leandro_ult', cd: [70, 60, 50], mana: [100, 100, 100], windup: 0.6, dur: 1.0,
+      p1: { name: 'Fiebre de cactus', icon: 'leandro_p1', preview: 'cactus', short: 'Cactus en una zona: daño de IA y aturden.', cd: [10, 9, 8], mana: [40, 45, 50], windup: 0.35, dur: 0.6,
+            desc: 'Cactus aparecen en una zona a tu elección (dentro de su alcance), causan daño de IA (escala fuerte con tu poder IA) y stunean a los enemigos. La zona crece con cada nivel.',
+            stun: [0.8, 1.0, 1.2], radius: [90, 110, 130], range: 360, dmg: [30, 50, 70], apScale: 0.7 },
+      p2: { name: 'Lanzamiento de contrato', icon: 'leandro_p2', preview: 'contract', short: 'Contratos en abanico: infectan el área y envenenan.', cd: [8, 7, 6], mana: [35, 40, 45], windup: 0.35, dur: 0.6,
+            desc: 'Lanza varios contratos hacia el frente en abanico: se van alejando y separando más. Al impactar a un enemigo infectan el área a su alrededor (zona verde) y envenenan a todos los que estén dentro. El veneno causa la mitad del daño del impacto. El daño escala con tu poder de IA. El alcance crece con el nivel.',
+            speed: 480, reach: [320, 440, 560], count: [3, 4, 5], spread: 0.75, areaRadius: [95, 110, 125], areaLife: [3, 3.5, 4], poisonRatio: 0.5, dmg: [20, 35, 50], apScale: 0.6 },
+      p3: { name: '4 Cauchos', icon: 'leandro_p3', preview: 'tire', short: 'Muro de 4 cauchos con vida que bloquea proyectiles; más nivel, más grandes y resistentes.', cd: [14, 13, 12], mana: [50, 50, 50], windup: 0.3, dur: 0.55,
+            desc: 'Muro de 4 cauchos al frente: bloquea cualquier proyectil. Los cauchos tienen vida (los proyectiles enemigos los dañan) y desaparecen cuando se les acaba. Más nivel: cauchos más grandes y con mucha más vida.',
+            life: [4, 5, 6], offset: 110, size: [0.55, 0.78, 1], hp: [80, 220, 560] },
+      ult: { name: 'IA voy', icon: 'leandro_ult', preview: 'bot_melee', short: 'Invoca bots que pelean a tu lado.', cd: [70, 60, 50], mana: [100, 100, 100], windup: 0.6, dur: 1.0,
              desc: 'Invoca bots (2 melee + 2 distancia) que pelean a su lado. Mejorar agrega mas bots. Los bots se hacen más fuertes con tu poder de IA: cuanto más tengas, más vida y más daño tienen.',
              life: 14, melee: [2, 3, 4], ranged: [2, 3, 4], botApScale: 0.45, botHpScale: 1.2 },
+    },
+    // second branch: when the ability is first learned the player picks this one OR the one in `abilities` (see Fighter.setBranch / the HUD choice window)
+    alt: {
+      p1: { name: 'Poder del peine', icon: 'leandro_p1b', preview: 'comb', anim: 'power1b', short: 'Peine en mano: ataques directos; nv 2 lanza ondas, nv 3 ondas rojas con más daño.', v: 'comb', cd: [14, 13, 12], mana: [35, 40, 45], windup: 0.25, dur: 0.4,
+            desc: 'Leandro se equipa un peine gigante sobre la mano y pasa a pelear CUERPO A CUERPO durante unos segundos, con daño de IA (escala con tu poder de IA). Nivel 1: solo ataques básicos directos. Nivel 2: cada golpe lanza además una onda de corto alcance. Nivel 3: las ondas son ROJAS y hacen más daño. El espacio que abarca crece con cada nivel.',
+            time: [7, 8, 9], reach: [110, 145, 175], atkCd: 0.55, dmg: [24, 36, 48], apScale: 0.5 },
+      p2: { name: 'Poder de la secadora', icon: 'leandro_p2b', preview: 'hair_dryer', anim: 'power2b_pull', short: 'Secadora en línea recta: jala o repele (Mayús). Más nivel, más alcance.', v: 'dryer', cd: [12, 11, 10], mana: [40, 45, 50], windup: 0.2, dur: 0.45,
+            desc: 'Apunta la línea de la secadora y confirma con clic (o pulsando F otra vez). Por defecto JALA a los enemigos de la línea hacia ti; mantén Mayús mientras apuntas para REPELERLOS lejos (las flechas y el color de la zona cambian). Causa daño de IA y los afectados no pueden escapar mientras son arrastrados. Alcance corto al inicio que crece con cada nivel.',
+            length: [260, 420, 580], width: 130, hold: 0.45, speed: 1100, dmg: [35, 55, 75], apScale: 0.6 },
+      p3: { name: 'Lanzamiento de cauchos', icon: 'leandro_p3b', preview: 'tire', anim: 'power3b', short: 'Lanza 4 cauchos lejos que botan 3 veces; al mejorar rompen el suelo y dejan fuego.', v: 'throw', wide: true, cd: [16, 15, 14], mana: [60, 65, 70], windup: 0.35, dur: 0.6,
+            desc: 'La cámara se aleja mucho para mostrar el mapa. Arrojas 4 cauchos hacia donde apuntas (muy lejos): cada uno bota 3 veces SIEMPRE hacia delante y causa daño de IA donde cae. Nivel 1: cauchos normales. Nivel 2: al rebotar rompen el suelo y aturden un instante a quien cae debajo. Nivel 3: cauchos en llamas que además rompen la tierra y dejan fuego.',
+            range: 1500, count: 4, spacing: 52, bounces: 2, speed: 760, radius: 85, stun: 0.6, fire: 3, dmg: [28, 42, 56], apScale: 0.45 },
+      ult: { name: 'Filtraciones', icon: 'leandro_ultb', preview: 'virtual_cage', anim: 'ultb', short: 'Revela a los enemigos; luego te teletransportas junto a uno y lo encierras en una arena virtual.', v: 'leak', wide: true, cd: [80, 70, 60], mana: [100, 100, 100], windup: 0.5, dur: 0.8,
+             desc: '1ª activación: filtras la ubicación de todos los campeones enemigos durante unos segundos (solo ves una pequeña parte de su entorno). 2ª activación: eliges a un enemigo y te teletransportas junto a él desde cualquier parte del mapa, creando un ESCENARIO VIRTUAL amplio: solo vosotros dos os quedáis dentro, nadie de fuera puede entrar y el resto del mapa se ve totalmente oscuro para quien está dentro; los de fuera no ven el terreno de la arena. Al terminar, Leandro vuelve a donde estaba antes de activarla y el enemigo también (si murió dentro, su cuerpo aparece en su posición original).',
+             reveal: [4, 5, 6], sight: 230, recast: 8, radius: 480, cage: [5, 6, 7] },
     },
   },
   xeviche: {
@@ -202,29 +217,26 @@ CHAMPIONS.hector = {
   },
 };
 
-// Maduro — soporte (ranged, magic). Passive: Devaluación. Q megaphone decree line (silence), F bodyguards (-20% damage + push), E empty supply box (area: enemies / allies), R = Súper Bigote (15 s):
+// Maduro — soporte (ranged, magic). Q megaphone decree line (silence), F bodyguards (-20% damage + push), E empty supply box (area: enemies / allies), R = Súper Bigote (15 s):
 // his Q / F / E become Iron Fist (dash punch + stun), Anti-imperialist Shield (blocks the first hit or CC) and Iron Hand (grab + armour shred); basic attacks become punches. `sb` holds the transformed kit.
 CHAMPIONS.maduro = {
   name: 'Maduro', cls: 'soporte', ref: 'ref_maduro', height: 122,
-  passive: { name: 'Devaluación', icon: 'maduro_passive',
-    desc: 'Cada vez que Maduro daña a un campeón enemigo, durante unos segundos le roba un 5 % del oro que gana (por cualquier vía). Los súbditos aliados de Maduro cercanos dan a los rivales un 10 % menos de oro al morir. Por cada 1000 de oro robado Maduro gana 80 de escudo permanente.',
-    steal: 0.05, mark: 4, minion: 0.1, per: 1000, shield: 80 },
   stats: { hp: 640, mana: 320, atk: 40, ap: 32, armor: 28, mr: 24, speed: 134, run: 214, range: 380, atkCd: 0.8 },
   grow: { hp: 0.07, atk: 0.04, ap: 0.06 },
   basic: { kind: 'projectile', base: 12, apScale: 0.55, type: 'magic', speed: 580, vfx: 'magic_missile', obj: 'decree_scroll', scale: 0.12, windup: 0.22, dur: 0.42 },
   abilities: {
     p1: { name: 'Decreto presidencial', icon: 'maduro_p1', cd: [10, 9, 8], mana: [60, 65, 70], windup: 0.3, dur: 0.6,
-          desc: 'Lanza un discurso por un megáfono gigante en línea recta. Los enemigos golpeados reciben daño mágico y quedan SILENCIADOS 1.5 s (no hay réplica). Si golpea a más de un campeón, el segundo queda además RALENTIZADO un 40 %.',
-          dmg: [60, 100, 140], apScale: 0.6, length: 640, width: 84, silence: 1.5, slowPct: 0.4, slowTime: 2 },
-    p2: { name: 'Colectivo protector', icon: 'maduro_p2', cd: [16, 15, 14], mana: [50, 55, 60], windup: 0.1, dur: 0.5,
-          desc: 'Invoca un escudo de escoltas a su alrededor: recibe un 20 % menos de daño durante 3 s. Al activarse causa daño físico a los enemigos cuerpo a cuerpo cercanos y los empuja hacia atrás.',
-          dr: [0.2, 0.22, 0.25], time: [3, 3.5, 4], radius: 170, dmg: [40, 70, 100], atkScale: 0.5, push: 120 },
+          desc: 'Lanza un discurso por un megáfono gigante en línea recta. Nivel 1: daño mágico y SILENCIO 1.5 s (el segundo campeón golpeado se ralentiza un 40 %). Nivel 2: las ondas se vuelven de un amarillo intenso y además ATURDEN 1 s. Nivel 3: las ondas son rojas, aturden 1.5 s, hacen mucho más daño y dejan manchas en el suelo.',
+          dmg: [60, 100, 190], apScale: 0.6, length: 640, width: 84, silence: 1.5, stun: [0, 1, 1.5], slowPct: 0.4, slowTime: 2, stainTime: 7 },
+    p2: { name: 'Colectivo protector', icon: 'maduro_p2', cd: [20, 18, 16], mana: [50, 55, 60], windup: 0.1, dur: 0.5,
+          desc: 'Invoca guardaespaldas que lo siguen y lo rodean siempre. Al activarla aparecen 2 al instante; después invoca uno nuevo cada 15 s hasta llegar al límite (5 en el nivel 1), y al llegar al máximo no invoca más. Atacan con daño físico a los enemigos cercanos, tienen vida y son permanentes. Al mejorarla aumentan su daño, su vida, su cantidad máxima (5 → 7) y la invocación es más rápida.',
+          initial: 2, cap: [5, 6, 7], interval: [15, 12, 10], hp: [260, 380, 520], dmg: [14, 22, 32], atkScale: 0.25 },
     p3: { name: 'La cesta básica', icon: 'maduro_p3', cd: [14, 13, 12], mana: [60, 65, 70], windup: 0.25, dur: 0.6,
-          desc: 'Lanza una caja de recursos vacía a una zona. Los enemigos dentro sufren DESABASTECIMIENTO 4 s: -30 % de velocidad de ataque y de curación. Los aliados dentro ganan una gran velocidad de movimiento 3 s, pero pagan con un 5 % de su vida máxima (lealtad).',
-          range: 520, radius: 130, time: [4, 4.5, 5], aspd: 0.3, heal: 0.3, ally: [0.35, 0.4, 0.45], allyTime: 3, drain: 0.05 },
+          desc: 'Arroja una caja de recursos vacía que, al caer, queda en el mapa durante 1 minuto con su propia vida (desaparece al llegar a 0). Va soltando cucarachas que atacan al objetivo más cercano, y el área alrededor de la caja ENVENENA a los enemigos. Al mejorarla la caja tiene más vida, suelta más bichos y estos son MÁS GRANDES, con más vida y más armadura, y el veneno es más fuerte.',
+          range: 520, radius: 80, life: 60, hp: [220, 340, 480], bugEvery: [6, 5, 4], bugCap: [4, 5, 6], bugHp: [60, 110, 180], bugArmor: [5, 18, 32], bugScale: [1, 1.5, 2.1], bugDmg: [8, 12, 16], poison: [10, 15, 22] },
     ult: { name: '¡Aparición de Súper Bigote!', icon: 'maduro_ult', cd: [100, 90, 80], mana: [100, 100, 100], windup: 0.5, dur: 0.9,
-           desc: 'Se transforma en el superhéroe Súper Bigote durante 15 s. Una onda de choque global RALENTIZA a todos los enemigos del mapa un 20 % durante 2 s. Mientras dura gana un 30 % de velocidad, armadura extra y su Q, F y E se vuelven ofensivas: Puño de hierro, Escudo antimperialista y Mano de hierro. Sus ataques básicos pasan a ser puñetazos.',
-           time: 15, slow: 0.2, slowTime: 2, speed: 0.3, armor: [30, 45, 60], mr: [15, 25, 35] },
+           desc: 'Se transforma en el superhéroe Súper Bigote durante 15 s. Una onda expansiva EMPUJA hacia atrás a todos a su alrededor (aliados incluidos, que no reciben daño) y daña a los enemigos. Nivel 1: onda blanca, empuje ligero. Nivel 2: onda azul, aleja más a todos. Nivel 3: onda roja, aleja aún más y causa mucho más daño. Mientras dura gana velocidad y armadura, y su Q, F y E se vuelven ofensivas: Puño de hierro, Escudo antimperialista y Mano de hierro.',
+           time: 15, speed: 0.3, armor: [30, 45, 60], mr: [15, 25, 35], radius: [280, 360, 440], push: [200, 330, 470], dmg: [30, 55, 120], apScale: 0.4 },
   },
   sb: {
     basic: { kind: 'melee', base: 22, atkScale: 1.0, type: 'physical', reach: 100, windup: 0.2, dur: 0.42, vfx: 'punch' },
@@ -324,10 +336,10 @@ CHAMPIONS.junior = {
 export function aimSpec(champ, key, rank, f) {
   const a = (f?.def?.abilities || CHAMPIONS[champ].abilities)[key];
   switch (champ + ':' + key) {
-    case 'leandro:p1':  return { type: 'zone', max: a.range, radius: a.radius, color: 0x7dff5a };
-    case 'leandro:p2':  return { type: 'trapezoid', length: 760, nearW: 70, farW: 560, color: 0xb0ff60 };
-    case 'leandro:p3':  return { type: 'wall', min: 80, max: 260, count: 4, spacing: 44, color: 0x9ad7ff };
-    case 'leandro:ult': return { type: 'circle', radius: 160, color: 0x66ffcc };
+    case 'leandro:p1':  return a.v === 'comb' ? { type: 'circle', radius: rk(a.reach, rank), color: 0x66ffcc } : { type: 'zone', max: a.range, radius: rk(a.radius, rank), color: 0x7dff5a };
+    case 'leandro:p2':  return a.v === 'dryer' ? { type: 'dryer', length: rk(a.length, rank), width: a.width, color: 0x5ad7ff } : { type: 'trapezoid', length: Math.round(rk(a.reach, rank) * 0.84), nearW: 70, farW: Math.round(rk(a.reach, rank) * 0.66 + 40), color: 0xb0ff60 };
+    case 'leandro:p3':  return a.v === 'throw' ? { type: 'tirethrow', min: 300, max: a.range, count: a.count, spacing: a.spacing, bounces: a.bounces, color: 0x9ad7ff } : { type: 'wall', min: 80, max: 260, count: 4, spacing: Math.round(84 * rk(a.size, rank)), color: 0x9ad7ff };
+    case 'leandro:ult': return a.v === 'leak' ? { type: 'pick', radius: 1800, color: 0x66ffcc } : { type: 'circle', radius: 160, color: 0x66ffcc };
     case 'xeviche:p1':  return { type: 'line', range: 620, width: 46, color: 0xffd23f };
     case 'xeviche:p3':  return { type: 'line', range: a.range, width: 44, color: 0xff3b60 };
     case 'julio:p1':    return { type: 'line', range: a.length, width: a.width, color: 0x8a5cff };

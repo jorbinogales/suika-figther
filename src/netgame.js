@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { net as conn } from './net.js';
 import { Fighter } from './fighter.js';
-import { ABILITY_KEYS } from './data.js';
+import { ABILITY_KEYS, rk } from './data.js';
 import { PERM_KEYS } from './items.js';
 
 // Online match, host-authoritative. Every room member runs the same Arena:
@@ -78,8 +78,9 @@ export class NetGame {
     else if (d.k === 'cast') { if (w.control?.target === f) return; const a = this.actor(r); if (!a.alive) return; a.setAim(d.ax, d.ay); a.castPoint = d.cp ? { x: d.cp[0], y: d.cp[1] } : null; if (!a.tryCast(d.c)) a.castPoint = null; }   // a mind-controlled champion ignores its own player
     else if (d.k === 'op') {
       if (['buy', 'sell', 'perm'].includes(d.op) && !w.canShop(f)) return;   // the shop only works in the base
+      if (d.op === 'recall') { f.startRecall(); return; }
       if (d.op === 'use') { if (w.control?.target !== f) this.actor(r).useItem(d.a); return; }   // items: those of the champion being driven (like offline)
-      if (d.op === 'perm') f.buyPerm(d.a); else if (d.op === 'buy') f.buyItem(d.a); else if (d.op === 'sell') f.sellItem(d.a); else if (d.op === 'spend') f.spend(d.a);
+      if (d.op === 'perm') f.buyPerm(d.a); else if (d.op === 'buy') f.buyItem(d.a); else if (d.op === 'sell') f.sellItem(d.a); else if (d.op === 'spend') { const [kk, bb] = String(d.a).split(':'); f.spend(kk, bb ? 1 : 0); }
     }
   }
   // the unit a remote player is driving: his own champion, or the enemy he is mind-controlling with Luis' ultimate
@@ -133,9 +134,12 @@ export class NetGame {
     if (f.poisons.length) o.pn = r2(Math.max(...f.poisons.map(p => p.t)));
     if (f.lure?.src) o.lr = [f.lure.src.nid, r2(f.lure.t)];   // Xeviche's heart: who the target walks to
     if (f.fist?.owner) o.fs = [f.fist.owner.nid, f.fist.n, r2(f.fist.t)];   // Junior's fist counter over the target
+    if (f.key.startsWith('bot_')) { o.lf = [r1(f.life), r1(f.life0)]; if (f.enraged) o.en = 1; }   // Leandro's bots: time left and berserk state
+    if (f.def.bot === 'crate') o.cb = [r1(f.life), r1(f.life0), r2(f.spawnT || 0), r2(f.spawnMax || 1), f.bugs?.length >= f.bugCap ? 1 : 0];   // Maduro's box: time left and time until the next bug (bars)
+    if (f.def.bot === 'crate' || f.key === 'roach' || f.def.guard) { o.mh = r1(f.maxHp); if (f.bugK) o.bs = r2(f.bugK); }   // summons with upgraded health / size (Maduro)
     if (f.invis) o.iv = f.invis.t === Infinity ? -1 : r2(f.invis.t); if (f.ink) o.ik = r2(f.ink.t); if (f.away) o.aw = 1;
     if (this.w.control?.mode === 'remote' && this.w.control.target === f) o.ch = r2(this.w.control.t);   // shows 'controlled' on that player's screen
-    if (f.recall) o.rc = r2(f.recall.t); if (f.protein) o.pr = r2(f.protein.t);
+    if (f.recall) o.rc = r2(f.recall.t); if (f.recallFx) o.rf = [f.recallFx.phase === 'out' ? 1 : 2, r2(f.recallFx.t)]; if (f.protein) o.pr = r2(f.protein.t);
     if (f.isChamp) {
       o.kd = [f.kills, f.deaths, f.assists]; o.m = r1(f.mana); o.lv = f.level; o.xp = r1(f.xp); o.gd = r1(f.gold); o.pt = f.points;
       o.rk = ABILITY_KEYS.map(a => f.ranks[a]); o.cd = [...ABILITY_KEYS.map(a => r2(f.cds[a])), r2(f.cds.basic)];
@@ -144,6 +148,7 @@ export class NetGame {
       if (f.potions.length) o.po = f.potions.map(p => r2(p.t));
       if (f.def.charge) o.cg = r1(f.charge); if (f.gun) o.gn = 1; if (f.sb) o.sb = r1(f.sb.t); if (f.bomber && !f.bomber.mirror) o.bm = [Math.max(0, BPH.indexOf(f.bomber.phase)), r1(f.bomber.T), r1(f.bomber.t)];   // Yonaiker: ship bar (only grows with hits) and machine gun switch
       if (f.hen) o.hen = [r1(f.henHp), r1(f.henMax)];
+      if (f.def.alt) o.br = ABILITY_KEYS.map(a => f.branch[a] || 0); if (f.comb) o.cb = r1(f.comb.t); if (f.leakRe) o.lk = r1(f.leakRe.t);   // Leandro: branch choices, comb and leak windows
       if (f.skin !== f.key) o.sk = f.skin;
       if (f.buff) o.bf = [f.buff.t === Infinity ? -1 : r1(f.buff.t), f.buff.hpMult, f.buff.atkMult, f.buff.cdSpeed];
       const pk = Object.entries(f.pkBuffs || {}); if (pk.length) o.pk = pk.map(([k, b]) => [k, r2(b.t), b.m, b.T]);
@@ -347,15 +352,19 @@ export class NetGame {
     f.slows = (o.sw || []).map(a => ({ pct: a[0], t: a[1] }));
     f.poisons = o.pn ? [{ dps: 0, t: o.pn, tick: 0, src: f }] : [];
     { const ls = o.lr && this.fighter(o.lr[0]); f.lure = ls ? { src: ls, t: o.lr[1] } : null; const fo = o.fs && this.fighter(o.fs[0]); f.fist = fo ? { owner: fo, n: o.fs[1], t: o.fs[2] } : null; }
+    if (o.mh && o.mh !== f.def.stats.hp) f.def = { ...f.def, stats: { ...f.def.stats, hp: o.mh } };
+    if (o.bs && !f.bsDone) { f.bsDone = true; f.baseScale *= o.bs; f.spr.setScale(f.baseScale); f.shadow?.setScale(f.shadow.scaleX * o.bs, f.shadow.scaleY * o.bs); }
+    if (o.cb) { f.life = o.cb[0]; f.life0 = o.cb[1]; f.spawnT = o.cb[2]; f.spawnMax = o.cb[3]; f.bugFull = !!o.cb[4]; }
+    if (o.lf) { f.lfShow = o.lf; f.enraged = !!o.en; }
     const ivT = o.iv < 0 ? Infinity : o.iv; f.invis = o.iv != null ? (f.invis ? Object.assign(f.invis, { t: ivT }) : { t: ivT, trail: 0.15 }) : null;   // keep the trail timer: resetting it every snapshot meant Luis' silhouettes never appeared
     f.ink = o.ik ? { t: o.ik, src: null } : null; f.away = !!o.aw;
-    f.recall = o.rc != null ? { t: o.rc } : null; f.protein = o.pr != null ? { t: o.pr, tick: 0, hps: 0 } : null;
+    f.recall = o.rc != null ? { t: o.rc, T: f.recall?.T || Math.max(o.rc, 10) } : null; f.recallFx = o.rf ? { phase: o.rf[0] === 1 ? 'out' : 'in', t: o.rf[1] } : null; f.protein = o.pr != null ? { t: o.pr, tick: 0, hps: 0 } : null;
     if (f.isChamp) {
       if (!first && o.lv > f.level) { w.audio.play('levelup', { at: f, vol: local ? 1 : 0.5, gap: 0 }); w.vfx('levelup', f.x, f.y - 20, { scale: 3.2 }); w.float(f.x, f.y - f.def.height - 30, `NIVEL ${o.lv}`, '#ffe066'); }
       if (o.kd) [f.kills, f.deaths, f.assists] = o.kd;
       f.level = o.lv; f.xp = o.xp; f.gold = o.gd; f.points = o.pt;
       const cd = !d || d.cd;   // cooldowns come only when they stop matching our own countdown
-      ABILITY_KEYS.forEach((a, i) => { f.ranks[a] = o.rk[i]; if (cd) f.cds[a] = o.cd[i]; }); if (cd) f.cds.basic = o.cd[4];
+      ABILITY_KEYS.forEach((a, i) => { f.ranks[a] = o.rk[i]; if (cd) f.cds[a] = o.cd[i]; }); if (o.br) ABILITY_KEYS.forEach((a, i) => f.setBranch(a, o.br[i])); f.comb = o.cb ? { t: o.cb, atkCd: f.def.abilities.p1.atkCd, reach: rk(f.def.abilities.p1.reach, f.ranks.p1 || 1) } : null; f.leakRe = o.lk ? { t: o.lk } : null; if (cd) f.cds.basic = o.cd[4];
       if (o.pm) { const ps = o.pm.join(); if (ps !== f.permSig) { f.permSig = ps; f.perm = {}; PERM_KEYS.forEach((k, i) => { if (o.pm[i]) f.perm[k] = o.pm[i]; }); f.recomputeItems(); } }
       const sig = JSON.stringify(o.inv); if (sig !== f.invSig) { f.invSig = sig; f.inv = o.inv.map(a => (a ? { id: a[0], cd: a[1], charges: a[2] } : null)); f.recomputeItems(); }
       else f.inv.forEach((sl, i) => { if (sl) sl.cd = o.inv[i][1]; });

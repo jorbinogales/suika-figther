@@ -1,6 +1,7 @@
+import { laneYAt, WORLD_W, F, BASE_X } from './mapdata.js';
 import { ABILITY_KEYS, aimSpec, rk } from './data.js';
 import { ITEM_BY_ID, nextAffordable } from './items.js';
-import { dist, BODY_R } from './fighter.js';
+import { dist, BODY_R, towerCircle } from './fighter.js';
 
 // Champion AI: picks targets, respects tower range, retreats when hurt, escorts minions and uses every ability with per-ability rules.
 const HOME_X = f => f.spawn.x;
@@ -43,6 +44,10 @@ const RULES = {
   'julio:ult': (f, c) => c.anyChampAlive && c.hpR > 0.3,
   'leandro:ult': (f, c) => c.champNear(750) >= 1,
   'leandro:p3': (f, c) => c.target && c.d < 230 && c.hpR < 0.65,
+  'leandro:p1:comb': (f, c) => c.target && c.d < 300 && !f.comb,
+  'leandro:p2:dryer': (f, c) => c.target && c.d < rk(f.def.abilities.p2.length, f.ranks.p2) * 0.9,
+  'leandro:p3:throw': (f, c) => c.target && c.d > 300 && c.d < 1300,
+  'leandro:ult:leak': (f, c) => f.leakRe ? !!c.target || c.anyChampAlive : c.anyChampAlive && c.hpR > 0.4,
   'eliud:ult': (f, c) => c.champNear(520) >= 1,
 };
 
@@ -53,7 +58,7 @@ function tryAbilities(w, f, c) {
     if (!a || !rank || a.passive || f.cds[k] > 0 || f.silenceT > 0 || f.charmT > 0 || !f.free) continue;
     if (f.key === 'jorbi' && k === 'p2') { if (jorbiDash(w, f, c)) return true; continue; }
     if (a.mana && f.mana < rk(a.mana, rank) * 1.0) continue;
-    const key = f.key + ':' + k, spec = aimSpec(f.key, k, rank, f);
+    const key = f.key + ':' + k + (a.v ? ':' + a.v : ''), spec = aimSpec(f.key, k, rank, f);
     if (MOVERS.has(key) && c.target && c.danger(c.target)) continue;
     let ok = false, point = null;
     if (RULES[key]) ok = RULES[key](f, c);
@@ -138,6 +143,7 @@ function campGoal(w, f, hpR) {
   if (!w.camps?.length || f.retreat || hpR < 0.6 || w.gameT < 20) return null;
   let best = null, bd = 1e9;
   for (const c of w.camps) {
+    if (c.tower?.alive) continue;
     if (c.owner === f.team && c.prog[f.team] > 0.95) continue;
     const cl = c.botClaim?.[f.team]; if (cl && cl.f !== f && cl.f.alive && w.gameT - cl.t < 1.5) continue;
     if (inTowerRange(w, c.x, c.y, f.team, 60)) continue;
@@ -150,7 +156,7 @@ function campGoal(w, f, hpR) {
 export function runChampAi(w, f, dt) {
   f.in = { mx: 0, my: 0, run: false };
   if (!f.alive || f.away) return;
-  const range = f.atkRange, hpR = f.hp / f.maxHp, dir = SIDE(f), home = f.charmT > 0 ? { x: f.team === 0 ? 420 : 3200 - 420, y: w.laneY } : { x: f.spawn.x, y: f.spawn.y };
+  const range = f.atkRange, hpR = f.hp / f.maxHp, dir = SIDE(f), home = f.charmT > 0 ? { x: f.team === 0 ? BASE_X + 170 : WORLD_W - BASE_X - 170, y: w.laneY } : { x: f.spawn.x, y: f.spawn.y };
   if (f.charmT > 0) f.retreat = false;
   const fo = w.fountains?.[f.baseTeam], rest = fo ? { x: fo.x + dir * 200, y: fo.y } : home;   // where a retreating bot goes: well inside the base (the spawn point lies on the edge of the shop zone: bots used to stop just outside it and stay there)
   // ---- retreat with hysteresis ----
@@ -168,6 +174,7 @@ export function runChampAi(w, f, dt) {
   let target = null, best = 1e9;
   for (const e of foes) {
     if (e.invis && !f.isTower) continue;
+    if (e.inBush && e.hiddenInBush(f.baseTeam)) continue;
     const d = dist(e, f) - (e.br - BODY_R); if (d > sight) continue;
     const score = d - (e.isChamp ? 160 : 0) - (e.isChamp ? (1 - e.hp / e.maxHp) * 220 : 0) + (e.isTower ? 260 : 0);
     if (score < best) { best = score; target = e; }
@@ -185,17 +192,18 @@ export function runChampAi(w, f, dt) {
     if (target && d <= range && champNear(300) === 0) f.tryBasic();
   } else if (target) {
     f.setAim(target.x - f.x, target.y - f.y);
-    const ranged = range > 150, hold = ranged ? range * 0.72 : range * 0.85;
+    const reff = target.isTower ? Math.min(range, towerCircle(target) * 0.8) : range;   // structures can only be hit from inside their circle
+    const ranged = reff > 150, hold = ranged ? reff * 0.72 : reff * 0.85;
     const nextPos = { x: f.x + (target.x - f.x) * 0.15, y: f.y + (target.y - f.y) * 0.15 };
     const walkingIntoTower = danger(nextPos) && !danger(f);
-    if (d > hold && !(walkingIntoTower && !target.isTower) && !(target.isTower && !minionCover && d > range * 0.9 && mates.every(m => !m.isMinion || dist(m, target) > 200))) { wantX = target.x - f.x; wantY = target.y - f.y; move = true; }
-    else if (ranged && d < range * 0.45) { wantX = f.x - target.x; wantY = f.y - target.y; move = true; }
+    if (d > hold && !(walkingIntoTower && !target.isTower) && !(target.isTower && !minionCover && d > reff * 0.9 && mates.every(m => !m.isMinion || dist(m, target) > 200))) { wantX = target.x - f.x; wantY = target.y - f.y; move = true; }
+    else if (ranged && d < reff * 0.45) { wantX = f.x - target.x; wantY = f.y - target.y; move = true; }
     else if (danger(f) && !minionCover) { wantX = f.x - dir * 100 - f.x; wantY = 0; move = true; }   // step out of tower range
     if (tryAbilities(w, f, ctx)) { /* cast */ }
-    else if (d <= range && f.free) f.tryBasic();
+    else if (d <= reff && f.free) f.tryBasic();
   } else {
     // ---- no target: push the lane behind the minions (never far ahead of them) ----
-    const front = mates.filter(m => m.isMinion).reduce((mx, m) => (dir > 0 ? Math.max(mx, m.x) : Math.min(mx, m.x)), dir > 0 ? -1e9 : 1e9);
+    const li = (f.aiLane || 0) + 1, front = mates.filter(m => m.isMinion && (m.laneI ?? 1) === li).reduce((mx, m) => (dir > 0 ? Math.max(mx, m.x) : Math.min(mx, m.x)), dir > 0 ? -1e9 : 1e9);
     const hasM = Math.abs(front) < 1e8;
     let limit = hasM ? front - dir * 90 : home.x + dir * 900;
     const minLimit = home.x + dir * (f.forceLeave > 0 ? 1300 : 650);   // never wait inside the base: the leash to the minions starts outside it
@@ -209,7 +217,7 @@ export function runChampAi(w, f, dt) {
       const ahead = dir > 0 ? f.x > limit : f.x < limit;
       if (!ahead) { wantX = dir; move = true; }
       else if (Math.abs(f.x - limit) > 60) { wantX = -dir; move = true; }
-      wantY = (w.laneY + ((f.aiLane || 0) * 40) - f.y) * 0.05;
+      wantY = (laneYAt((f.aiLane || 0) + 1, f.x) - f.y) * 0.05;   // each bot champion keeps to its own lane
       f.setAim(wantX || dir, wantY);
     }
     if (f.mana < f.maxMana * 0.2 || hpR < 0.5) tryAbilities(w, f, ctx);

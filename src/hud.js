@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
-import { CLASSES, ABILITY_KEYS, MAX_LEVEL, MAX_RANK, ULT_LEVELS, rk } from './data.js';
+import { CLASSES, CHAMPIONS, ABILITY_KEYS, MAX_LEVEL, MAX_RANK, ULT_LEVELS, rk } from './data.js';
 import { WORLD_W, WORLD_H, CAMPS } from './fighter.js';
-import { walk, GW, GH, CELL } from './mapdata.js';
+import { walk, grass, GW, GH, CELL, RIVER, riverOffset, BASE_Y, F } from './mapdata.js';
 import { levelGauge } from './world.js';
 import { vol, saveVol } from './audio.js';
 import { net } from './net.js';
@@ -75,6 +75,7 @@ export class Hud extends Phaser.Scene {
       if (this.textures.exists('ui_' + n)) this.panels[n] = this.add.image(0, 0, 'ui_' + n).setOrigin(0, 0).setDepth(2.5);
     });
     let sv = {}; try { sv = JSON.parse(localStorage.getItem('suika_shop') || '{}'); } catch (e) { /* ignore */ }   // shop tab / filter survive closing the shop, new matches and reloads
+    this.branchSel = null;   // ability slot whose two-version choice window is open
     this.shopOpen = false; this.shopStat = sv.stat || null; this.shopCat = sv.cat === 'all' ? 'all' : 'rec'; this.shopSel = null; this.shopScroll = 0; this.shopBtns = []; this.slotBtns = [];
     this.shopG = this.add.graphics().setDepth(30); this.shopTipG = this.add.graphics().setDepth(40);
     this.input.on('wheel', (ptr, over, dx, dy) => { if (this.shopOpen) this.shopScroll += dy > 0 ? 1 : -1; });
@@ -88,7 +89,7 @@ export class Hud extends Phaser.Scene {
       const bt = this.btns.find(hit); if (bt) { A.audio.play('ui_click', { gap: 0 }); bt.fn(); return; }
       if (this.overlay) return;
       const up = this.upRects.findIndex(r => r && hit(r)), i = this.iconRects.findIndex(hit);
-      if (up >= 0) A.player.spend(ABILITY_KEYS[up]);   // glowing upgrade button above the icon
+      if (up >= 0) A.askSpend(ABILITY_KEYS[up]);   // glowing upgrade button above the icon
       else if (i >= 0) { if (A.pc.silenceT > 0 && !A.pc.def.abilities[ABILITY_KEYS[i]].passive) return; A.aimKey === ABILITY_KEYS[i] ? A.confirmAim() : A.beginAim(ABILITY_KEYS[i]); }   // silenced: icons cannot be clicked
       else if (hit(this.enemyHelpRect)) this.helpHold = 'sel';
     });
@@ -130,7 +131,7 @@ export class Hud extends Phaser.Scene {
     // ---- worm: darkness, only a small circle around the champion stays visible ----
     if (p.alive && p.blindT > 0) {   // darkened map with an irregular, blurred vision area (not a perfect circle, not pitch black)
       const cam = A.cameras.main, v = cam.worldView, z = cam.zoom, cx = (p.x - v.x) * z, cy = (p.y - 40 - v.y) * z, S = 560 * z;
-      if (!this.blindTex) { this.blindTex = this.textures.createCanvas('blindmask', 256, 256); this.blindImg = this.add.image(0, 0, 'blindmask').setDepth(0.45); this.blindTex.setFilter(Phaser.Textures.FilterMode.LINEAR); }
+      if (!this.blindTex) { if (this.textures.exists('blindmask')) this.textures.remove('blindmask'); this.blindTex = this.textures.createCanvas('blindmask', 256, 256); this.blindImg = this.add.image(0, 0, 'blindmask').setDepth(0.45); this.blindTex.setFilter(Phaser.Textures.FilterMode.LINEAR); }
       if (!this.blindWas) {   // new random blob each time the blindness starts
         const ctx = this.blindTex.getContext(), id = ctx.createImageData(256, 256), ph = [0, 1, 2, 3, 4].map(() => Math.random() * 6.283), am = [0.1, 0.07, 0.05, 0.03, 0.02];
         for (let y = 0; y < 256; y++) for (let x = 0; x < 256; x++) {
@@ -282,7 +283,7 @@ export class Hud extends Phaser.Scene {
       const sp = this.shopPrompt, ptrS = this.input.activePointer, overS = ptrS.x >= sp.x && ptrS.x <= sp.x + sp.w && ptrS.y >= sp.y && ptrS.y <= sp.y + sp.h;
       this.boxes.push(sp); this.slotBtns.push({ ...sp, special: true });
       o.fillStyle(overS ? 0x2e8a5a : 0x14583a).fillRect(sp.x, sp.y, sp.w, sp.h).lineStyle(2, 0x7dff9a, 0.9).strokeRect(sp.x, sp.y, sp.w, sp.h);
-      this.T('shopPrompt', 'TIENDA (B)', sp.x + sp.w / 2, sp.y + sp.h / 2, { size: 13 * u, bold: true, origin: [0.5, 0.5], stroke: 2, depth: 5 });
+      this.T('shopPrompt', 'TIENDA (P)', sp.x + sp.w / 2, sp.y + sp.h / 2, { size: 13 * u, bold: true, origin: [0.5, 0.5], stroke: 2, depth: 5 });
     }
     this.drawShop(A, p, u, W, H);
     this.drawScoreboard(A, p, u, W, H, !!A.k?.tab?.isDown && !this.shopOpen && !A.paused);
@@ -342,19 +343,20 @@ export class Hud extends Phaser.Scene {
       this.btns.push({ x, y, w, h, fn });
     };
     const finished = A.over && A.over.t > 2.4;
-    this.overlay = A.paused || finished;
+    this.overlay = A.paused || finished; if (!A.paused) this.menuPage = 'main';
     if (!this.overlay) {
       const mb = { x: 12, y: 44 * u, w: 92 * u, h: 26 * u }; this.boxes.push(mb);
       const over = this.input.activePointer.x >= mb.x && this.input.activePointer.x <= mb.x + mb.w && this.input.activePointer.y >= mb.y && this.input.activePointer.y <= mb.y + mb.h;
       o.fillStyle(over ? 0x1d7fc4 : 0x0a1a30, 0.95).fillRoundedRect(mb.x, mb.y, mb.w, mb.h, 6 * u).lineStyle(2, over ? 0x8ae2ff : 0x3fd0ff, over ? 1 : 0.8).strokeRoundedRect(mb.x, mb.y, mb.w, mb.h, 6 * u);
       this.T('menuBtn', '☰ MENÚ (Esc)', mb.x + mb.w / 2, mb.y + mb.h / 2, { size: 11 * u, bold: true, origin: [0.5, 0.5], stroke: 2 });
       this.btns.push({ ...mb, fn: () => A.togglePause() });
+      if (A.training && !A.net) { const alive = A.player.alive; btn('die', alive ? '☠ MORIR' : '↺ REVIVIR', mb.x, mb.y + mb.h + 6 * u, mb.w, mb.h, () => A.trainingDie(), alive ? 0x5c1d1d : 0x1d5c2e); this.boxes.push({ x: mb.x, y: mb.y + mb.h + 6 * u, w: mb.w, h: mb.h }); }   // practice only: test the death / respawn
     } else {
       this.boxes.push({ x: 0, y: 0, w: W, h: H });
       ov.fillStyle(0x020812, 0.68).fillRect(0, 0, W, H);
       const pw = 380 * u, px0 = W / 2 - pw / 2, bh = 46 * u;
       // panel de cristal tech oscuro (estilo B) detrás del contenido
-      const pW = Math.min(pw + 52 * u, W - 16 * u), pX = W / 2 - pW / 2, pTop = finished ? H / 2 - 184 * u : H / 2 - 200 * u, pH = finished ? 268 * u : 408 * u;
+      const pW = Math.min(pw + 52 * u, W - 16 * u), pX = W / 2 - pW / 2, pTop = finished ? H / 2 - 184 * u : H / 2 - 170 * u, pH = finished ? 268 * u : ({ main: 330, options: 330, sound: 430, access: 300 }[this.menuPage || 'main']) * u;
       ov.lineStyle(2, 0x3fd0ff, 0.22).strokeRoundedRect(pX - 3 * u, pTop - 3 * u, pW + 6 * u, pH + 6 * u, 14 * u);
       ov.fillStyle(0x0a1a30, 0.94).fillRoundedRect(pX, pTop, pW, pH, 12 * u).lineStyle(2, 0x3fd0ff, 0.65).strokeRoundedRect(pX, pTop, pW, pH, 12 * u);
       ov.lineStyle(1, 0x8ae2ff, 0.35).lineBetween(pX + 14 * u, pTop + 2.5 * u, pX + pW - 14 * u, pTop + 2.5 * u);
@@ -364,26 +366,70 @@ export class Hud extends Phaser.Scene {
         this.T('ovSub', win ? 'El nexo enemigo ha caído' : 'Tu nexo ha sido destruido', W / 2, H / 2 - 60 * u, { size: 18 * u, color: '#cfe3ff', origin: [0.5, 0.5], stroke: 4, depth: 22 });
         btn('leave', 'VOLVER AL MENÚ', px0, H / 2 - 10 * u, pw, bh, () => this.leave());
       } else {
-        this.T('ovTitle', 'PAUSA', W / 2, H / 2 - 150 * u, { size: 48 * u, bold: true, color: '#eaf7ff', origin: [0.5, 0.5], stroke: 6, depth: 22 });
-        ov.fillStyle(0x3fd0ff, 0.9).fillRoundedRect(W / 2 - 34 * u, H / 2 - 121 * u, 68 * u, 3 * u, 2 * u);
-        btn('resume', 'CONTINUAR', px0, H / 2 - 100 * u, pw, bh, () => A.togglePause());
-        // volume bars (click or drag): the filled part is the current level
-        [['music', 'MÚSICA', 0x3fd0ff], ['sfx', 'EFECTOS', 0x7dff9a], ['voice', 'VOZ ANUNCIADOR', 0xffd23f], ['ui', 'TAMAÑO INTERFAZ', 0xff9a4a]].forEach(([k, label, col], n) => {
-          const y = H / 2 + 80 * u + n * 34 * u, lw = 150 * u, bx = px0 + lw, bw = pw - lw - 56 * u, bhh = 16 * u, val = k === 'ui' ? (vol.ui - 0.5) * 2 : vol[k];
-          this.T('vl' + k, label, px0, y + bhh / 2, { size: 12 * u, bold: true, color: '#cfe3ff', origin: [0, 0.5], stroke: 3, depth: 22 });
-          const trad = bhh / 2;
-          ov.lineStyle(2, col, 0.28).strokeRoundedRect(bx - 2 * u, y - 2 * u, bw + 4 * u, bhh + 4 * u, trad + 2 * u);
-          ov.fillStyle(0x08182e, 1).fillRoundedRect(bx, y, bw, bhh, trad);
-          if (val > 0) { ov.fillStyle(col, 0.95).fillRoundedRect(bx, y, Math.max(bhh, bw * val), bhh, trad); ov.fillStyle(0xffffff, 0.28).fillRoundedRect(bx + 2 * u, y + 2 * u, Math.max(0, bw * val - 4 * u), bhh * 0.32, 2 * u); }
-          ov.lineStyle(1, 0x3fd0ff, 0.45).strokeRoundedRect(bx, y, bw, bhh, trad);
-          ov.fillStyle(0xeaf7ff, 1).fillRoundedRect(bx + bw * val - 3 * u, y - 3 * u, 6 * u, bhh + 6 * u, 3 * u).lineStyle(1, col, 0.9).strokeRoundedRect(bx + bw * val - 3 * u, y - 3 * u, 6 * u, bhh + 6 * u, 3 * u);
-          this.T('vp' + k, `${Math.round((k === 'ui' ? vol.ui : vol[k]) * 100)}%`, bx + bw + 8 * u, y + bhh / 2, { size: 12 * u, bold: true, color: '#fff', origin: [0, 0.5], stroke: 3, depth: 22 });
-          this.volBars.push({ x: bx - 4 * u, y: y - 8 * u, w: bw + 8 * u, h: bhh + 16 * u, bx, bw, key: k });
-        });
-        if (!A.training && !A.net) btn('surr', 'RENDIRSE', px0, H / 2 - 40 * u, pw, bh, () => A.surrender(), 0x5c1d1d);
-        btn('leave', 'SALIR AL MENÚ PRINCIPAL', px0, A.training ? H / 2 - 40 * u : H / 2 + 20 * u, pw, bh, () => this.leave());
+        const pg = this.menuPage || 'main', TITLES = { main: 'PAUSA', options: 'OPCIONES', sound: 'SONIDO', access: 'ACCESIBILIDAD' }, top = H / 2 - 170 * u;
+        this.T('ovTitle', TITLES[pg], W / 2, top + 46 * u, { size: 44 * u, bold: true, color: '#eaf7ff', origin: [0.5, 0.5], stroke: 6, depth: 22 });
+        ov.fillStyle(0x3fd0ff, 0.9).fillRoundedRect(W / 2 - 34 * u, top + 78 * u, 68 * u, 3 * u, 2 * u);
+        let y = top + 100 * u; const next = h => { const r = y; y += h; return r; };
+        const slider = (k, label, col) => {   // volume bars (click or drag): the filled part is the current level
+          const sy = next(38 * u), lw = 150 * u, bx = px0 + lw, bw = pw - lw - 56 * u, bhh = 16 * u, val = k === 'ui' ? (vol.ui - 0.5) * 2 : vol[k], trad = bhh / 2;
+          this.T('vl' + k, label, px0, sy + bhh / 2, { size: 12 * u, bold: true, color: '#cfe3ff', origin: [0, 0.5], stroke: 3, depth: 22 });
+          ov.lineStyle(2, col, 0.28).strokeRoundedRect(bx - 2 * u, sy - 2 * u, bw + 4 * u, bhh + 4 * u, trad + 2 * u);
+          ov.fillStyle(0x08182e, 1).fillRoundedRect(bx, sy, bw, bhh, trad);
+          if (val > 0) { ov.fillStyle(col, 0.95).fillRoundedRect(bx, sy, Math.max(bhh, bw * val), bhh, trad); ov.fillStyle(0xffffff, 0.28).fillRoundedRect(bx + 2 * u, sy + 2 * u, Math.max(0, bw * val - 4 * u), bhh * 0.32, 2 * u); }
+          ov.lineStyle(1, 0x3fd0ff, 0.45).strokeRoundedRect(bx, sy, bw, bhh, trad);
+          ov.fillStyle(0xeaf7ff, 1).fillRoundedRect(bx + bw * val - 3 * u, sy - 3 * u, 6 * u, bhh + 6 * u, 3 * u).lineStyle(1, col, 0.9).strokeRoundedRect(bx + bw * val - 3 * u, sy - 3 * u, 6 * u, bhh + 6 * u, 3 * u);
+          this.T('vp' + k, `${Math.round((k === 'ui' ? vol.ui : vol[k]) * 100)}%`, bx + bw + 8 * u, sy + bhh / 2, { size: 12 * u, bold: true, color: '#fff', origin: [0, 0.5], stroke: 3, depth: 22 });
+          this.volBars.push({ x: bx - 4 * u, y: sy - 8 * u, w: bw + 8 * u, h: bhh + 16 * u, bx, bw, key: k });
+        };
+        const row = (id, label, fn, col) => btn(id, label, px0, next(bh + 14 * u), pw, bh, fn, col);
+        if (pg === 'main') {
+          row('resume', 'CONTINUAR', () => A.togglePause()); row('opts', 'OPCIONES', () => { this.menuPage = 'options'; }); row('leave', 'SALIR PARTIDA', () => this.leave(), 0x5c1d1d);
+        } else if (pg === 'options') {
+          row('osnd', 'SONIDO', () => { this.menuPage = 'sound'; }); row('oacc', 'ACCESIBILIDAD', () => { this.menuPage = 'access'; }); row('oback', 'VOLVER', () => { this.menuPage = 'main'; });
+        } else if (pg === 'sound') {
+          slider('music', 'MÚSICA', 0x3fd0ff); slider('sfx', 'EFECTOS', 0x7dff9a); slider('voice', 'VOZ ANUNCIADOR', 0xffd23f); slider('champ', 'VOCES CAMPEONES', 0xff7ad0); y += 8 * u;
+          row('sback', 'VOLVER', () => { this.menuPage = 'options'; });
+        } else {
+          slider('ui', 'TAMAÑO INTERFAZ', 0xff9a4a); y += 8 * u;
+          row('aback', 'VOLVER', () => { this.menuPage = 'options'; });
+        }
       }
     }
+
+    // ---- branch choice window: learning a slot that has two versions (Leandro) ----
+    if (this.branchSel && p.def.alt?.[this.branchSel] && !p.ranks[this.branchSel] && p.canSpend(this.branchSel)) {
+      const k = this.branchSel, opts = [CHAMPIONS[p.key].abilities[k], p.def.alt[k]], KEY = { p1: 'Q', p2: 'F', p3: 'E', ult: 'R' }[k];
+      const bw = Math.min(W - 24, 940 * u), bh = Math.min(H - 16, 560 * u), bx = W / 2 - bw / 2, by = H / 2 - bh / 2, gap = 18 * u;
+      this.boxes.push({ x: 0, y: 0, w: W, h: H });
+      ov.fillStyle(0x020812, 0.74).fillRect(0, 0, W, H);
+      ov.lineStyle(2, 0x3fd0ff, 0.22).strokeRoundedRect(bx - 3 * u, by - 3 * u, bw + 6 * u, bh + 6 * u, 14 * u);
+      ov.fillStyle(0x0a1a30, 0.97).fillRoundedRect(bx, by, bw, bh, 12 * u).lineStyle(2, 0x3fd0ff, 0.65).strokeRoundedRect(bx, by, bw, bh, 12 * u);
+      ov.lineStyle(1, 0x8ae2ff, 0.35).lineBetween(bx + 14 * u, by + 2.5 * u, bx + bw - 14 * u, by + 2.5 * u);
+      this.T('brT', `ELIGE EL PODER DE LA ${KEY}`, W / 2, by + 30 * u, { size: 26 * u, bold: true, color: '#eaf7ff', origin: [0.5, 0.5], stroke: 5, depth: 22 });
+      this.T('brS', 'La elección es para toda la partida; después lo mejoras con normalidad.', W / 2, by + 58 * u, { size: 12 * u, color: '#9fc4e8', origin: [0.5, 0.5], stroke: 2, depth: 22 });
+      const cw = (bw - 3 * gap) / 2, cy0 = by + 82 * u, ch = bh - 82 * u - 66 * u, ptr = this.input.activePointer;
+      opts.forEach((a, i) => {
+        const cx = bx + gap + i * (cw + gap), over = ptr.x >= cx && ptr.x <= cx + cw && ptr.y >= cy0 && ptr.y <= cy0 + ch, pick = () => { A.audio.play('ui_upgrade', { gap: 0 }); this.branchSel = null; A.player.spend(k, i); };
+        ov.fillStyle(over ? 0x13365a : 0x0c2240, 0.98).fillRoundedRect(cx, cy0, cw, ch, 10 * u).lineStyle(2, over ? 0x8ae2ff : 0x3fd0ff, over ? 1 : 0.55).strokeRoundedRect(cx, cy0, cw, ch, 10 * u);
+        this.T('brTag' + i, i ? 'OPCIÓN B' : 'OPCIÓN A', cx + 16 * u, cy0 + 12 * u, { size: 11 * u, bold: true, color: i ? '#ffd23f' : '#7dff9a', stroke: 3, depth: 22 });
+        // left: the champion casting the power (looping sprite) with the power's icon underneath; right: name, cost and description
+        const sx = cx + 16 * u, sw = 150 * u, anim = a.anim || { p1: 'power1', p2: 'power2', p3: 'power3', ult: 'ult' }[k], akey = p.key + '_' + anim;
+        ov.fillStyle(0x070a12, 1).fillRoundedRect(sx, cy0 + 34 * u, sw, sw, 8 * u).lineStyle(1, 0x3fd0ff, 0.6).strokeRoundedRect(sx, cy0 + 34 * u, sw, sw, 8 * u);
+        if (this.anims.exists(akey) && this.textures.exists('atl_' + p.key)) {
+          const im = (this.itImgs['brS' + i] ||= this.add.sprite(0, 0, 'atl_' + p.key).setDepth(23));
+          if (im.anims.currentAnim?.key !== akey) im.play({ key: akey, repeat: -1, frameRate: 9 });
+          im.setVisible(true).setPosition(sx + sw / 2, cy0 + 34 * u + sw / 2).setScale(sw / 256);
+        } else if (a.preview && this.textures.exists(a.preview)) this.iconImg('brP' + i, a.preview, sx + sw / 2, cy0 + 34 * u + sw / 2, sw * 0.7, 23);
+        this.iconImg('brI' + i, 'icon_' + a.icon, sx + sw / 2, cy0 + 34 * u + sw + 40 * u, 60 * u, 23);
+        const tx = sx + sw + 18 * u, tw = cw - (tx - cx) - 16 * u;
+        this.T('brN' + i, a.name, tx, cy0 + 50 * u, { size: 19 * u, bold: true, color: '#fff', origin: [0, 0.5], stroke: 4, depth: 22 }).setWordWrapWidth(tw, true);
+        this.T('brK' + i, `ENFR. ${a.cd[0]} s  ·  MANÁ ${a.mana[0]}`, tx, cy0 + 84 * u, { size: 11 * u, color: '#9fe8ff', origin: [0, 0.5], stroke: 3, depth: 22 });
+        this.T('brD' + i, a.short || a.desc, tx, cy0 + 102 * u, { size: 13 * u, color: '#cfe3ff', stroke: 2, depth: 22 }).setWordWrapWidth(tw, true).setLineSpacing(3 * u);
+        btn('brC' + i, 'ELEGIR', cx + 16 * u, cy0 + ch - 54 * u, cw - 32 * u, 40 * u, pick);
+        this.btns.push({ x: cx, y: cy0, w: cw, h: ch, fn: pick });
+      });
+      btn('brX', 'CANCELAR (Esc)', W / 2 - 90 * u, by + bh - 54 * u, 180 * u, 38 * u, () => { this.branchSel = null; }, 0x5c1d1d);
+    } else this.branchSel = null;
 
     A.uiRects = this.boxes;
   }
@@ -668,6 +714,8 @@ export class Hud extends Phaser.Scene {
     vol[bar.key] = Math.round((bar.key === 'ui' ? 0.5 + f * 0.5 : f) * 100) / 100; saveVol(); A.audio.refresh();
   }
 
+  menuBack() { const m = { sound: 'options', access: 'options', options: 'main' }[this.menuPage]; if (m) { this.menuPage = m; return true; } return false; }
+
   leave() {
     const A = this.scene.get('arena'); if (A) { A.time.paused = false; A.tweens.resumeAll(); A.paused = false; }   // leaving from the pause menu must not leave the clocks frozen for the next match
     this.anims.resumeAll();
@@ -845,7 +893,12 @@ export class Hud extends Phaser.Scene {
     const learned = rank > 0, cd = p.cds[a], total = learned && d.cd ? rk(d.cd, rank) : 1, onCd = learned && cd > 0 && !d.passive;
     const locked = learned && p.abilityLocked?.(a), noMana = learned && d.mana && p.mana < rk(d.mana, rank) && !A.debugFree;
     const tex = 'icon_' + d.icon, pad = size * 0.04;
-    if (this.textures.exists(tex)) {
+    const pending = !!p.def.alt?.[a] && !rank;   // two versions and none chosen yet: a question mark instead of a dimmed icon
+    if (pending) {
+      this.icons[i]?.setVisible(false);
+      o.fillStyle(0x0b1426, 1).fillRect(x + size * 0.04, y + size * 0.04, size * 0.92, size * 0.92).lineStyle(2, 0xffd23f, 0.7).strokeRect(x + size * 0.04, y + size * 0.04, size * 0.92, size * 0.92);
+      this.T('qm' + i, '?', x + size / 2, y + size / 2, { size: size * 0.7, bold: true, origin: [0.5, 0.5], color: '#ffd23f', stroke: 5 });
+    } else if (this.textures.exists(tex)) {
       if (!this.icons[i] || this.icons[i].texture.key !== tex) { this.icons[i]?.destroy(); this.icons[i] = this.add.image(0, 0, tex).setDepth(1.5); }
       const sil = p.silenceT > 0 && !d.passive && learned, jx = sil ? Phaser.Math.Between(-4, 4) : 0, jw = sil ? Phaser.Math.FloatBetween(0.82, 1.18) : 1;
       const im = this.icons[i].setVisible(true).setPosition(x + size / 2 + jx, y + size / 2 + (sil ? Phaser.Math.Between(-2, 2) : 0)).setDisplaySize((size - pad * 2) * jw, size - pad * 2).setAlpha(learned ? (sil ? 0.55 : 1) : 0.3);
@@ -915,7 +968,10 @@ export class Hud extends Phaser.Scene {
 
   // hover info: title, description and what each rank improves (current rank highlighted)
   drawTip(p, i, q, u, W) {
-    const a = ABILITY_KEYS[i], d = p.def.abilities[a], rank = p.ranks[a], g = this.tipG;
+    const a = ABILITY_KEYS[i], rank = p.ranks[a], g = this.tipG, pend = !!p.def.alt?.[a] && !rank;
+    const d = pend ? { name: '¿?  Poder por elegir', desc: `Al aprenderlo elegirás entre dos versiones:
+· ${CHAMPIONS[p.key].abilities[a].name}
+· ${p.def.alt[a].name}`, icon: '' } : p.def.abilities[a];
     const TW = 360 * u, pad = 12 * u, fs = 12 * u, depth = 7, rows = [];
     Object.keys(FIELD).forEach(k => { if (Array.isArray(d[k])) rows.push([k, d[k]]); });
     if (a === 'ult') rows.push(['reqLvl', ULT_LEVELS]);
@@ -923,7 +979,7 @@ export class Hud extends Phaser.Scene {
     const title = this.T('tipTitle', `[${'QFER'[i]}] ${d.name}`, 0, 0, { size: 16 * u, bold: true, color: '#ffe066', depth });
     const sub = this.T('tipSub', rank ? `Nivel ${rank} de ${MAX_RANK}${a === 'ult' ? ' · mejora en nv ' + ULT_LEVELS.join(', ') : ''}` : a === 'ult' ? `Se desbloquea en el nivel ${ULT_LEVELS[0]}` : 'Sin aprender (Ctrl+' + 'QFER'[i] + ' o botón dorado)', 0, 0, { size: 11 * u, color: rank ? '#7dff9a' : '#ff9a7a', depth, stroke: 2 });
     const desc = this.T('tipDesc', d.desc, 0, 0, { size: fs, color: '#cfe3ff', depth, stroke: 2 }); desc.setWordWrapWidth(TW - 2 * pad);
-    const sc = d.passive && !Array.isArray(d.dmg) ? [] : scaleRows(d, rank, { ap: p.ap, atk: p.atk, maxHp: p.maxHp });
+    const sc = pend || (d.passive && !Array.isArray(d.dmg)) ? [] : scaleRows(d, rank, { ap: p.ap, atk: p.atk, maxHp: p.maxHp });
     const rh = 18 * u, head = 20 * u, scH = sc.length ? 18 * u + sc.length * 20 * u + 6 * u : 0, th = pad + title.height + 2 * u + sub.height + 8 * u + desc.height + 10 * u + scH + head + rows.length * rh + pad;
     const x = Phaser.Math.Clamp(q.x + q.s / 2 - TW / 2, 8, W - TW - 8), y = q.y - 50 * u - th;
     g.fillStyle(0x070b14, 0.97).fillRect(x, y, TW, th).lineStyle(2, 0x3fd0ff, 0.9).strokeRect(x, y, TW, th);
@@ -996,10 +1052,11 @@ export class Hud extends Phaser.Scene {
     const fx = q.w / WORLD_W, fy = q.h / WORLD_H;     // stretched to fill the hole
     g.fillStyle(0x7d8226).fillRect(q.x, q.y, q.w, q.h);
     const dirt = 0x8c6a2c;
-    for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) if (walk[j * GW + i]) g.fillStyle(dirt).fillRect(q.x + i * CELL * fx, q.y + j * CELL * fy, CELL * fx + 0.6, CELL * fy + 0.6);
+    for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) if (walk[j * GW + i] && !grass[j * GW + i]) g.fillStyle(dirt).fillRect(q.x + i * CELL * fx, q.y + j * CELL * fy, CELL * fx + 0.6, CELL * fy + 0.6);
     (A.camps?.length ? A.camps : CAMPS.map(([x, y]) => ({ x, y, owner: null, prog: [0, 0] }))).forEach(c => { const col = c.owner === 0 ? 0x4aa3ff : c.owner === 1 ? 0xff4a3a : 0x8a6238; g.fillStyle(col).fillCircle(q.x + c.x * fx, q.y + c.y * fy, 5); g.lineStyle(1, 0xffffff, 0.8).strokeCircle(q.x + c.x * fx, q.y + c.y * fy, 5); });
-    g.fillStyle(0x3b82f6, 0.45).fillRect(q.x, q.y + 600 * fy, 340 * fx, 312 * fy);
-    g.fillStyle(0xef4444, 0.45).fillRect(q.x + q.w - 340 * fx, q.y + 600 * fy, 340 * fx, 312 * fy);
+    for (let y = RIVER.y0; y < RIVER.y1; y += 15) { g.fillStyle(0x5f9f94).fillRect(q.x + (WORLD_W / 2 + riverOffset(y) - 84 * F) * fx, q.y + y * fy, 168 * F * fx, 15 * fy + 0.6); }   // the river (the lanes cross it on earth)
+    g.fillStyle(0x3b82f6, 0.45).fillRect(q.x, q.y + (BASE_Y - 450 * F) * fy, 510 * F * fx, 900 * F * fy);
+    g.fillStyle(0xef4444, 0.45).fillRect(q.x + q.w - 510 * F * fx, q.y + (BASE_Y - 450 * F) * fy, 510 * F * fx, 900 * F * fy);
     if (A.fog) { if (!this.fogImg || !this.fogImg.scene) this.fogImg = this.add.image(0, 0, 'fogmask').setOrigin(0, 0).setDepth(1.6); this.fogImg.setPosition(q.x, q.y).setDisplaySize(q.w, q.h).setVisible(true); } else this.fogImg?.setVisible(false);
     A.fighters.forEach(ft => {
       if ((!ft.alive && !ft.isNexus) || ft.hiddenFor(A.player)) return;

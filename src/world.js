@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { CHAMPIONS, ABILITY_KEYS, MAX_RANK, COMBO_WINDOW, aimSpec, rk } from './data.js';
-import { Fighter, UNIT_DEFS, BODY_R, WORLD_W, WORLD_H, LANE_Y0, LANE_Y1, WALK_Y0, WALK_Y1, dist } from './fighter.js';
-import { walk, GW, GH, CELL, cellWalk, walkField, MID, CAMP_SITES, LANE_NORTH, LANE_SOUTH } from './mapdata.js';
+import { Fighter, UNIT_DEFS, BODY_R, towerCircle, WORLD_W, WORLD_H, LANE_Y0, LANE_Y1, WALK_Y0, WALK_Y1, dist } from './fighter.js';
+import { walk, GW, GH, CELL, cellWalk, walkField, grassField, isWalk as isWalkM, CAMP_SITES, laneYAt, LANE_HALF, RIVER, riverOffset, TOWER_XS, BASE_X, BASE_Y, F } from './mapdata.js';
 import { Audio } from './audio.js';
 import { runChampAi } from './ai.js';
 import { bootScreen } from './bootscreen.js';
@@ -11,13 +11,14 @@ import { botStart } from './launcher.js';
 import { isWalk } from './mapdata.js';
 
 
+const ZOOM_MIN = 0.96, ZOOM_MAX = 1.4;   // default / farthest view = 80 % of the first closer view (1.2), closest = 1.4
 const VIEW_H = 640;   // world units visible vertically at zoom 1 (zoom scales this to the window height)
-const LANE_MID = (LANE_Y0 + LANE_Y1) / 2;
+const LANE_MID = BASE_Y;
 
 // vfx sheets in public/assets/vfx (32px frames)
 const VFX = ['energy_bolt', 'magic_missile', 'rock_throw', 'poison_dart', 'poison_cloud', 'heal', 'summon', 'shield', 'buff',
   'shockwave', 'punch', 'spark', 'block', 'poison_hit', 'levelup', 'run_dust', 'bullet_tracer', 'cannonball', 'plasma_shot', 'burning_ground', 'fire_trail'];
-const ANIM_FPS = { idle: 6, walk: 10, run: 14, attack: 12, power1: 12, power2: 12, power3: 12, ult: 12, death: 8, destroy: 7, transform: 12, attack3: 12, dash: 14 };
+const ANIM_FPS = { idle: 6, walk: 10, run: 14, attack: 12, power1: 12, power2: 12, power3: 12, ult: 12, death: 8, destroy: 7, transform: 12, attack3: 12, dash: 14, power1b: 12, power2b_pull: 12, power2b_push: 12, power3b: 12, ultb: 12 };
 const LOOPS = new Set(['idle', 'walk', 'run']);
 // 8-direction sprites: sheets named <anim>_<dir> with dir in s/se/e/ne/n (sw/w/nw are the mirror of se/e/ne); looping cycles run at a fixed cycle time whatever their frame count
 const DIR_SUFFIX = new Set(['s', 'se', 'e', 'ne', 'n']);
@@ -37,6 +38,7 @@ const MINION_XP_SHARE = 0.3;   // XP of an allied champion that is near a minion
 const YR = 0.75;   // the map is seen at an angle: ground areas are ellipses squashed to this ratio, not perfect circles
 const eDist = (ax, ay, bx, by) => Math.hypot(ax - bx, (ay - by) / YR);   // distance measured in that ellipse metric
 const FOREST = ['wall1', 'wall2', 'wall3', 'tree1', 'tree2', 'tree3', 'tree4', 'bush1', 'bush2', 'trunk1', 'stone1', 'stone2', 'stone3', 'stone4', 'flower1', 'flower2', 'flower3', 'mush1', 'mush2', 'mush3', 'mush4', 'mush5', 'mush6'];
+const LANE_YS_N = [0, 1, 2];
 const CHAMP_ORDER = ['leandro', 'xeviche', 'jorbi', 'axel', 'julio', 'luis', 'eliud', 'hector', 'yonaiker', 'junior'];   // TAB cycles through these
 
 // circular XP gauge around the level number: gold arc from 12 o'clock, full ring = level up
@@ -57,75 +59,18 @@ const rng = (seed) => () => (seed = (seed * 16807) % 2147483647) / 2147483647;
 export class Boot extends Phaser.Scene {
   constructor() { super('boot'); }
 
-  preload() {
-    bootScreen.show(); this.load.on('progress', v => bootScreen.progress(v * 25, 'CARGANDO INTERFAZ...'));
+  preload() {   // first load: only what the interface needs (the launcher is HTML). Champions, sounds and the map load when a match starts (Arena.preload)
+    bootScreen.show(); this.load.on('progress', v => bootScreen.progress(v * 100, 'CARGANDO INTERFAZ...'));
     this.load.json('manifest', 'assets/sprites/manifest.json?' + Date.now());
-    Object.keys(CHAMPIONS).forEach(k => this.load.image('face_' + k, `assets/concept/${k}_face.webp`));   // death recap portraits
-    this.load.image('ref_leandro', 'assets/ref_leandro.png');
-    this.load.image('ref_xeviche', 'assets/ref_xeviche.png');
-    this.load.image('ref_jorbi', 'assets/ref_jorbi.png');
-    this.load.image('ref_axel', 'assets/ref_axel.png');
-    this.load.image('ref_julio', 'assets/ref_julio.png');
-    this.load.image('ref_luis', 'assets/ref_luis.png');
-    this.load.image('ref_eliud', 'assets/ref_eliud.png');
-    this.load.image('ref_hector', 'assets/ref_hector.png');
-    this.load.image('ref_yonaiker', 'assets/ref_yonaiker.png');
-    this.load.image('ref_maduro', 'assets/ref_maduro.png');
-    this.load.image('ref_diosa', 'assets/ref_diosa.png');
-    this.load.image('ref_superbigote', 'assets/ref_superbigote.png');
-    this.load.image('ref_junior', 'assets/ref_junior.png');
-    this.load.spritesheet('fist_progress', 'assets/objects/fist_progress_sheet.png', { frameWidth: 128, frameHeight: 128 });
-    this.load.image('shadow', 'assets/map/shadow.png');
-    ['blue', 'red', 'gold', 'blue_l', 'red_l', 'gold_l', 'gold_plain'].forEach(c => this.load.image('ui_hud_banner_' + c, `assets/ui/hud_banner_${c}.png?${Date.now()}`));
     this.load.json('uilayout', 'assets/ui/layout.json?' + Date.now());
     this.load.json('sfx', 'assets/sfx/sfx.json?' + Date.now());
-    ['hud_hero', 'hud_center', 'hud_minimap', 'hud_items', 'hud_stats', 'hud_enemy', 'hud_target', 'hud_kda', 'hud_score'].forEach(n => this.load.image('ui_' + n, `assets/ui/${n}.png?${Date.now()}`));
-    this.load.spritesheet('ground', 'assets/map/ground.png', { frameWidth: 32, frameHeight: 32 });
-    this.load.spritesheet('details', 'assets/map/details.png', { frameWidth: 32, frameHeight: 32 });
-    ['trees', 'bushes', 'rocks'].forEach(n => this.load.image(n, `assets/map/${n}.png`));
-    this.load.image('f_trail', 'assets/map/forest/trail.png'); this.load.image('f_gt', 'assets/map/forest/gtrans.png');   // path + grass transition tiles (Brendon Bancer)
-    ['zap_a', 'zap_b'].forEach(n => this.load.spritesheet(n, `assets/vfx/${n}.png`, { frameWidth: 112, frameHeight: 112 }));   // lightning lines by sanctumpixel (itch.io)
-    ['sentry_robot_fire', 'turret_robot_fire'].forEach(n => this.load.image(n, `assets/objects/${n}.png?${Date.now()}`));
-    ['fence_h', 'fence_v'].forEach(n => this.load.image(n, `assets/objects/${n}.png?${Date.now()}`));
-    FOREST.forEach(n => this.load.image('f_' + n, `assets/map/forest/${n}.png`));   // forest props by Brendon Bancer (itch.io/brendon-bancer)
-    VFX.forEach(n => this.load.spritesheet('vfx_' + n, `assets/vfx/${n}.png`, { frameWidth: 32, frameHeight: 32 }));
+    this.load.json('voices', 'assets/voice/voices.json?' + Date.now());
     this.load.on('loaderror', f => { if (!/^(manifest|uilayout)/.test(f.key)) console.warn('missing', f.src); });
   }
 
-  create() {
-    // second pass: sprites/icons/objects listed in the manifest (produced by tools/process_sprites.py)
-    const m = this.cache.json.get('manifest') || {}, sprites = m.sprites || {};
-    const t = Date.now();
-    for (const ch in sprites) this.load.multiatlas('atl_' + ch, `assets/sprites/${ch}/atlas.json?${t}`, `assets/sprites/${ch}/`);   // one atlas per character/unit: frames are named <anim>/<index>
-    (m.icons || []).forEach(n => this.load.image('icon_' + n, `assets/icons/${n}.png?${t}`));
-    const sfx = this.cache.json.get('sfx') || {};
-    Object.values(sfx).flat().forEach(f => this.load.audio('sfx_' + f, 'assets/sfx/' + f));
-    (m.classes || []).forEach(n => this.load.image('class_' + n, `assets/classes/${n}.png?${t}`));
-    (m.flags || []).forEach(n => this.load.spritesheet('flag_' + n, `assets/flags/${n}.png?${t}`, { frameWidth: 128, frameHeight: 128 }));
-    Object.entries(m.statics || {}).forEach(([n, fr]) => this.load.spritesheet('st_' + n, `assets/statics/${n}.png?${t}`, { frameWidth: 192, frameHeight: 192 }));
-    (m.stats || []).forEach(n => this.load.image('stat_' + n, `assets/stats/${n}.png?${t}`));
-    (m.items || []).forEach(n => this.load.image('item_' + n, `assets/items/${n}.png?${t}`));
-    (m.aim || []).forEach(n => this.load.image(n, `assets/aim/${n}.png?${t}`));
-    (m.objects || []).forEach(n => this.load.image(n, `assets/objects/${n}.png?${t}`));
-    const LAB = k => (k.startsWith('sfx_') ? 'CARGANDO SONIDOS...' : /^(item_|icon_|class_)/.test(k) ? 'CARGANDO OBJETOS E ICONOS...' : 'CARGANDO CAMPEONES Y UNIDADES...');
-    let pct = 25; this.load.off('progress'); this.load.on('progress', v => { pct = 25 + v * 75; bootScreen.progress(pct); });
-    this.load.on('filecomplete', k => bootScreen.progress(pct, LAB(k)));
-    this.load.once('complete', () => this.finish(sprites));
-    this.load.start();
-  }
+  create() { this.finish((this.cache.json.get('manifest') || {}).sprites || {}); }
 
   finish(sprites) {
-    VFX.forEach(n => this.anims.create({ key: 'vfx_' + n, frames: this.anims.generateFrameNumbers('vfx_' + n), frameRate: 18, repeat: -1 }));
-    for (const ch in sprites) for (const a in sprites[ch]) {
-      const [base, dir] = splitDir(a), frames = this.anims.generateFrameNames('atl_' + ch, { prefix: `${a}/`, start: 0, end: sprites[ch][a] - 1 });
-      this.anims.create({ key: `${ch}_${a}`, frames, frameRate: dir && CYCLE_SEC[base] ? frames.length / CYCLE_SEC[base] : ANIM_FPS[base] || 10, repeat: LOOPS.has(base) ? -1 : 0 });
-    }
-    // units that only ship walk/attack get a 1-frame idle (first walk frame)
-    for (const ch in sprites) if (sprites[ch].walk && !sprites[ch].idle)
-      this.anims.create({ key: `${ch}_idle`, frames: [{ key: 'atl_' + ch, frame: 'walk/0' }], frameRate: 1, repeat: -1 });
-    ['zap_a', 'zap_b'].forEach(n => { if (this.textures.exists(n)) this.anims.create({ key: n, frames: this.anims.generateFrameNumbers(n), frameRate: 16, repeat: -1 }); });
-    for (const fl of (this.cache.json.get('manifest')?.flags || [])) this.anims.create({ key: 'flag_' + fl, frames: this.anims.generateFrameNumbers('flag_' + fl), frameRate: 8, repeat: -1 });
-    for (const sheet in CROPS) for (const n in CROPS[sheet]) this.textures.get(sheet).add(n, 0, ...CROPS[sheet][n]);
     this.registry.set('sprites', sprites);
     const h = new URLSearchParams(location.hash.slice(1));
     bootScreen.progress(100, 'LISTO');
@@ -150,16 +95,79 @@ export class Arena extends Phaser.Scene {
     this.bot = !!data.bot;   // headless match host on the server (?bot=): simulates for everyone, has no player, draws nothing
   }
 
+  // champions that take part in this match (only their sprites, icons, portraits and sounds are loaded)
+  matchChamps() {
+    const c = this.cfg || {}, set = new Set([this.playerKey, ...(this.allyKeys || []), ...(this.enemyKeys || [])]);
+    (c.roster || []).forEach(r => set.add(r.key)); if (this.enemyKey) set.add(this.enemyKey);
+    return [...set].filter(k => CHAMPIONS[k]);
+  }
+  preload() {   // match loading screen: everything the match needs, nothing else
+    const m = this.cache.json.get('manifest') || {}, t = Date.now(), all = !!this.bot, LD = this.load;
+    // a second match in the same page: whatever is already loaded is not requested again
+    const L = { on: (...a) => LD.on(...a), image: (k, u) => { if (!this.textures.exists(k)) LD.image(k, u); }, spritesheet: (k, u, c) => { if (!this.textures.exists(k)) LD.spritesheet(k, u, c); }, multiatlas: (k, j, p) => { if (!this.textures.exists(k)) LD.multiatlas(k, j, p); }, audio: (k, u) => { if (!this.cache.audio.exists(k)) LD.audio(k, u); } };
+    const champs = this.matchChamps(), allKeys = Object.keys(CHAMPIONS), mine = k => champs.some(c => k === c || k.startsWith(c + '_')), isChampKey = k => allKeys.some(c => k === c || k.startsWith(c + '_'));
+    const ok = k => all || !isChampKey(k) || mine(k);
+    if (!this.bot) { bootScreen.show(); L.on('progress', v => bootScreen.progress(8 + v * 80)); L.on('filecomplete', k => bootScreen.progress(undefined, /^sfx_/.test(k) ? 'CARGANDO SONIDOS...' : /^(atl_)/.test(k) ? 'CARGANDO CAMPEONES Y UNIDADES...' : /^(item_|icon_|class_)/.test(k) ? 'CARGANDO HABILIDADES Y OBJETOS...' : 'CONSTRUYENDO EL MAPA...')); }
+    champs.forEach(k => { L.image('face_' + k, `assets/concept/${k}_face.webp`); L.image('ref_' + k, `assets/ref_${k}.png`); });
+    if (champs.includes('maduro')) L.image('ref_superbigote', 'assets/ref_superbigote.png');
+    L.spritesheet('fist_progress', 'assets/objects/fist_progress_sheet.png', { frameWidth: 128, frameHeight: 128 });
+    L.image('shadow', 'assets/map/shadow.png'); L.image('virtual_floor', 'assets/virtual_floor.png');
+    ['blue', 'red', 'gold', 'blue_l', 'red_l', 'gold_l', 'gold_plain'].forEach(c => L.image('ui_hud_banner_' + c, `assets/ui/hud_banner_${c}.png?${t}`));
+    ['hud_hero', 'hud_center', 'hud_minimap', 'hud_items', 'hud_stats', 'hud_enemy', 'hud_target', 'hud_kda', 'hud_score'].forEach(n => L.image('ui_' + n, `assets/ui/${n}.png?${t}`));
+    L.spritesheet('ground', 'assets/map/ground.png', { frameWidth: 32, frameHeight: 32 }); L.spritesheet('details', 'assets/map/details.png', { frameWidth: 32, frameHeight: 32 });
+    ['trees', 'bushes', 'rocks'].forEach(n => L.image(n, `assets/map/${n}.png`));
+    L.image('f_trail', 'assets/map/forest/trail.png'); L.image('f_gt', 'assets/map/forest/gtrans.png');
+    ['zap_a', 'zap_b'].forEach(n => L.spritesheet(n, `assets/vfx/${n}.png`, { frameWidth: 112, frameHeight: 112 }));
+    ['sentry_robot_fire', 'turret_robot_fire', 'fence_h', 'fence_v'].forEach(n => L.image(n, `assets/objects/${n}.png?${t}`));
+    FOREST.forEach(n => L.image('f_' + n, `assets/map/forest/${n}.png`));
+    VFX.forEach(n => L.spritesheet('vfx_' + n, `assets/vfx/${n}.png`, { frameWidth: 32, frameHeight: 32 }));
+    const sprites = m.sprites || {};
+    for (const ch in sprites) if (ok(ch)) L.multiatlas('atl_' + ch, `assets/sprites/${ch}/atlas.json?${t}`, `assets/sprites/${ch}/`);   // one atlas per unit / selected champion
+    (m.icons || []).forEach(n => { if (ok(n)) L.image('icon_' + n, `assets/icons/${n}.png?${t}`); });
+    (m.classes || []).forEach(n => L.image('class_' + n, `assets/classes/${n}.png?${t}`));
+    (m.flags || []).forEach(n => L.spritesheet('flag_' + n, `assets/flags/${n}.png?${t}`, { frameWidth: 128, frameHeight: 128 }));
+    Object.entries(m.statics || {}).forEach(([n]) => L.spritesheet('st_' + n, `assets/statics/${n}.png?${t}`, { frameWidth: 192, frameHeight: 192 }));
+    (m.stats || []).forEach(n => L.image('stat_' + n, `assets/stats/${n}.png?${t}`));
+    (m.items || []).forEach(n => L.image('item_' + n, `assets/items/${n}.png?${t}`));
+    (m.aim || []).forEach(n => L.image(n, `assets/aim/${n}.png?${t}`));
+    (m.objects || []).forEach(n => { if (n !== 'fist_progress') L.image(n, `assets/objects/${n}.png?${t}`); });
+    // sounds: the common ones plus those of the champions in the match
+    const sfx = this.cache.json.get('sfx') || {}, files = new Set();
+    for (const name in sfx) { const owner = allKeys.find(c => new RegExp('(^|_)' + c + '(_|$)').test(name)); if (all || !owner || champs.includes(owner)) sfx[name].forEach(f => files.add(f)); }
+    files.forEach(f => L.audio('sfx_' + f, 'assets/sfx/' + f));
+    const vo = this.cache.json.get('voices') || {};   // champion voices (only those in the match)
+    for (const c in vo) if (all || champs.includes(c)) vo[c].forEach(e => L.audio(`vo_${c}_${e}`, `assets/voice/${c}/${e}.mp3?${t}`));
+  }
+  setupAssets() {   // animations of what was loaded, tile crops
+    const m = this.cache.json.get('manifest') || {}, sprites = m.sprites || {}, A = this.anims;
+    VFX.forEach(n => { if (this.textures.exists('vfx_' + n) && !A.exists('vfx_' + n)) A.create({ key: 'vfx_' + n, frames: A.generateFrameNumbers('vfx_' + n), frameRate: 18, repeat: -1 }); });
+    for (const ch in sprites) {
+      if (!this.textures.exists('atl_' + ch)) continue;
+      for (const a in sprites[ch]) {
+        if (A.exists(`${ch}_${a}`)) continue;
+        const [base, dir] = splitDir(a), frames = A.generateFrameNames('atl_' + ch, { prefix: `${a}/`, start: 0, end: sprites[ch][a] - 1 });
+        A.create({ key: `${ch}_${a}`, frames, frameRate: dir && CYCLE_SEC[base] ? frames.length / CYCLE_SEC[base] : ANIM_FPS[base] || 10, repeat: LOOPS.has(base) ? -1 : 0 });
+        if (a === 'ultb') A.create({ key: `${ch}_ultb_loop`, frames: A.generateFrameNames('atl_' + ch, { prefix: 'ultb/', start: 2, end: sprites[ch][a] - 1 }), frameRate: 9, repeat: -1 });   // Filtraciones: from the 3rd frame on
+      }
+      if (sprites[ch].walk && !sprites[ch].idle && !A.exists(`${ch}_idle`)) A.create({ key: `${ch}_idle`, frames: [{ key: 'atl_' + ch, frame: 'walk/0' }], frameRate: 1, repeat: -1 });
+    }
+    ['zap_a', 'zap_b'].forEach(n => { if (this.textures.exists(n) && !A.exists(n)) A.create({ key: n, frames: A.generateFrameNumbers(n), frameRate: 16, repeat: -1 }); });
+    for (const fl of (m.flags || [])) if (this.textures.exists('flag_' + fl) && !A.exists('flag_' + fl)) A.create({ key: 'flag_' + fl, frames: A.generateFrameNumbers('flag_' + fl), frameRate: 8, repeat: -1 });
+    for (const sheet in CROPS) for (const n in CROPS[sheet]) { const tx = this.textures.get(sheet); if (!tx.has(n)) tx.add(n, 0, ...CROPS[sheet][n]); }
+  }
+
   get pc() { return this.ctrl && this.ctrl.alive ? this.ctrl : this.player; }
 
   hasAnims(key) { const a = this.sprites[key]; return !!a && !!(a.idle || a.walk); }
 
   create() {
+    this.setupAssets();
     this.time.paused = false; this.tweens.resumeAll(); this.anims.resumeAll(); this.floatN = 0;
-    this.fighters = []; this.projs = []; this.obstacles = []; this.audio = new Audio(this); this.audio.music('music_game'); this.events.once('shutdown', () => { this.audio.stopMusic(); this.audio.clearVoice(); }); this.timers = []; this.zones = []; this.castCtx = null; this.mortars = []; this.chains = []; this.eggs = []; this.spears = []; this.packages = []; this.grenades = []; this.towerRings = new Map(); this.control = null; this.ctrl = null; this.aimObjs = {}; this.rangeObjs = {}; this.gfx = null;
+    this.fighters = []; this.projs = []; this.obstacles = []; this.cages = []; this.tireShots = []; this.fireZones = []; this.audio = new Audio(this); this.audio.music('music_game'); this.events.once('shutdown', () => { this.audio.stopMusic(); this.audio.clearVoice(); }); this.timers = []; this.zones = []; this.castCtx = null; this.mortars = []; this.chains = []; this.eggs = []; this.spears = []; this.packages = []; this.grenades = []; this.towerRings = new Map(); this.control = null; this.ctrl = null; this.aimObjs = {}; this.rangeObjs = {}; this.gfx = null;
     this.rangeG = this.add.graphics();
     this.buildPlaceholderTextures();
     if (!this.bot) this.buildMap();   // the headless host needs no scenery (it is pure decoration)
+    this.buildBushes();
 
     const my = this.myTeam, dflt = CHAMP_ORDER[(CHAMP_ORDER.indexOf(this.playerKey) + 1) % CHAMP_ORDER.length];
     const enemyKeys = this.enemyKeys && this.enemyKeys.length ? this.enemyKeys : [this.enemyKey || dflt], allyKeys = this.training ? [] : this.allyKeys;
@@ -167,8 +175,8 @@ export class Arena extends Phaser.Scene {
     // spawn slots: staggered across the lane at each base (training zone: both at the map center)
     const pos = (team, i, n) => {
       if (this.training) return { x: WORLD_W / 2 + (team === 0 ? -140 : 140), y: LANE_MID };
-      const dirx = team === 0 ? 1 : -1, bx = team === 0 ? 420 : WORLD_W - 420;
-      return { x: bx + (i % 2) * 70 * dirx, y: Phaser.Math.Clamp(LANE_MID + (i - (n - 1) / 2) * 52, LANE_Y0 + 30, LANE_Y1 - 10) };
+      const dirx = team === 0 ? 1 : -1, bx = team === 0 ? BASE_X + 170 : WORLD_W - BASE_X - 170;   // spawn / respawn / recall point: inside the base's healing + shop circle, next to the nexus
+      return { x: bx + (i % 2) * 70 * dirx, y: Phaser.Math.Clamp(LANE_MID + (i - (n - 1) / 2) * 76, LANE_MID - 250, LANE_MID + 250) };
     };
     const myN = allyKeys.length + 1, enN = enemyKeys.length, pm = pos(my, 0, myN);
     if (this.cfg.roster) this.buildRoster(pos);
@@ -182,10 +190,13 @@ export class Arena extends Phaser.Scene {
     this.fighters.push(...this.champs);
     if (!this.training) {
     // nexus of each side + towers (middle lane: 2 each; top and bottom lanes: 1 each)
-      this.fighters.push(new Fighter(this, 'nexus_blue', 0, 190, LANE_MID), new Fighter(this, 'nexus_red', 1, WORLD_W - 190, LANE_MID));
-      this.fountains = [0, 1].map(t => ({ x: t === 0 ? 190 : WORLD_W - 190, y: LANE_MID, team: t })); this.fountG = this.add.graphics().setDepth(-996);
-      [['tower_blue', 0, 560, LANE_MID - 40], ['tower_blue', 0, 1000, LANE_MID - 40], ['tower_red', 1, WORLD_W - 560, LANE_MID - 40], ['tower_red', 1, WORLD_W - 1000, LANE_MID - 40]]
-        .forEach(([k, t, x, y]) => this.fighters.push(new Fighter(this, k, t, x, y, { ai: true })));
+      this.fighters.push(new Fighter(this, 'nexus_blue', 0, BASE_X, LANE_MID), new Fighter(this, 'nexus_red', 1, WORLD_W - BASE_X, LANE_MID));
+      this.fountains = [0, 1].map(t => ({ x: t === 0 ? BASE_X : WORLD_W - BASE_X, y: LANE_MID, team: t })); this.fountG = this.add.graphics().setDepth(-996);
+      LANE_YS_N.forEach(li => [0, 1].forEach(t => {   // every lane: two towers per team; the inner (last) one heals allies and is immune while the outer one stands
+        const X = x => t === 0 ? x : WORLD_W - x, key = t === 0 ? 'tower_blue' : 'tower_red';
+        const outer = new Fighter(this, key, t, X(TOWER_XS[0]), laneYAt(li, TOWER_XS[0]) - 40, { ai: true }), inner = new Fighter(this, key, t, X(TOWER_XS[1]), laneYAt(li, TOWER_XS[1]) - 40, { ai: true });
+        outer.laneI = inner.laneI = li; inner.inner = true; inner.wallRef = outer; this.fighters.push(outer, inner);
+      }));
       this.fighters.filter(f => f.isTower).forEach((t, i) => this.setNid(t, 200 + i));   // structures: same id on every client
     }
     this.waveT = 4; this.waveN = 0; this.gameT = 0; this.firstBlood = false; this.streaks = new Map();
@@ -203,7 +214,8 @@ export class Arena extends Phaser.Scene {
     this.camTarget = { x: this.player.x, y: this.player.y };
     cam.setBounds(0, -340, WORLD_W, WORLD_H + 340 + 120);   // the view may go past the top (and a bit past the bottom) of the map, so units at the edges are not hidden behind the HUD
     cam.startFollow(this.camTarget, true, 0.12, 0.12);
-    this.zoom = 0;
+    this.zoom = 0; this.zoomK = ZOOM_MIN;   // wheel zoom: ZOOM_MIN (default, cannot zoom out past it) .. ZOOM_MAX, relative to the old view
+    this.input.on('wheel', (p, o, dx, dy) => { if (!this.scene.get('hud')?.shopOpen) this.zoomK = Phaser.Math.Clamp(this.zoomK * (dy > 0 ? 0.92 : 1.087), ZOOM_MIN, ZOOM_MAX); });
 
     this.input.setDefaultCursor('crosshair');
     this.input.on('pointermove', () => (this.mouseSeen = true));
@@ -216,6 +228,7 @@ export class Arena extends Phaser.Scene {
     this.debugScenario();
     if (!this.bot && !this.scene.isActive('hud')) this.scene.launch('hud');
     this.game.events.emit('arena-ready');   // the launcher's loading screen waits for this
+    if (!this.cfg.roster && !this.bot) bootScreen.hide();   // practice / test links: the loading screen ends here (online matches end it on 'go')
   }
 
   /* ---------- fog of war ----------
@@ -230,11 +243,17 @@ export class Arena extends Phaser.Scene {
     this.fog = { FW, FH, cw: WORLD_W / FW, ch: WORLD_H / FH, explored: new Uint8Array(FW * FH).fill(1), tex, t: 0, img: this.add.image(0, 0, 'fogmask').setOrigin(0, 0).setDisplaySize(WORLD_W, WORLD_H).setDepth(90000) };
     this.updateFog(1, true);
   }
+  sees(a, b) {   // line of sight: nobody sees through the non-walkable terrain (forest)
+    const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy), n = Math.ceil(d / 48);
+    for (let k = 1; k < n; k++) if (!isWalkM(a.x + dx * k / n, a.y + dy * k / n)) return false;
+    return true;
+  }
   sightOf(f) { return f.sight ? f.sight : f.sentinel ? 720 : f.isNexus ? 900 : f.isTower ? 850 : f.isChamp ? 820 : f.isBot ? 520 : 560; }
   updateFog(dt, force) {
     const F = this.fog; if (!F) return;
     if ((F.t -= dt) > 0 && !force) return; F.t = 0.06;
     const team = this.pc.team, src = this.fighters.filter(f => f.alive && !f.away && f.team === team).concat((this.sentinels || []).filter(q => q.team === team).map(q => ({ x: q.x, y: q.y, team, sentinel: true }))).concat(this.pc.bomber?.phase === 'fly' ? [{ x: this.pc.bomber.pt.x, y: this.pc.bomber.pt.y, team, sight: 520 }] : []), { FW, FH, cw, ch, explored } = F;
+    for (const f of this.fighters) if (f.revealT > 0 && f.alive && f.team !== team && f.revealBy === team) src.push({ x: f.x, y: f.y, team, sight: f.revealSight || 230, reveal: true });   // Leandro's leaks: a small circle of sight around each revealed enemy
     // explore the ground around every unit of ours
     for (const s of src) {
       const r = this.sightOf(s) * 0.92, i0 = Math.max(0, Math.floor((s.x - r) / cw)), i1 = Math.min(FW - 1, Math.floor((s.x + r) / cw)), j0 = Math.max(0, Math.floor((s.y - r) / ch)), j1 = Math.min(FH - 1, Math.floor((s.y + r) / ch));
@@ -244,7 +263,7 @@ export class Arena extends Phaser.Scene {
     for (const f of this.fighters) {
       if (f.team === team) { f.fogHidden = false; continue; }
       if (f.isTower) { f.fogHidden = !explored[Math.min(FH - 1, Math.floor(f.y / ch)) * FW + Math.min(FW - 1, Math.floor(f.x / cw))]; continue; }
-      f.fogHidden = !src.some(s => Math.hypot(s.x - f.x, s.y - f.y) <= this.sightOf(s));
+      f.fogHidden = !src.some(s => Math.hypot(s.x - f.x, s.y - f.y) <= this.sightOf(s) && this.sees(s, f));
     }
     if (this.selected?.fogHidden) this.selected = null;
     // paint the overlay: dark where unexplored, dimmed where explored, clear inside the sight circles
@@ -283,7 +302,8 @@ export class Arena extends Phaser.Scene {
     window.__arena = this;   // test hook
     const p = this.player, e = this.enemy;
     for (let i = 1; i < +(h.get('lvl') || 1); i++) p.levelUp();
-    ABILITY_KEYS.forEach(a => { while (p.canSpend(a) && p.ranks[a] < (+h.get('rank') || 1)) p.spend(a); });
+    const brs = h.get('br') || '';   // #br=1010: second branch for p1 / p2 / p3 / ult
+    ABILITY_KEYS.forEach((a, i) => { while (p.canSpend(a) && p.ranks[a] < (+h.get('rank') || 1)) p.spend(a, brs[i] === '1' ? 1 : 0); });
     if (h.get('px') && !h.get('keep')) p.x = p.spawn.x = +h.get('px');
     if (h.get('wave')) this.waveT = +h.get('wave');
     if (!h.get('keep')) { e.x = e.spawn.x = p.x + +(h.get('gap') || 260);
@@ -296,12 +316,38 @@ export class Arena extends Phaser.Scene {
 
   /* ---------- placeholder art (replaced by assets/objects/<name>.png when present) ---------- */
   buildPlaceholderTextures() {
+    if (!this.textures.exists('comb_wave0')) {   // Leandro's comb wave: a detailed animated crescent (glowing body with a white core, inner streaks, speed trail and sparks), blue-green and red versions
+      const PAL = { n: { core: '#ffffff', mid: '#7fffe6', out: 'rgba(40,200,220,0.25)', glow: '#3ee8d0', streak: 'rgba(255,255,255,0.85)', trail: '90,240,225' }, r: { core: '#fff2e0', mid: '#ff7a55', out: 'rgba(200,30,30,0.3)', glow: '#ff2a2a', streak: 'rgba(255,230,200,0.85)', trail: '255,90,70' } };
+      const W = 170, H = 130, A = 1.05, rnd = rng(5);
+      for (const k of ['n', 'r']) {
+        const pal = PAL[k];
+        for (let f = 0; f < 6; f++) {
+          const t = this.textures.createCanvas(`comb_wave${k === 'r' ? 'R' : ''}${f}`, W, H), x = t.getContext(), cx0 = 20, cy = H / 2, rx = 112, ry = 52, T = 38 + 8 * Math.sin(f / 6 * Math.PI * 2);
+          const out = a => ({ x: cx0 + rx * Math.cos(a), y: cy + ry * Math.sin(a) }), th = a => T * Math.cos(a / A * Math.PI / 2);
+          x.clearRect(0, 0, W, H);
+          for (let i = 0; i < 7; i++) { const a = (rnd() * 2 - 1) * A * 0.85, o = out(a), len = 22 + rnd() * 40; const g = x.createLinearGradient(o.x - len - th(a), 0, o.x - th(a), 0); g.addColorStop(0, `rgba(${pal.trail},0)`); g.addColorStop(1, `rgba(${pal.trail},0.7)`); x.strokeStyle = g; x.lineWidth = 2; x.beginPath(); x.moveTo(o.x - len - th(a), o.y); x.lineTo(o.x - th(a), o.y); x.stroke(); }   // speed trail
+          x.save(); x.shadowColor = pal.glow; x.shadowBlur = 16;
+          const g = x.createLinearGradient(cx0 + rx - T, 0, cx0 + rx + 2, 0); g.addColorStop(0, pal.out); g.addColorStop(0.55, pal.mid); g.addColorStop(1, pal.core); x.fillStyle = g;
+          x.beginPath(); for (let i = 0; i <= 28; i++) { const a = -A + 2 * A * i / 28, o = out(a); i ? x.lineTo(o.x, o.y) : x.moveTo(o.x, o.y); }
+          for (let i = 28; i >= 0; i--) { const a = -A + 2 * A * i / 28, o = out(a); x.lineTo(o.x - th(a), o.y); } x.closePath(); x.fill(); x.restore();
+          x.lineCap = 'round'; x.strokeStyle = pal.streak;   // inner streaks following the crescent
+          for (let j = 0; j < 3; j++) { const u = 0.35 + 0.22 * j + 0.05 * Math.sin(f + j * 2), a0 = -A * (0.8 - 0.1 * j) + 0.15 * Math.sin(f * 1.3 + j), a1 = A * (0.8 - 0.1 * j) + 0.15 * Math.cos(f * 1.1 + j); x.lineWidth = 2 - j * 0.4; x.beginPath(); for (let i = 0; i <= 16; i++) { const a = a0 + (a1 - a0) * i / 16, o = out(a), tt = th(a); i ? x.lineTo(o.x - tt * u, o.y) : x.moveTo(o.x - tt * u, o.y); } x.stroke(); }
+          for (let i = 0; i < 9; i++) { const a = (rnd() * 2 - 1) * A, o = out(a), dx = 4 + rnd() * 18, dy = (rnd() - 0.5) * 22, sz = 2 + (rnd() < 0.3 ? 1 : 0); x.fillStyle = rnd() < 0.5 ? pal.core : pal.mid; x.fillRect(o.x + dx, o.y + dy, sz, sz); }   // sparks
+          t.refresh();
+        }
+        this.anims.create({ key: `comb_wave_fx${k === 'r' ? '_red' : ''}`, frames: Array.from({ length: 6 }, (_, f) => ({ key: `comb_wave${k === 'r' ? 'R' : ''}${f}` })), frameRate: 14, repeat: -1 });
+      }
+    }
     const mk = (key, w, h, draw) => {
       if (this.textures.exists(key)) return;
       if (this.bot) { this.textures.createCanvas(key, w, h); return; }   // headless host: no renderer to draw with; the key just has to exist
       const g = this.make.graphics({ x: 0, y: 0, add: false });
       draw(g); g.generateTexture(key, w, h); g.destroy();
     };
+    mk('roach', 40, 24, g => {   // Maduro's cockroach: brown oval body, head, legs and antennae, facing right
+      g.lineStyle(2, 0x2a1608).beginPath().moveTo(12, 10).lineTo(6, 3).moveTo(18, 10).lineTo(18, 2).moveTo(24, 10).lineTo(30, 3).moveTo(12, 15).lineTo(6, 22).moveTo(18, 16).lineTo(18, 23).moveTo(24, 15).lineTo(30, 22).moveTo(33, 11).lineTo(39, 5).moveTo(33, 13).lineTo(39, 17).strokePath();
+      g.fillStyle(0x2a1608).fillEllipse(19, 13, 28, 17).fillCircle(31, 13, 7); g.fillStyle(0x7a3f14).fillEllipse(19, 13, 25, 14).fillCircle(31, 13, 5); g.fillStyle(0xb8742a).fillEllipse(17, 11, 14, 5);
+    });
     for (const [key, up] of [['bird_a', true], ['bird_b', false]]) mk(key, 34, 28, g => {   // stun bird: chubby yellow chick facing right, wings up / down
       g.fillStyle(0x1a1208).fillTriangle(0, 13, 11, 8, 11, 18).fillEllipse(15, 16, 23, 17).fillCircle(23, 10, 9).fillTriangle(29, 8, 34, 11, 29, 14);   // outlines: tail, body, head, beak
       g.fillStyle(0xffd23f).fillTriangle(2, 13, 11, 10, 11, 17).fillEllipse(15, 16, 19, 13).fillCircle(23, 10, 7);
@@ -401,7 +447,7 @@ export class Arena extends Phaser.Scene {
     if (this.textures.exists('ground_baked')) this.textures.remove('ground_baked');
     const tex = this.textures.createCanvas('ground_baked', cols * T, rows * T), ctx = tex.getContext();
     const dm = new Uint8Array(cols * rows);
-    for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) dm[j * cols + i] = walkField((i + 0.5) * T * K, (j + 0.5) * T * K) >= 0.5 ? 1 : 0;
+    for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) dm[j * cols + i] = walkField((i + 0.5) * T * K, (j + 0.5) * T * K) >= 0.5 && grassField((i + 0.5) * T * K, (j + 0.5) * T * K) < 0.3 ? 1 : 0;
     const D = (i, j) => (i < 0 || j < 0 || i >= cols || j >= rows ? 0 : dm[j * cols + i]);
     for (let pass = 0; pass < 2; pass++) for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {   // close 1-tile gaps / notches so every fringe tile has a matching piece
       if (D(i, j)) continue; const n = D(i, j - 1), so = D(i, j + 1), w = D(i - 1, j), e = D(i + 1, j);
@@ -438,11 +484,12 @@ export class Arena extends Phaser.Scene {
   /* ---------- map: top-down, one horizontal lane ---------- */
   buildMap() {
     const S = MAP_SCALE, R = rng(12345), rnd = (a, b) => a + R() * (b - a);
-    const img = (sheet, frame, x, y, depth = y, sc = S) => this.add.image(x, y, sheet, frame).setOrigin(0.5, 1).setScale(sc).setDepth(depth);
+    this.mapSprites = [];   // live scenery (trees, bushes, stones...): hidden inside Leandro's virtual arena
+    const img = (sheet, frame, x, y, depth = y, sc = S) => { const o = this.add.image(x, y, sheet, frame).setOrigin(0.5, 1).setScale(sc).setDepth(depth); this.mapSprites.push(o); return o; };
     const pick = a => a[R() * a.length | 0];
     const BIGT = ['f_tree1', 'f_tree2', 'f_tree1', 'f_tree2', 'f_tree3'], SMALLT = ['f_tree4', 'f_tree4', 'f_tree1'], BUSH = ['f_bush1', 'f_bush2'], STONE = ['f_stone1', 'f_stone2', 'f_stone3', 'f_stone4'], TUFT = ['f_flower1', 'f_flower2', 'f_flower3', 'f_mush1', 'f_mush2', 'f_mush3', 'f_mush4', 'f_mush5', 'f_mush6', 'f_stone1', 'f_stone3'];
     const W = (i, j) => cellWalk(i, j);
-    this.bakeGround();
+    this.bakeGround(); this.buildRiver();
     // distance (in cells) from every forest cell to the nearest walkable cell
     const near = (i, j) => { for (let d = 1; d <= 4; d++) for (let dj = -d; dj <= d; dj++) for (let di = -d; di <= d; di++) if (Math.max(Math.abs(di), Math.abs(dj)) === d && W(i + di, j + dj)) return d; return 5; };
     // static forest decor far from any path never interacts with units: it is stamped once into a single texture instead of ~1200 live sprites (a big part of the frame cost)
@@ -477,8 +524,8 @@ export class Arena extends Phaser.Scene {
       else { put(pick(BIGT), cx, cy + 44, 1.6, 0.9); if (R() < 0.7) put(pick(SMALLT), cx + rnd(-30, 30), cy + rnd(0, 30), 1.2, 0.9); }
     }
     if (this.bakedDecor) this.bakedDecor.destroy();
-    const rt = this.bakedDecor = this.add.renderTexture(0, 0, WORLD_W, WORLD_H).setOrigin(0, 0).setDepth(-5);
-    baked.forEach(([sheet, frame, x, y, oy = 1, sc = S]) => rt.stamp(sheet, frame, x, y, { originX: 0.5, originY: oy, scale: sc }));
+    const rt = this.bakedDecor = this.add.renderTexture(0, 0, WORLD_W / 2, WORLD_H / 2).setOrigin(0, 0).setScale(2).setDepth(-5);   // half resolution, drawn x2 (the art is 1x pixel art scaled up anyway)
+    baked.forEach(([sheet, frame, x, y, oy = 1, sc = S]) => rt.stamp(sheet, frame, x / 2, y / 2, { originX: 0.5, originY: oy, scale: sc / 2 }));
     rt.render();
     this.bakeBorders(pick, rnd, R);
   }
@@ -506,7 +553,7 @@ export class Arena extends Phaser.Scene {
     this.k = K.addKeys({
       up: 'W', down: 'S', left: 'A', right: 'D', up2: 'UP', down2: 'DOWN', left2: 'LEFT', right2: 'RIGHT', run: 'SHIFT', ctrl: 'CTRL',
       basic: 'J', basic2: 'SPACE', p1: 'Q', p2: 'F', p3: 'E', ult: 'R',
-      i1: 'ONE', i2: 'TWO', i3: 'THREE', i4: 'FOUR', i5: 'FIVE', i6: 'SIX', shop: 'B', tab: 'TAB', lvl: 'L', ai: 'F1', free: 'F2', respawn: 'ENTER', full: 'G', esc: 'ESC',
+      recall: 'B', i1: 'ONE', i2: 'TWO', i3: 'THREE', i4: 'FOUR', i5: 'FIVE', i6: 'SIX', shop: 'P', tab: 'TAB', lvl: 'L', ai: 'F1', free: 'F2', respawn: 'ENTER', full: 'G', esc: 'ESC',
     });
     K.addCapture('TAB,SPACE,F1,F2,Q,F,E,R,CTRL,ESC');
   }
@@ -529,7 +576,7 @@ export class Arena extends Phaser.Scene {
       this.selected = hit || null;
     }
     // powers: 1st press/click shows the preview, 2nd click (or same key) casts, right click / ESC cancels
-    ABILITY_KEYS.forEach(a => J(k[a]) && (k.ctrl.isDown ? this.player.spend(a) : this.aimKey === a ? this.confirmAim() : this.beginAim(a)));
+    ABILITY_KEYS.forEach(a => J(k[a]) && (k.ctrl.isDown ? this.askSpend(a) : this.aimKey === a ? this.confirmAim() : this.beginAim(a)));
     if (J(k.esc) || rightClick) this.cancelAim();
     if (this.aimKey) { if (leftClick && !overUi) this.confirmAim(); }
     else {
@@ -539,6 +586,7 @@ export class Arena extends Phaser.Scene {
     }
     ['i1', 'i2', 'i3', 'i4', 'i5', 'i6'].forEach((n, i) => J(k[n]) && p.useItem(i));
     if (J(k.shop)) this.scene.get('hud')?.toggleShop?.();
+    if (J(k.recall) && !this.paused && !this.over) { if (this.net?.role === 'client') this.net.op('recall'); else this.player.startRecall(); }   // B: return to the base
     if (J(k.lvl)) this.player.levelUp();
     if (J(k.ai)) this.aiOn = !this.aiOn;
     if (J(k.free)) this.debugFree = !this.debugFree;
@@ -555,18 +603,27 @@ export class Arena extends Phaser.Scene {
     const m = this.cursorWorld(), p = this.pc;
     return { x: m.x, y: m.y + p.def.height * 0.6 };
   }
+  trainingDie() {   // practice zone: test the champion's death animation / effects, and bring it back
+    if (!this.training || this.net) return; const p = this.player;
+    if (p.alive) { p.hp = 0; p.die(null); } else { p.x = p.spawn.x; p.y = p.spawn.y; p.reset(); p.playAnim('idle'); }
+  }
+  askSpend(k) {   // learning a slot with two branches opens the choice window first
+    const p = this.player; if (!p.canSpend(k)) return;
+    if (p.def.alt?.[k] && !p.ranks[k]) { const hs = this.scene.get('hud'); if (hs) { hs.shopOpen = false; hs.branchSel = k; return; } }
+    p.spend(k);
+  }
   beginAim(a) {
     const p = this.pc, rank = p.ranks[a], d = p.def.abilities[a];
     if (d.passive) { this.float(p.x, p.y - p.def.height - 30, 'Habilidad pasiva', '#ffe066'); return; }
     if (p.silenceT > 0) { this.float(p.x, p.y - p.def.height - 30, 'SILENCIADO', '#c77dff'); this.audio.play('glitch', { gap: 250 }); return; }
     if (p.key === 'yonaiker' && p.abilityLocked(a)) { this.float(p.x, p.y - p.def.height - 30, a === 'p3' ? 'La nave llega al llenar la barra (dispara y acierta)' : 'Solo disponible a bordo de la nave', '#9fe8ff'); return; }   // Q gun on foot, F both, E / R aboard
-    if ((p.key === 'luis' && a !== 'ult') || (p.key === 'hector' && a !== 'p2') || (p.key === 'yonaiker' && (a !== 'p2' || p.bomber)) || (p.key === 'maduro' && (a === 'p2' || a === 'ult')) || (p.key === 'diosa' && (a === 'p2' || a === 'ult' || (a === 'p1' && p.qRe)))) { p.tryCast(a); return; }   // instant casts: no aiming step
+    if ((p.key === 'luis' && a !== 'ult') || (p.key === 'hector' && a !== 'p2') || (p.key === 'yonaiker' && (a !== 'p2' || p.bomber)) || (p.key === 'maduro' && (a === 'p2' || a === 'ult')) || (p.key === 'diosa' && (a === 'p2' || a === 'ult' || (a === 'p1' && p.qRe))) || (p.key === 'leandro' && (d.v === 'comb' || (d.v === 'leak' && !p.leakRe)))) { p.tryCast(a); return; }   // instant casts: no aiming step
     if (p.key === 'junior' && a === 'p2') { const m = this.mouseGround(); if (!this.hoverKey) p.setAim(m.x - p.x, m.y - p.y); p.tryCast(a); return; }   // somersault is instant; the flamethrower is aimed (the triangle preview) and then locks that direction
     if (p.key === 'jorbi' && a === 'p2') {   // instant dash toward the cursor (no aim step)
       const m = this.mouseGround(); if (!this.hoverKey) p.setAim(m.x - p.x, m.y - p.y);
       p.tryCast('p2'); return;
     }
-    if (!rank || !p.free || p.cds[a] > 0 || (p.mana < rk(d.mana, rank) && !this.debugFree)) { if (rank) this.audio.play('ui_error', { gap: 250, vol: 0.7 }); return; }
+    if (!rank || !p.free || p.cds[a] > 0 || (p.mana < (p.leakRe && a === 'ult' ? 0 : rk(d.mana, rank)) && !this.debugFree)) { if (rank) this.audio.play('ui_error', { gap: 250, vol: 0.7 }); return; }
     this.aimKey = a;
   }
   cancelAim() { this.aimKey = null; this.aimG.clear(); }
@@ -578,7 +635,8 @@ export class Arena extends Phaser.Scene {
   confirmAim() {
     const p = this.pc, a = this.aimKey, spec = aimSpec(p.key, a, p.ranks[a], p);
     const m = this.mouseGround(); p.setAim(m.x - p.x, m.y - p.y);
-    p.castPoint = spec.type === 'wall' || spec.type === 'zone' || spec.type === 'rect' ? this.wallCenter(spec) : spec.type === 'pick' ? this.mouseGround() : null;
+    if (spec.type === 'dryer') p.castPoint = { x: this.k.run?.isDown ? 1 : 0, y: 0 };   // Shift while aiming = push (the cast point carries the mode to the host)
+    else p.castPoint = spec.type === 'wall' || spec.type === 'zone' || spec.type === 'rect' || spec.type === 'tirethrow' ? this.wallCenter(spec) : spec.type === 'pick' ? this.mouseGround() : null;
     if (spec.type === 'rect' && p.castPoint) p.castPoint.vert = Math.abs(p.ax) >= Math.abs(p.ay);   // aiming sideways -> vertical fence, aiming up/down -> horizontal fence
     this.cancelAim();
     p.tryCast(a);
@@ -654,6 +712,24 @@ export class Arena extends Phaser.Scene {
         .lineBetween(p.x + p.ax * L + px * f, p.y + p.ay * L + py * f, p.x + p.ax * L - px * f, p.y + p.ay * L - py * f);
       this.aimObj('band', () => this.add.tileSprite(0, 0, 10, 10, 'aim_band').setOrigin(0, 0.5).setDepth(99990)).setVisible(true)
         .setPosition(p.x, p.y).setSize(L, 50).setTileScale(50 / 128).setRotation(Math.atan2(p.ay, p.ax)).setTint(c).setAlpha(0.7);
+    } else if (spec.type === 'tirethrow') {   // no range circle: only the spots where each tire will land / bounce (always forward)
+      const ctr = this.wallCenter(spec), dx = ctr.x - p.x, dy = ctr.y - p.y, D = Math.max(1, Math.hypot(dx, dy)), base = Math.atan2(dy, dx), px = -Math.sin(base), py = Math.cos(base), g = this.aimG;
+      for (let i = 0; i < spec.count; i++) {
+        const o = (i - (spec.count - 1) / 2) * spec.spacing, ang = base + (i - (spec.count - 1) / 2) * 0.05, x0 = p.x + px * o, y0 = p.y + py * o;
+        const Di = D;
+        [0.4, 0.7, 1].slice(0, spec.bounces + 1).forEach((u, j) => { const x = x0 + Math.cos(ang) * Di * u, y = y0 + Math.sin(ang) * Di * u * 1; g.fillStyle(c, 0.22 - j * 0.04).fillCircle(x, y, 26).lineStyle(3, c, 0.95 - j * 0.15).strokeCircle(x, y, 26); });
+      }
+    } else if (spec.type === 'dryer') {   // hair dryer line: cyan arrows towards Leandro (pull) / orange arrows away from him (push, Shift)
+      const push = !!this.k.run?.isDown, col = push ? 0xff9a3a : 0x5ad7ff, px = -p.ay, py = p.ax, L = spec.length, hw = spec.width / 2, g = this.aimG, tt = this.time.now / 1000;
+      const P = (u, v) => ({ x: p.x + p.ax * u + px * v, y: p.y + p.ay * u + py * v });
+      g.fillStyle(col, 0.16).fillPoints([P(0, -hw), P(L, -hw), P(L, hw), P(0, hw)], true);
+      g.lineStyle(3, col, 0.9).lineBetween(P(0, -hw).x, P(0, -hw).y, P(L, -hw).x, P(L, -hw).y).lineBetween(P(0, hw).x, P(0, hw).y, P(L, hw).x, P(L, hw).y).lineBetween(P(L, -hw).x, P(L, -hw).y, P(L, hw).x, P(L, hw).y);
+      for (let i = 0; i < 6; i++) {
+        const u = (((i / 6) + tt * (push ? 0.7 : -0.7)) % 1 + 1) % 1 * L, d = push ? 1 : -1, al = Math.sin(Math.PI * u / L), tip = P(u + d * 16, 0), l1 = P(u - d * 14, -hw * 0.55), l2 = P(u - d * 14, hw * 0.55);
+        g.lineStyle(5, col, 0.95 * al).lineBetween(l1.x, l1.y, tip.x, tip.y).lineBetween(l2.x, l2.y, tip.x, tip.y);
+      }
+      this.aimObj('dryerHint', () => this.add.text(0, 0, '', { fontFamily: 'monospace', fontSize: '15px', fontStyle: 'bold', color: '#fff', stroke: '#000', strokeThickness: 4 }).setOrigin(0.5).setDepth(99991))
+        .setVisible(true).setText(push ? 'REPELER  (suelta Mayús: JALAR)' : 'JALAR  (mantén Mayús: REPELER)').setColor(push ? '#ffb86a' : '#8ae2ff').setPosition(p.x, p.y - p.def.height - 56);
     } else if (spec.type === 'pick') {
       ring('ring', p.x, p.y, spec.radius, 0.7);
       const t = this.pickTarget(p, spec.radius, this.mouseGround());
@@ -747,14 +823,162 @@ export class Arena extends Phaser.Scene {
     const d = sh.base + blocked * sh.mult; this.enemiesNear(f.team, f.x, f.y, sh.r).forEach(t => this.damage(f, t, d, 'magic', true));
     return true;
   }
-  solidAt(x, y) { return this.obstacles.some(o => Math.hypot(x - o.x, y - o.y) < o.r + BODY_R * 0.7) || this.fighters.some(n => n.isNexus && n.alive && Math.hypot(x - n.x, y - n.y) < n.br * 0.8 + BODY_R * 0.6); }
+  solidAt(x, y, team) { return this.obstacles.some(o => !(o.gate && o.team === team) && Math.hypot(x - o.x, y - o.y) < o.r + BODY_R * 0.7) || this.fighters.some(n => n.isNexus && n.alive && Math.hypot(x - n.x, y - n.y) < n.br * 0.8 + BODY_R * 0.6); }
+  // virtual cage (Leandro's leaks): whoever was inside when it closed cannot leave, nobody else can come in
+  makeCage(owner, target, r, life, origin = null, tOrigin = null) {
+    this.cages.push({ x: target.x, y: target.y, r, t: life, T: life, inside: new Set([owner, target]), owner, target, origin, tOrigin });
+    this.audio.play('ui_announce', { vol: 0.7, gap: 0 });
+  }
+  endCage(c) {   // when the arena closes Leandro goes back to where he was before activating it, and so does the enemy (a dead enemy simply appears as a body at its old position)
+    if (this.net?.role === 'client') return;
+    for (const [f, pos] of [[c.owner, c.origin], [c.target, c.tOrigin]]) {
+      if (!f || !pos) continue;
+      this.vfx('summon', f.x, f.y - 10, { scale: 3.5, tint: 0x66ffcc }); f.x = pos.x; f.y = pos.y;
+      if (f.alive) { f.carriedT = Math.max(f.carriedT || 0, 0.3); this.vfx('summon', f.x, f.y - 10, { scale: 3.5, tint: 0x66ffcc }); }
+    }
+  }
+  cageClamp(f) {
+    for (const c of this.cages) {
+      const dx = f.x - c.x, dy = f.y - c.y, d = Math.hypot(dx, dy) || 1, ins = c.inside.has(f), lim = ins ? c.r - 16 : c.r + 16;
+      if (ins ? d <= lim : d >= lim) continue;
+      const nx = c.x + dx / d * lim, ny = c.y + dy / d * lim; if (isWalk(nx, ny)) { f.x = nx; f.y = ny; }
+    }
+  }
+  arenaTex() {   // procedural fallback of the virtual arena floor (Codex's `virtual_arena` replaces it)
+    if (this.textures.exists('virtual_floor')) return 'virtual_floor';
+    if (!this.textures.exists('virt_arena_gen')) {
+      const S = 512, t = this.textures.createCanvas('virt_arena_gen', S, S), x = t.getContext();
+      x.beginPath(); x.arc(S / 2, S / 2, S / 2 - 2, 0, 6.2832); x.clip();
+      const g = x.createRadialGradient(S / 2, S / 2, 20, S / 2, S / 2, S / 2); g.addColorStop(0, '#1d5f8c'); g.addColorStop(1, '#0a2744'); x.fillStyle = g; x.fillRect(0, 0, S, S);
+      x.strokeStyle = 'rgba(90,240,235,0.5)'; x.lineWidth = 2; for (let i = 0; i <= S; i += 32) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i, S); x.moveTo(0, i); x.lineTo(S, i); x.stroke(); }
+      x.strokeStyle = 'rgba(120,255,240,0.55)'; x.lineWidth = 3; for (const r of [60, 130, 200, 250]) { x.beginPath(); x.arc(S / 2, S / 2, r, 0, 6.2832); x.stroke(); }
+      x.lineWidth = 6; x.strokeStyle = 'rgba(100,255,230,0.9)'; x.beginPath(); x.arc(S / 2, S / 2, S / 2 - 6, 0, 6.2832); x.stroke(); t.refresh();
+    }
+    return 'virt_arena_gen';
+  }
+  drawLeakRing() {   // Filtraciones: a data ring around Leandro from the 3rd frame of the activation animation until he uses the 2nd activation (or the window closes)
+    const g = (this.leakRingG ||= this.add.graphics().setDepth(99979)); g.clear(); if (this.bot) return; const tt = this.time.now / 1000;
+    for (const f of this.fighters) {
+      if (!f.leakRe || !f.alive) { f.leakRing = false; continue; }
+      if (!f.leakRing) { const fr = f.spr?.anims?.currentFrame, key = f.spr?.anims?.currentAnim?.key; if (f.replaying || (key && /ultb$/.test(key) && fr && fr.index >= 3) || f.state !== 'cast') f.leakRing = true; }
+      if (!f.leakRing) continue;
+      const R = 120, al = Math.min(1, f.leakRe.t * 2);
+      g.lineStyle(4, 0x66ffcc, (0.75 + 0.2 * Math.sin(tt * 6)) * al).strokeEllipse(f.x, f.y, R * 2, R * 2 * YR).lineStyle(2, 0xffffff, 0.35 * al).strokeEllipse(f.x, f.y, R * 1.55, R * 1.55 * YR);
+      for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2 + tt * 1.4; g.fillStyle(0x9fffe8, 0.9 * al).fillRect(f.x + Math.cos(a) * R - 3, f.y + Math.sin(a) * R * YR - 3, 6, 6); }
+    }
+  }
+  drawLeakMarks() {   // Filtraciones, while Leandro picks the target: a prison-cell icon floats above every enemy champion (the one under the cursor is highlighted)
+    const g = (this.leakMarkG ||= this.add.graphics().setDepth(99978)); g.clear(); if (this.bot) return;
+    const L = this.fighters.find(f => f.leakRe && f.alive && f.team === this.pc.team); if (!L) return;
+    const pick = this.aimKey === 'ult' && this.pc === L ? this.pickTarget(L, 1e6, this.mouseGround()) : null, k = 1 / Math.max(0.5, this.cameras.main.zoom) * 0.9, tt = this.time.now / 1000;
+    for (const e of this.fighters) {
+      if (!e.alive || !e.isChamp || e.team === L.team || e.away) continue;
+      const hot = e === pick, w = (hot ? 40 : 32) * k, h = (hot ? 44 : 36) * k, x = e.x, y = e.y - e.def.height - 78 * k + Math.sin(tt * 3 + e.nid) * 3 * k, col = hot ? 0xffffff : 0x66ffcc;
+      g.fillStyle(0x04121a, 0.9).fillRoundedRect(x - w / 2, y - h / 2, w, h, 5 * k).lineStyle(3 * k, col, 1).strokeRoundedRect(x - w / 2, y - h / 2, w, h, 5 * k);
+      for (let i = 1; i < 5; i++) g.lineStyle(2.5 * k, col, 0.95).lineBetween(x - w / 2 + w * i / 5, y - h / 2 + 3 * k, x - w / 2 + w * i / 5, y + h / 2 - 3 * k);   // cell bars
+      g.lineStyle(2.5 * k, col, 0.95).lineBetween(x - w / 2 + 3 * k, y - h * 0.18, x + w / 2 - 3 * k, y - h * 0.18);
+      g.fillStyle(col, 0.9).fillTriangle(x - 6 * k, y + h / 2, x + 6 * k, y + h / 2, x, y + h / 2 + 8 * k);   // pointer towards the head
+    }
+  }
+  hideSceneryInCages() {   // inside the virtual arena nothing of the real map may show: scenery sprites, camp and structure labels, flags
+    const ins = this.cages.filter(c => c.inside.has(this.pc)), hid = (this.sceneryHidden ||= new Set());
+    if (!ins.length && !hid.size) return;
+    const inC = (x, y, m) => ins.some(c => Math.hypot(x - c.x, y - c.y) < c.r + m);
+    for (const o of this.mapSprites || []) { const h = inC(o.x, o.y, 50); if (h && !hid.has(o)) { o.setVisible(false); hid.add(o); } else if (!h && hid.has(o)) { o.setVisible(true); hid.delete(o); } }
+    for (const f of this.fighters) if (f.isTower || f.def?.lane || f.def?.static) { const h = inC(f.x, f.y, f.br || 40); if (h && !hid.has(f)) { f.spr?.setVisible(false); hid.add(f); } else if (!h && hid.has(f)) { f.spr?.setVisible(true); hid.delete(f); } }
+    if (this.laneFlagG) this.laneFlagG.setVisible(!ins.length); if (this.campG) this.campG.setVisible(!ins.length); if (this.riverG) this.riverG.setVisible(!ins.length); this.riverImg?.setVisible(!ins.length);
+  }
+  updateCages(dt) {
+    this.cages = this.cages.filter(c => (c.t -= dt) > 0 || (this.endCage(c), c.img?.destroy(), false));
+    if (this.bot) return;
+    this.hideSceneryInCages();
+    const g = (this.cageG ||= this.add.graphics().setDepth(99980)), dk = (this.cageDark ||= this.add.graphics().setDepth(99985)); g.clear(); dk.clear(); const tt = this.time.now / 1000;
+    for (const c of this.cages) {
+      const fade = Math.min(1, c.t * 2, (c.T - c.t) * 3), pulse = 0.5 + 0.5 * Math.sin(tt * 6), inside = c.inside.has(this.pc);
+      // the virtual arena replaces the terrain: under the units for the two inside, an opaque dome over everything for the rest
+      c.img ||= this.add.image(c.x, c.y, this.arenaTex()).setDisplaySize(c.r * 2, c.r * 2);
+      c.img.setDepth(inside ? -4 : 99970).setAlpha((inside ? 1 : 0.97) * fade).setRotation(inside ? 0 : Math.sin(tt * 0.5) * 0.02);
+      if (inside) {   // everything outside the arena is pitch black for those inside
+        const R = 4000, N = 72; dk.fillStyle(0x000000, 0.97 * fade);
+        for (let i = 0; i < N; i++) {   // ring of quads from the arena rim outwards (a polygon with a hole would be filled solid)
+          const a0 = i / N * Math.PI * 2, a1 = (i + 1) / N * Math.PI * 2, c0 = Math.cos(a0), s0 = Math.sin(a0), c1 = Math.cos(a1), s1 = Math.sin(a1);
+          dk.fillPoints([{ x: c.x + c0 * c.r, y: c.y + s0 * c.r }, { x: c.x + c1 * c.r, y: c.y + s1 * c.r }, { x: c.x + c1 * R, y: c.y + s1 * R }, { x: c.x + c0 * R, y: c.y + s0 * R }], true);
+        }
+      }
+      g.lineStyle(4, 0x66ffcc, (0.7 + 0.25 * pulse) * fade).strokeCircle(c.x, c.y, c.r);
+      for (let i = 0; i < 28; i++) { const a = i / 28 * Math.PI * 2 + tt * 0.3, x = c.x + Math.cos(a) * c.r, y = c.y + Math.sin(a) * c.r; g.lineStyle(3, 0x9fffe8, 0.55 * fade).lineBetween(x, y, x, y - 60); }
+    }
+  }
+  // Leandro's tire throw: every tire hops 3 times, always FORWARD, along a straight line (landing points at 40 / 70 / 100 % of the distance).
+  // Rank 1 = plain tires; rank 2 = every landing breaks the ground and stuns briefly whoever is under it; rank 3 = flaming tires that also leave fire.
+  throwTires(owner, c, a, dmg) {
+    const rank = owner.ranks.p3 || 1, dx0 = c.x - owner.x, dy0 = c.y - owner.y, D = Math.min(a.range, Math.max(300, Math.hypot(dx0, dy0))), base = Math.atan2(dy0, dx0), px = -Math.sin(base), py = Math.cos(base);
+    const fr = [0, 0.4, 0.7, 1].slice(0, a.bounces + 2), n = a.count;
+    for (let i = 0; i < n; i++) {
+      const o = (i - (n - 1) / 2) * a.spacing, ang = base + (i - (n - 1) / 2) * 0.05, x0 = owner.x + px * o, y0 = owner.y + py * o, fire = rank >= 3;
+      const s = this.add.image(x0, y0, fire && this.textures.exists('tire_fire') ? 'tire_fire' : 'tire').setOrigin(0.5, 0.5); if (fire && !this.textures.exists('tire_fire')) s.setTint(0xff7a2a);
+      const sh = this.add.ellipse(x0, y0, 44, 18, 0x000000, 0.35).setDepth(-3);
+      this.tireShots.push({ owner, s, sh, x0, y0, dx: Math.cos(ang), dy: Math.sin(ang), D, fr, leg: 0, t: 0, dur: fr.slice(1).map((f, j) => (f - fr[j]) * D / a.speed), rank, fire, dmg, rad: a.radius, stun: a.stun, squash: 0, hit: new Set(), a });
+    }
+    this.audio.play('explosion', { at: owner, vol: 0.5, gap: 100 });
+  }
+  tireLand(q, x, y) {
+    const rank = q.rank, a = q.a;
+    this.vfx('shockwave', x, y - 4, { scale: 2.2, below: true, tint: q.fire ? 0xff8a2a : 0x9ad7ff }); this.vfx('run_dust', x, y - 6, { scale: 3, alpha: 0.9, below: true }); this.audio.play('hit_metal', { at: { x, y }, vol: 0.5, gap: 40 });
+    for (const t of this.enemiesOf(q.owner)) {
+      if (t.isTower || t.def?.lane || eDist(t.x, t.y, x, y) > q.rad + t.br * 0.5) continue;
+      this.damage(q.owner, t, q.dmg, 'magic'); this.vfx('spark', t.x, t.cy, { scale: 3, tint: q.fire ? 0xff8a2a : 0x9ad7ff });
+      if (rank >= 2 && !t.def?.static && eDist(t.x, t.y, x, y) <= q.rad * 0.7) t.stun(q.stun);
+    }
+    if (rank >= 2) { const cr = this.textures.exists('ground_crack') ? this.add.image(x, y, 'ground_crack').setDepth(y - 8).setDisplaySize(q.rad * 1.6, q.rad * 1.6 * YR) : null; if (cr) this.tweens.add({ targets: cr, alpha: 0, delay: 2500, duration: 1200, onComplete: () => cr.destroy() }); this.cameras.main.shake(90, 0.003); }
+    if (q.fire) { this.fireZones.push({ owner: q.owner, x, y, r: q.rad * 0.9, t: a.fire, tick: 0, dmg: q.dmg * 0.25 }); this.vfx('burning_ground', x, y, { scale: 3, below: true }); }
+  }
+  drawTireBars() {   // health bar over every damaged Leandro tire wall piece
+    const g = (this.tireBarG ||= this.add.graphics().setDepth(99000)); g.clear(); if (this.bot) return;
+    for (const o of this.obstacles) if (o.maxHp != null && o.s?.scene) {   // every tire shows its health (green) and, right under it, a white bar with the time it has left
+      const w = 40, f = Math.max(0, o.hp / o.maxHp), tl = Math.max(0, o.left / o.life0), y = o.y - o.h - 18;
+      g.fillStyle(0x000000, 0.75).fillRect(o.x - w / 2 - 1, y - 1, w + 2, 12).fillStyle(f > 0.5 ? 0x4cd964 : f > 0.25 ? 0xffc83d : 0xff4a3a, 1).fillRect(o.x - w / 2, y, w * f, 6).fillStyle(0xffffff, 1).fillRect(o.x - w / 2, y + 7, w * tl, 3);
+    }
+  }
+  updateTireShots(dt) {
+    this.drawTireBars();
+    this.tireShots = this.tireShots.filter(q => {
+      const legs = q.dur.length;
+      if (q.squash > 0) {   // contact frame
+        if ((q.squash -= dt) > 0) return true;
+        if (q.leg >= legs) { q.s.destroy(); q.sh.destroy(); return false; }
+        q.s.setTexture(q.fire && this.textures.exists('tire_fire') ? 'tire_fire' : 'tire'); return true;
+      }
+      q.t += dt; let k = Math.min(1, q.t / q.dur[q.leg]);
+      const u = q.fr[q.leg] + (q.fr[q.leg + 1] - q.fr[q.leg]) * k; let gx = q.x0 + q.dx * q.D * u, gy = q.y0 + q.dy * q.D * u;
+      gy = Phaser.Math.Clamp(gy, WALK_Y0, WALK_Y1); gx = Phaser.Math.Clamp(gx, 60, WORLD_W - 60); q.lx = gx; q.ly = gy;   // tires fly over forest and cliffs and may land on them; only the map limits stop them
+      const h = 150 * (1 - 0.28 * q.leg) * Math.sin(Math.PI * k);
+      q.s.setPosition(gx, gy - h - 22).setDepth(gy + 1).setRotation(q.s.rotation + dt * 12).setDisplaySize(54, 54); q.sh.setPosition(gx, gy).setScale(1 - h / 260);
+      if (k >= 1) {
+        this.tireLand(q, gx, gy); q.leg++; q.t = 0; q.squash = 0.14; q.s.setRotation(0).setPosition(gx, gy - 18);
+        const sq = q.fire ? 'tire_fire_squash' : 'tire_squash';
+        if (this.textures.exists(sq)) q.s.setTexture(sq).setDisplaySize(70, 46); else q.s.setDisplaySize(72, 36);
+        if (q.leg >= legs) q.squash = 0.35;
+      }
+      return true;
+    });
+  }
+  updateFireZones(dt) {
+    this.fireZones = this.fireZones.filter(z => {
+      z.t -= dt; z.tick -= dt;
+      if (z.tick <= 0) { z.tick = 0.5; this.vfx('burning_ground', z.x + Phaser.Math.Between(-30, 30), z.y + Phaser.Math.Between(-20, 20), { scale: 2.4, below: true, alpha: 0.9 }); for (const t of this.enemiesOf(z.owner)) if (!t.isTower && !t.def?.lane && eDist(t.x, t.y, z.x, z.y) <= z.r + t.br * 0.5) this.damage(z.owner, t, z.dmg, 'magic', true); }
+      return z.t > 0;
+    });
+  }
   resolveSolids(f) {
+    if (this.cages.length) this.cageClamp(f);
     for (const n of this.fighters) if (n.isNexus && n.alive) {
       const min = n.br * 0.8 + BODY_R * 0.6, dx = f.x - n.x, dy = f.y - n.y, d = Math.hypot(dx, dy) || 1;
       if (d < min) { f.x += dx / d * (min - d); f.y += dy / d * (min - d); }
     }
     for (let pass = 0; pass < 2; pass++) {
       for (const o of this.obstacles) {
+        if (o.gate && o.team === f.team) continue;   // lane walls let their own team through
         const min = o.r + BODY_R * 0.7;
         let dx = f.x - o.x, dy = f.y - o.y, d = Math.hypot(dx, dy);
         if (d >= min) continue;
@@ -766,15 +990,15 @@ export class Arena extends Phaser.Scene {
   }
 
   // base: healing fountain + shop zone around each team's nexus
-  inBase(f) { const n = this.fountains?.[f.baseTeam]; return !!n && f.alive && ((f.x - n.x) / 320) ** 2 + ((f.y - n.y) / 230) ** 2 < 1; }
-  canShop(f) { return !!f.isChamp && (!f.alive || this.training || this.inBase(f)); }   // a dead champion can shop from anywhere while waiting to respawn
+  inBase(f) { const n = this.fountains?.[f.baseTeam]; return !!n && f.alive && ((f.x - n.x) / 520) ** 2 + ((f.y - n.y) / 370) ** 2 < 1; }   // the base's healing circle
+  canShop(f) { return !!f.isChamp && (!f.alive || this.training || this.inBase(f)); }   // a dead champion can shop from anywhere while waiting
   drawFountain() {
     if (!this.fountG) return; const g = this.fountG, t = this.time.now / 1000; g.clear();
     this.fountains.forEach(n => {
       const c = n.team === 0 ? 0x4aa3ff : 0xff5a4a, pulse = 0.5 + 0.5 * Math.sin(t * 2);
-      g.fillStyle(c, 0.06 + 0.03 * pulse).fillEllipse(n.x, n.y, 640, 460);
-      g.lineStyle(3, c, 0.5).strokeEllipse(n.x, n.y, 640, 460);
-      for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2 + t * 0.4; g.fillStyle(c, 0.5).fillCircle(n.x + Math.cos(a) * 320, n.y + Math.sin(a) * 230, 4); }
+      g.fillStyle(c, 0.06 + 0.03 * pulse).fillEllipse(n.x, n.y, 1040, 740);
+      g.lineStyle(3, c, 0.5).strokeEllipse(n.x, n.y, 1040, 740);
+      for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2 + t * 0.4; g.fillStyle(c, 0.5).fillCircle(n.x + Math.cos(a) * 520, n.y + Math.sin(a) * 370, 4); }
     });
   }
 
@@ -784,13 +1008,13 @@ export class Arena extends Phaser.Scene {
     w.audio.play('ui_select', { at: f, vol: 0.5, gap: 100 });
     if (a.type === 'multi') { a.parts.forEach(pt => w.useActive(f, pt, a.m || 1.5)); return; }   // combined actives of the new level-3 items
     if (a.type === 'blink') {   // rocket thruster: a quick dash along the aim (stops at walls) and a speed boost
-      let d = 0; while (d < a.dist) { const nd = Math.min(a.dist, d + 20), nx = f.x + f.ax * nd, ny = f.y + f.ay * nd * 0.75; if (!isWalk(nx, ny) || ny < WALK_Y0 || ny > WALK_Y1 || this.solidAt(nx, ny)) break; d = nd; }
+      let d = 0; while (d < a.dist) { const nd = Math.min(a.dist, d + 20), nx = f.x + f.ax * nd, ny = f.y + f.ay * nd * 0.75; if (!isWalk(nx, ny) || ny < WALK_Y0 || ny > WALK_Y1 || this.solidAt(nx, ny, f.team)) break; d = nd; }
       f.x += f.ax * d; f.y += f.ay * d * 0.75; f.speedBoost = 0.3; f.speedT = a.time; w.vfx('shockwave', f.x, f.y - 6, { scale: 2.4, below: true, tint: 0xffaa44 }); w.vfx('buff', f.x, f.cy, { scale: 3, tint: 0xffaa44 }); w.float(f.x, f.y - f.def.height - 34, '¡Propulsor!', '#ffaa44'); return;
     }
     if (a.type === 'shield') { w.markSrc(f, 'shield'); f.shieldHp = Math.max(f.shieldHp, 150 * m); f.shieldT = a.time; w.float(f.x, f.y - f.def.height - 34, `Escudo ${Math.round(f.shieldHp)}`, '#7ee0ff'); }
     else if (a.type === 'sprint') { f.speedBoost = 0.35 + 0.05 * m; f.speedT = a.time; w.vfx('buff', f.x, f.cy, { scale: 3 }); w.float(f.x, f.y - f.def.height - 34, '¡Sprint!', '#ffd23f'); }
     else if (a.type === 'smoke') { w.enemiesWithin(f, 260).forEach(t => t.slow(Math.min(0.7, 0.3 + 0.07 * m), a.time + 0.5 * m)); for (let i = 0; i < 6; i++) w.vfx('run_dust', f.x + (Math.random() - 0.5) * 300, f.y + (Math.random() - 0.5) * 120, { scale: 3.5, alpha: 0.8 }); }
-    else if (a.type === 'recall') { f.recall = { t: 4 }; w.float(f.x, f.y - f.def.height - 34, 'Teletransportando...', '#7ee0ff'); }
+    else if (a.type === 'recall') { f.recall = { t: 4, T: 4 }; w.float(f.x, f.y - f.def.height - 34, 'Teletransportando...', '#7ee0ff'); }
     else if (a.type === 'mortar') {
       const t = this.nearestEnemy(f, 800), px = t ? t.x : f.x + f.ax * 260, py = t ? t.y : f.y + f.ay * 260;
       const x = Phaser.Math.Clamp(f.x + (px - f.x) * 0.45, 60, WORLD_W - 60), y = Phaser.Math.Clamp(f.y + (py - f.y) * 0.45, WALK_Y0, WALK_Y1);
@@ -835,13 +1059,26 @@ export class Arena extends Phaser.Scene {
     if (!f.alive || !f.free || f.away || f.drop) return;
     if (f.antivirus) return this.runAntivirus(f);
     if (f.def.bot === 'wall') return;
+    if (f.def.guard && f.owner) {   // bodyguards never leave their formation around Maduro: they only strike what is already inside their reach
+      this.escort(f); const t = this.nearestEnemy(f, f.def.stats.range + 40);
+      if (t && !t.isTower) { const dx = t.x - f.x, dy = t.y - f.y; if (Math.hypot(dx, dy) - (t.br - BODY_R) <= f.def.stats.range) { f.setAim(dx, dy); f.tryBasic(); } }
+      return;
+    }
+    if (f.def.bot === 'crate') return this.crateTick(f, dt);
     if (f.isNexus) return;
     if (f.isTower) return this.runTower(f);
     if (f.isMinion) return this.runMinion(f);
     const range = f.def.stats.range;
-    const t = this.nearestEnemy(f, f.blindT > 0 ? 150 : f.isBot ? 600 : 900);
+    let t = this.nearestEnemy(f, f.blindT > 0 ? 150 : f.enraged ? 1500 : f.isBot ? 600 : f.def.guard ? 260 : 900);
+    if (f.def.guard && t && f.owner && dist(t, f.owner) > 340) t = null;   // bodyguards only fight what is close to Maduro
     if (!t) {
+      if (f.home) {   // no target: scuttle around the box all the time
+        if (!f.home.alive || f.home.dispose) { f.dispose = true; return; }
+        if (!f.wp || (f.wpT -= 0.016) <= 0 || Math.hypot(f.wp.x - f.x, f.wp.y - f.y) < 12) { const an = Math.random() * 6.283, rr = 30 + Math.random() * 60; f.wp = { x: f.home.x + Math.cos(an) * rr, y: f.home.y + Math.sin(an) * rr * YR }; f.wpT = 1 + Math.random(); }
+        const dx = f.wp.x - f.x, dy = f.wp.y - f.y; f.in.mx = dx; f.in.my = dy; f.setAim(dx, dy); return;
+      }
       if (!f.owner && f.isChamp) { f.in.mx = f.team === 0 ? 1 : -1; f.in.my = (LANE_MID - f.y) * 0.03; f.setAim(f.in.mx, 0); return; }   // AI champions push the middle lane
+      if (f.enraged) { const e = this.enemiesOf(f).filter(q => q.isChamp).sort((a, b) => dist(a, f) - dist(b, f))[0]; if (e) { f.in.mx = e.x - f.x; f.in.my = e.y - f.y; f.in.run = true; f.setAim(f.in.mx, f.in.my); } return; }   // berserk bots hunt the nearest enemy champion
       if (f.owner && !f.def.static) this.escort(f);   // sentries, turrets and walls never follow their owner (escort would even teleport them when far away)
       return;
     }
@@ -867,7 +1104,7 @@ export class Arena extends Phaser.Scene {
 
   runTower(f) {   // shoots whoever attacked an allied champion, otherwise the nearest enemy in range (minions first)
     let t = this.huntedBy(f, f.def.stats.range), best = 1e9;
-    if (!t) for (const e of this.enemiesOf(f)) { const d = dist(e, f); if (d <= f.def.stats.range && d - (e.isMinion ? 120 : 0) < best) { best = d - (e.isMinion ? 120 : 0); t = e; } }
+    if (!t) for (const e of this.enemiesOf(f)) { if (e.inBush && e.hiddenInBush(f.baseTeam)) continue; const d = dist(e, f); if (d <= f.def.stats.range && d - (e.isMinion ? 120 : 0) < best) { best = d - (e.isMinion ? 120 : 0); t = e; } }
     if (t) { f.setAim(t.x - f.x, t.y - f.y); f.tryBasic(); }
   }
 
@@ -887,10 +1124,11 @@ export class Arena extends Phaser.Scene {
     if (t) {
       const dx = t.x - f.x, dy = t.y - f.y, d = Math.hypot(dx, dy) - (t.br - BODY_R);
       f.setAim(dx, dy);
-      if (d > range * 0.9) { f.in.mx = dx; f.in.my = dy; }
-      if (d <= range) f.tryBasic();
+      const reff = t.isTower ? Math.min(range, towerCircle(t) * 0.8) : range;   // structures can only be hit from inside their circle
+      if (d > reff * 0.9) { f.in.mx = dx; f.in.my = dy; }
+      if (d <= reff) f.tryBasic();
     } else {
-      f.in.mx = f.team === 0 ? 1 : -1; f.in.my = (LANE_MID + (f.slot.y || 0) - f.y) * 0.03;
+      f.in.mx = f.team === 0 ? 1 : -1; f.in.my = (laneYAt(f.laneI ?? 1, f.x) + (f.slot.y || 0) - f.y) * 0.05;
       f.setAim(f.in.mx, 0);
     }
   }
@@ -955,15 +1193,139 @@ export class Arena extends Phaser.Scene {
 
 
   /* ---------- capturable camps + reinforcement ships ---------- */
+  // where the minions of `team` leave in lane `li`: from the lane just in front of the base
+  flagPos(team, li) { const x = 780 * F; return { x: team === 0 ? x : WORLD_W - x, y: laneYAt(li, x) }; }
+  drawTowerFlags() {   // every tower carries the same waving flag that marks a captured camp (its team's colour)
+    if (this.training || this.bot) return;
+    for (const t of this.fighters) {
+      if (!t.isTower || t.isNexus) continue;
+      const fk = 'flag_' + (t.team === 0 ? 'blue' : 'red');
+      if (!t.alive || !this.textures.exists(fk)) { t.flagSpr?.destroy(); t.flagSpr = null; continue; }
+      if (!t.flagSpr) { t.flagSpr = this.add.sprite(t.x + 46, t.y + 46, fk).setOrigin(0.5, 0.92).setScale(1.2); if (this.anims.exists(fk)) t.flagSpr.play(fk); }
+      t.flagSpr.setVisible(!t.hiddenFor?.(this.pc) && !t.fogHidden).setDepth(t.y + 50);
+    }
+  }
+  // bushes: patches of scenery where champions can hide (see Fighter.hiddenInBush)
+  buildBushes() {   // hiding places: clumps of the olive bushes of the map's Nature pack (Topdown RPG 32x32) on a patch of light grass, right on the borders of the lanes
+    this.bushes = [];
+    for (let li = 0; li < 3; li++) [[0.27, li === 0 ? 1 : -1], [0.43, li === 2 ? -1 : 1]].forEach(([fx, side]) => [fx * WORLD_W, (1 - fx) * WORLD_W].forEach(xx => this.bushes.push({ x: xx, y: laneYAt(li, xx) + side * LANE_HALF, rx: 140, ry: 80, side, li })));
+    for (let li = 0; li < 3; li++) for (const sg of [-1, 1]) { const xx = WORLD_W / 2 + sg * 340, side = li === 0 ? 1 : -1; this.bushes.push({ x: xx, y: laneYAt(li, xx) + side * LANE_HALF, rx: 140, ry: 80, side, li }); }   // lane borders next to the river
+    if (this.bot || !this.textures.exists('bushes')) return;
+    if (!this.textures.exists('bush_grass_m0')) {   // ground under a bush: same colours / chunky leaf texture as the bush, with an IRREGULAR outline (3 variants)
+      const W = 150, H = 90, TONES = [[116, 130, 34], [146, 158, 40], [146, 158, 40], [170, 182, 54]], bw = Math.ceil(W / 3);
+      for (let v = 0; v < 3; v++) {
+        const t = this.textures.createCanvas('bush_grass_m' + v, W, H), c = t.getContext(), im = c.createImageData(W, H), d = im.data, R2 = rng(7 + v * 13), ph = [R2() * 6.28, R2() * 6.28, R2() * 6.28, R2() * 6.28];
+        const blk = new Uint8Array(bw * Math.ceil(H / 3)).map(() => (R2() * TONES.length) | 0);
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+          const dx = (x - W / 2) / (W / 2), dy = (y - H / 2) / (H / 2), ang = Math.atan2(dy, dx), rad = 0.86 + 0.13 * Math.sin(3 * ang + ph[0]) + 0.09 * Math.sin(5 * ang + ph[1]) + 0.06 * Math.sin(9 * ang + ph[2]) + 0.04 * Math.sin(13 * ang + ph[3]);   // wavy, lumpy outline
+          const e = Math.hypot(dx, dy) / rad, o = (y * W + x) * 4; if (e > 1) continue;
+          let [r, g, b] = TONES[blk[((y / 3) | 0) * bw + ((x / 3) | 0)]]; if (e > 0.82) { r = 116; g = 130; b = 34; }
+          d[o] = r; d[o + 1] = g; d[o + 2] = b; d[o + 3] = 255;
+        }
+        c.putImageData(im, 0, 0); t.refresh(); t.setFilter(Phaser.Textures.FilterMode.NEAREST);
+      }
+    }
+    const R = rng(2024), tx = this.textures.get('bushes');
+    for (const b of this.bushes) {
+      b.spr = []; b.sway = 0;
+      [['bushA', 0, 0], ['bushB', -80, 6], ['bushD', 70, 4]].forEach(([fr, dx, dy], i) => {
+        if (!tx.has(fr)) return;
+        const o = this.add.image(b.x + dx, b.y + dy + b.side * 6 + (i ? 12 : 26), 'bushes', fr).setOrigin(0.5, 1).setScale(2.1 - i * 0.15).setFlipX(R() < 0.5); o.setDepth(o.y);
+        const g = this.add.image(o.x, o.y - o.displayHeight * 0.18, 'bush_grass_m' + ((R() * 3) | 0)).setDisplaySize(o.displayWidth * 1.22, o.displayHeight * 0.98).setDepth(-4).setFlipX(R() < 0.5);   // grass only where the bush stands
+        this.mapSprites.push(o, g); b.spr.push(o);
+      });
+    }
+  }
+  updateRecallFx(dt) {   // return to base: white lines rise from a circle on the ground to the sky (more and more of them, faster); at the base they come back down
+    if (this.bot) return; const g = (this.recallG ||= this.add.graphics().setDepth(99960)); g.clear();
+    for (const f of this.fighters) {
+      const R = f.recall, F = f.recallFx; if (!R && !F) { f.rfRings = null; continue; }
+      const st = (f.rfRings ||= { list: [], acc: 0 }); let rate, dir = 1, p = 1;
+      if (R) { p = 1 - R.t / (R.T || 10); rate = 3 + 40 * p * p; } else if (F.phase === 'out') rate = 90; else { rate = 70; dir = -1; p = 1 - F.t / 0.4; }
+      st.acc += rate * dt; while (st.acc >= 1) { st.acc -= 1; const a = Math.random() * 6.2832; st.list.push({ age: 0, dir, cx: Math.cos(a) * (0.35 + 0.65 * Math.random()), cy: Math.sin(a) * (0.35 + 0.65 * Math.random()), len: 60 + Math.random() * 120 * (0.4 + p) }); }
+      const life = R ? 0.9 - 0.45 * p : 0.3, hh = 560, RC = 48;
+      st.list = st.list.filter(r => (r.age += dt) < life);
+      g.lineStyle(2, 0xffffff, 0.35 + 0.35 * p).strokeEllipse(f.x, f.y, RC * 2, RC * 2 * YR);   // the circle on the ground
+      for (const r of st.list) {
+        const u = r.age / life, head = (r.dir > 0 ? u : 1 - u) * hh, a = (r.dir > 0 ? 1 - u * u : u) * (0.5 + 0.5 * p), x = f.x + r.cx * RC, y = f.y + r.cy * RC * YR;
+        g.lineStyle(2, 0xffffff, a).lineBetween(x, y - Math.max(0, head - r.len), x, y - head);
+      }
+    }
+  }
+  // ---- Maduro's box (E): thrown, stays on the map, spawns bugs, poisons the area ----
+  throwBox(owner, c, a, rank) {   // the logic runs on a timer (not a tween), so the headless host creates the box too; the arc is only drawn where there is a screen
+    const x0 = owner.x, y0 = owner.y - owner.def.height * 0.6;
+    if (!this.bot) {
+      const img = this.add.image(x0, y0, 'empty_box').setDepth(99000), k = { v: 0 }; img.setScale(64 / Math.max(1, img.height));
+      this.tweens.add({ targets: k, v: 1, duration: 650, ease: 'Sine.easeInOut', onUpdate: () => { img.setPosition(x0 + (c.x - x0) * k.v, y0 + (c.y - y0) * k.v - Math.sin(Math.PI * k.v) * 190).setAngle(k.v * 540); },
+        onComplete: () => { img.destroy(); this.vfx('shockwave', c.x, c.y, { scale: 3, below: true, tint: 0xffd23f }); this.vfx('run_dust', c.x, c.y - 6, { scale: 3, alpha: 0.9 }); } });
+    }
+    if (this.net?.role === 'client') return;   // the crate itself comes from the host in the snapshots
+    this.after(0.65, () => {
+      if (!owner.alive && owner.dispose) return;
+      const cr = new Fighter(this, 'crate', owner.team, c.x, c.y, { ai: true, owner, life: a.life }); cr.def = { ...cr.def, stats: { ...cr.def.stats, hp: rk(a.hp, rank) } }; cr.hp = cr.maxHp; cr.spawnT = 1.5; cr.bugs = []; cr.crateRank = rank; this.fighters.push(cr);
+    });
+  }
+  crateTick(f, dt) {
+    const a = CHAMPIONS.maduro.abilities.p3, r = f.owner?.ranks?.p3 || f.crateRank || 1; f.bugs = (f.bugs || []).filter(b => b.alive && !b.dispose);
+    f.bugCap = rk(a.bugCap, r); f.spawnMax ||= f.spawnT || 1.5;
+    f.bugFull = f.bugs.length >= f.bugCap;
+    if (f.bugs.length < rk(a.bugCap, r) && (f.spawnT = (f.spawnT ?? 2) - dt) <= 0) {
+      f.spawnT = f.spawnMax = rk(a.bugEvery, r); const ang = Math.random() * 6.283, b = new Fighter(this, 'roach', f.team, f.x + Math.cos(ang) * 40, f.y + Math.sin(ang) * 30, { ai: true, owner: f.owner, botAp: rk(a.bugDmg, r) });
+      b.def = { ...b.def, stats: { ...b.def.stats, hp: rk(a.bugHp, r), armor: rk(a.bugArmor, r) } }; b.hp = b.maxHp; b.home = f; { const k = b.bugK = rk(a.bugScale, r); b.baseScale *= k; b.spr.setScale(b.baseScale); b.shadow?.setScale(b.shadow.scaleX * k, b.shadow.scaleY * k); } this.fighters.push(b); f.bugs.push(b); this.vfx('run_dust', b.x, b.y - 4, { scale: 1.2, alpha: 0.8 });
+    }
+    if ((f.poisonT = (f.poisonT || 0) - dt) <= 0) { f.poisonT = 0.5; this.enemiesNear(f.team, f.x, f.y, a.radius).forEach(t => { if (!t.isTower && !t.def?.static) t.poison(rk(a.poison, r), 1.0, f.owner, 'physical', 'crate' + f.nid); }); }
+  }
+  drawCrates() {   // poison area around every box
+    const g = (this.crateG ||= this.add.graphics().setDepth(-869)); g.clear(); if (this.bot) return; const t = this.time.now / 1000, R = CHAMPIONS.maduro.abilities.p3.radius;
+    for (const f of this.fighters) if (f.def?.bot === 'crate' && f.alive) { const pulse = 0.5 + 0.5 * Math.sin(t * 2 + f.nid); const rx = R, ry = R * YR * 0.9, tm = this.time.now;   // same toxic look as a poisoned champion, over the whole area
+      g.fillStyle(0x4fbf3a, 0.2 + 0.07 * pulse).fillEllipse(f.x, f.y, rx * 2, ry * 2).lineStyle(3, 0x9be37a, 0.75).strokeEllipse(f.x, f.y, rx * 2, ry * 2).lineStyle(2, 0x2f8f2a, 0.6).strokeEllipse(f.x, f.y, rx * 1.3, ry * 1.3);
+      for (let i = 0; i < 26; i++) { const ph = ((tm / 1100) + i * 0.137) % 1, an = i * 2.4 + f.nid, rr = 0.15 + 0.85 * ((i * 0.618) % 1); g.fillStyle(0xb8ff9a, 0.7 * (1 - ph)).fillCircle(f.x + Math.cos(an) * rx * rr, f.y + Math.sin(an) * ry * rr - ph * 55, 3 + 3 * (1 - ph)); } }
+  }
+  // ground stains (Decreto presidencial level 3)
+  addStain(x, y, r, life) { const bl = []; for (let i = 0; i < 6; i++) bl.push([(Math.random() - 0.5) * r * 1.4, (Math.random() - 0.5) * r * 0.9, r * (0.35 + Math.random() * 0.4)]); (this.stains ||= []).push({ x, y, bl, t: life, T: life }); }
+  drawStains(dt) {
+    const g = (this.stainG ||= this.add.graphics().setDepth(-868)); g.clear(); if (!this.stains?.length) return;
+    this.stains = this.stains.filter(s => (s.t -= dt) > 0);
+    for (const s of this.stains) { const a = Math.min(1, s.t / 1.5) * 0.55; for (const [dx, dy, r] of s.bl) g.fillStyle(0x8a0f0f, a).fillEllipse(s.x + dx, s.y + dy, r * 2, r * 2 * YR); g.fillStyle(0x500606, a * 0.7).fillEllipse(s.x, s.y, s.bl[0][2] * 1.2, s.bl[0][2] * 0.9); }
+  }
+  updateMeet(dt) {   // the first time a champion sees an enemy champion it says its 'meet' line (once per enemy champion every 40 s)
+    if (this.bot || this.over) return; if ((this.meetT = (this.meetT || 0) - dt) > 0) return; this.meetT = 0.5;
+    const me = this.pc; if (!me?.alive) return; const seen = (me.metSeen ||= {});
+    for (const e of this.fighters) {
+      if (!e.isChamp || !e.alive || e.baseTeam === me.baseTeam || e.hiddenFor(me) || eDist(e.x, e.y, me.x, me.y) > 950) continue;
+      if (this.gameT - (seen[e.key] ?? -99) < 40) continue;
+      if (this.audio.line(me, 'meet', { gap: 5000 })) seen[e.key] = this.gameT; break;
+    }
+  }
+  updateBushes(dt = 0.016) {   // who stands inside a bush (champions only); the bush shakes while somebody moves inside it
+    if (!this.bushes) return; const t = this.time.now / 1000;
+    for (const b of this.bushes) b.moving = false;
+    for (const f of this.fighters) {
+      if (!f.isChamp) continue;
+      const mv = f._bx !== undefined && Math.hypot(f.x - f._bx, f.y - f._by) > 0.4; f._bx = f.x; f._by = f.y;
+      f.inBush = false;
+      if (f.alive) for (const b of this.bushes) { const dx = (f.x - b.x) / b.rx, dy = (f.y - b.y) / b.ry; if (dx * dx + dy * dy < 1) { f.inBush = true; if (mv) b.moving = true; } }
+    }
+    if (this.bot) return;
+    for (const b of this.bushes) {
+      b.sway = b.moving ? Math.min(1, b.sway + dt * 10) : Math.max(0, b.sway - dt * 3);
+      (b.spr || []).forEach((o, i) => { o.setAngle(Math.sin(t * 11 + i * 1.9) * 1.4 * b.sway); o.setScale((o.scaleX >= 0 ? 1 : -1) * Math.abs(o.scaleX), Math.abs(o.scaleY)); });
+    }
+  }
   setupCamps() {
-    this.camps = this.training ? [] : CAMP_SITES.map((c, i) => ({ i, x: c.x, y: c.y, lane: c.y < 750 ? 'n' : 's', owner: null, prog: [0, 0], spawnT: 0, contested: false, flag: null, fx: 0 }));
-    this.ships = []; this.campG = this.add.graphics().setDepth(-870); this.campR = 118;
+    this.camps = []; this.ships = []; this.campG = this.add.graphics().setDepth(-870); this.campR = 118;
+    if (this.training) return;
+    const mk = (x, y, ln, owner, tower = null) => { const c = { i: this.camps.length, x, y, ln, lane: y < WORLD_H / 2 ? 'n' : 's', owner, prog: owner === 0 ? [1, 0] : owner === 1 ? [0, 1] : [0, 0], spawnT: 0, contested: false, flag: null, fx: 0, tower }; this.camps.push(c); return c; };
+    [RIVER.y0 + 280 * F, RIVER.y1 - 280 * F].forEach((y, k) => mk(WORLD_W / 2 + riverOffset(y), y, k ? 2 : 0, null));   // neutral flags in the middle of the river, at both ends of the map
+    for (const t of this.fighters) if (t.isTower && !t.isNexus) mk(t.x + 46, t.y + 46, t.laneI, t.team, t);   // every tower carries a flag; once the tower falls the enemy can capture it
   }
   campOwnerColor(o) { return o === 0 ? 0x4aa3ff : o === 1 ? 0xff4a3a : 0xc9d1dd; }
   updateCamps(dt) {
     if (!this.camps?.length || this.net?.role === 'client' || this.over) return;
     const R = this.campR;
     for (const c of this.camps) {
+      if (c.tower?.alive) { c.contested = false; continue; }   // a tower flag cannot be captured while its tower stands
       const n = [0, 0]; for (const f of this.fighters) if (f.isChamp && f.alive && !f.away && !f.drop && eDist(f.x, f.y, c.x, c.y) <= R) n[f.team]++;
       c.contested = n[0] > 0 && n[1] > 0;
       if (!c.contested && (n[0] || n[1])) {
@@ -972,22 +1334,19 @@ export class Arena extends Phaser.Scene {
         else if (c.prog[O] > 0) c.prog[O] = Math.max(0, c.prog[O] - rate);
         else { c.prog[T] = Math.min(1, c.prog[T] + rate); if (c.prog[T] >= 1 && c.owner !== T) this.captureCamp(c, T); }
       } else if (!c.contested && c.owner != null) c.prog[c.owner] = Math.min(1, c.prog[c.owner] + dt / 20);   // nobody on it: the owner's pie slowly refills
-      if (c.owner != null) { c.spawnT -= dt; if (c.spawnT <= 0) { c.spawnT = 30; this.dropShip(c, c.owner); } }
+      if (c.owner != null && !(c.tower && c.owner === c.tower.team)) { c.spawnT -= dt; if (c.spawnT <= 0) { c.spawnT = 30; this.dropShip(c, c.owner); } }   // reinforcements only for whoever took a flag from its builder
     }
   }
   captureCamp(c, T) {
     c.owner = T; c.prog[T] = 1; c.prog[1 - T] = 0; c.spawnT = 5;
     this.fighters.forEach(f => { if (f.isChamp && f.team === T && f.alive && eDist(f.x, f.y, c.x, c.y) <= this.campR) f.gold += 80; });
-    this.showBanner({ title: '¡CAMPAMENTO RECLAMADO!', sub: `${T === 0 ? 'El equipo azul' : 'El equipo rojo'} controla ${c.lane === 'n' ? 'el camino norte' : 'el camino sur'}`, team: T }, 3000);
+    this.showBanner({ title: '¡CAMPAMENTO RECLAMADO!', sub: `${T === 0 ? 'El equipo azul' : 'El equipo rojo'} controla ${['el carril superior', 'el carril central', 'el carril inferior'][c.ln]}`, team: T }, 3000);
     this.audio.play('ui_announce', { vol: 0.7, gap: 0 }); this.vfx('levelup', c.x, c.y - 30, { scale: 6 }); this.zoneDecal(c.x, c.y, this.campR, this.campOwnerColor(T), 1.5);
     this.net?.onCamp?.();
   }
-  lanePath(c, team) {
-    const L = c.lane === 'n' ? LANE_NORTH : LANE_SOUTH, dir = team === 0 ? 1 : -1; let idx = 0, best = 1e9;
-    L.forEach((p, i) => { const d = Math.hypot(p[0] - c.x, p[1] - c.y); if (d < best) { best = d; idx = i; } });
-    const raw = []; for (let i = idx; i >= 0 && i < L.length; i += dir) raw.push({ x: L[i][0], y: L[i][1] });
-    raw.push({ x: team === 0 ? WORLD_W - 330 : 330, y: LANE_MID });
-    const pts = [raw[0]]; for (let i = 1; i < raw.length; i++) { const a = raw[i - 1], b = raw[i], n = Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / 70); for (let k = 1; k <= n; k++) pts.push({ x: a.x + (b.x - a.x) * k / n, y: a.y + (b.y - a.y) * k / n }); }   // dense waypoints along the route centre
+  lanePath(c, team) {   // from the flag onto its lane, then straight to the enemy base
+    const endX = team === 0 ? WORLD_W - 495 * F : 495 * F, raw = [{ x: c.x, y: c.y }, { x: c.x, y: laneYAt(c.ln, c.x) }, { x: endX, y: laneYAt(c.ln, endX) }];
+    const pts = [raw[0]]; for (let i = 1; i < raw.length; i++) { const a = raw[i - 1], b = raw[i], n = Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / 70); for (let k = 1; k <= n; k++) pts.push({ x: a.x + (b.x - a.x) * k / n, y: a.y + (b.y - a.y) * k / n }); }
     return pts;
   }
   // a giant ship descends slowly over the camp and drops 3 minions that then follow the camp's lane to the enemy nexus
@@ -1026,7 +1385,7 @@ export class Arena extends Phaser.Scene {
     const names = team === 0 ? ['minion_blue_melee', 'minion_blue_melee', 'minion_blue_ranged'] : ['minion_red_melee', 'minion_red_melee', 'minion_red_ranged'];
     names.forEach((k, i) => {
       const x = c.x + (i - 1) * 42, y = c.y + 18 + (i % 2) * 14, m = new Fighter(this, k, team, x, y, { ai: true, slot: { x: 0, y: (i - 1) * 24 } });
-      m.ax = team === 0 ? 1 : -1; m.path = this.lanePath(c, team);
+      m.ax = team === 0 ? 1 : -1; m.path = this.lanePath(c, team); m.laneI = c.ln;
       m.drop = c.lane === 'n' ? { t: -i * 0.18, dur: 1.0, h: Math.max(120, y - fromY + 80) } : { t: -i * 0.18, dur: 1.1, h: 40, slide: { x0: x + (i - 1) * 30, y0: fromY + 10, x1: x, y1: y } };   // bottom ships launch them from the extreme: they fly in towards the camp
       this.fighters.push(m);
     });
@@ -1040,20 +1399,48 @@ export class Arena extends Phaser.Scene {
     return t.setVisible(true).setText(text).setColor(color).setPosition(x, y);
   }
   drawTimers() {
-    for (const c of this.camps || []) { const own = c.owner != null; this.timerLabel('c' + c.i, c.x, c.y + this.campR * 0.75 + 16, `REFUERZOS EN ${Math.max(0, Math.ceil(c.spawnT))}s`, c.owner === 0 ? '#8ab4ff' : '#ff8a8a', own); }
+    for (const c of this.camps || []) { const own = c.owner != null && !(c.tower && (c.tower.alive || c.owner === c.tower.team)); this.timerLabel('c' + c.i, c.x, c.y + this.campR * 0.75 + 16, `REFUERZOS EN ${Math.max(0, Math.ceil(c.spawnT))}s`, c.owner === 0 ? '#8ab4ff' : '#ff8a8a', own); }
     if (!this.training && this.waveT < 1e8) for (const n of this.fighters) if (n.isNexus) this.timerLabel('n' + n.baseTeam, n.x, n.y + 64, `SÚBDITOS EN ${Math.max(0, Math.ceil(this.waveT))}s`, n.baseTeam === 0 ? '#8ab4ff' : '#ff8a8a', n.alive);
   }
+  buildRiver() {   // shallow curved river (pixel-art look): drawn at half resolution and scaled up with nearest-neighbour. The water is see-through so the ground shows through the blue: it is not deep. No flowing animation.
+    const P = 2, cx = (RIVER.x0 + RIVER.x1) / 2, y0 = RIVER.y0 - 20, H = Math.ceil((RIVER.y1 + 20 - y0) / P), halfW = Math.round(210 * F), W = halfW * 2 / P, HW = Math.round(84 * F), BANK = 18;
+    const wob = riverOffset; this.riverWob = wob; this.riverCx = cx;
+    const R = rng(91), pads = []; for (let i = 0; i < 7; i++) pads.push([Math.floor(10 + R() * (W - 20)), Math.floor(R() * H)]);
+    const hash = (x, y) => ((x * 73856093) ^ (y * 19349663)) >>> 0;
+    if (this.textures.exists('river_f0')) this.textures.remove('river_f0');
+    const t = this.textures.createCanvas('river_f0', W, H), ctx = t.getContext(), im = ctx.createImageData(W, H), d = im.data;
+    for (let py = 0; py < H; py++) {
+      const wy = y0 + py * P, c = cx + wob(wy), edge = HW + ((py * 7919) % 5 - 2) * 0.9;
+      for (let px = 0; px < W; px++) {
+        const wx = cx - halfW + px * P, dx = Math.abs(wx - c), o = (py * W + px) * 4, h = hash(px, py) % 90; let r = 0, g = 0, b = 0, a = 0;
+        if (dx < edge) {
+          const k = dx / edge;   // 0 centre .. 1 bank: the middle is a bit deeper (more tint), the edges are shallow (ground almost clear)
+          r = 10 + 50 * k; g = 120 + 50 * k; b = 252 - 10 * k; a = Math.round(122 - 52 * k * k);
+          if (h === 0) { r = 150; g = 128; b = 90; a = 130; }          // pebbles on the riverbed
+          else if (h === 1) { r = 205; g = 195; b = 150; a = 130; }    // pale sand specks
+          else if (h === 2 && k < 0.8) { r = 160; g = 220; b = 210; a = 90; }   // faint glints
+          for (const [qx, qy] of pads) if (Math.abs(px - qx) < 4 && Math.abs(py - qy) < 3 && (px - qx) ** 2 / 16 + (py - qy) ** 2 / 9 <= 1) { r = 150; g = 160; b = 44; a = 255; }
+        } else if (dx < edge + P) { r = 150; g = 196; b = 184; a = 190; }   // shore light line
+        else if (dx < edge + 2 * P) { r = 112; g = 78; b = 58; a = 255; }   // muddy edge
+        else if (dx < edge + BANK) { const hh = hash(px, py) % 7; r = hh < 2 ? 140 : 154; g = hh < 2 ? 150 : 162; b = 40; a = dx > edge + BANK - 3 * P && hh < 4 ? 0 : 255; }   // grass bank
+        d[o] = r; d[o + 1] = g; d[o + 2] = b; d[o + 3] = a;
+      }
+    }
+    ctx.putImageData(im, 0, 0); t.refresh(); t.setFilter(Phaser.Textures.FilterMode.NEAREST);
+    this.riverImg = this.add.image(cx - halfW, y0, 'river_f0').setOrigin(0, 0).setScale(P).setDepth(-995);
+  }
+  drawRiver() {}   // static: the river no longer animates
   drawCamps(dt) {
-    this.updateShips(dt); this.drawTimers();
+    this.updateShips(dt); this.drawTimers(); this.drawRiver(dt);
     if (!this.camps?.length) return; const g = this.campG; g.clear(); const t = this.time.now / 1000;
     for (const c of this.camps) {
       if (!this.inView(c.x, c.y, 220)) { c.flag?.setVisible(false); continue; }
-      const a = this.campR, b = a * YR, col = (o) => this.campOwnerColor(o);
-      g.fillStyle(0x0a0f1a, 0.38).fillEllipse(c.x, c.y, a * 2, b * 2);
+      const a = this.campR, b = a * YR, col = (o) => this.campOwnerColor(o), lock = !!c.tower?.alive;
+      if (!lock) g.fillStyle(0x0a0f1a, 0.38).fillEllipse(c.x, c.y, a * 2, b * 2);
       const pie = (frac, color, al) => { if (frac <= 0.001) return; const pts = [{ x: c.x, y: c.y }], n = Math.max(3, Math.ceil(frac * 60)); for (let i = 0; i <= n; i++) { const ang = -Math.PI / 2 + frac * Math.PI * 2 * i / n; pts.push({ x: c.x + Math.cos(ang) * a, y: c.y + Math.sin(ang) * b }); } g.fillStyle(color, al).fillPoints(pts, true); };
-      pie(c.prog[0], col(0), 0.55); pie(c.prog[1], col(1), 0.55);
+      if (!lock) { pie(c.prog[0], col(0), 0.55); pie(c.prog[1], col(1), 0.55);
       g.lineStyle(3, c.contested ? 0xffffff : col(c.owner), c.contested ? 0.5 + 0.5 * Math.sin(t * 10) : 0.9).strokeEllipse(c.x, c.y, a * 2, b * 2);
-      g.lineStyle(1, 0xffffff, 0.35).strokeEllipse(c.x, c.y, a * 1.7, b * 1.7);
+      g.lineStyle(1, 0xffffff, 0.35).strokeEllipse(c.x, c.y, a * 1.7, b * 1.7); }
       // flag: waving sprite of the owner's colour (grey when neutral); procedural fallback until the art exists
       const fk = 'flag_' + (c.owner === 0 ? 'blue' : c.owner === 1 ? 'red' : 'neutral');
       if (this.textures.exists(fk)) {
@@ -1234,7 +1621,7 @@ export class Arena extends Phaser.Scene {
         if (!h.shown && H.age >= h.delay) { h.shown = true; this.vfx('summon', h.x, h.y - 20, { scale: 3 }); }
         const spr = h.spr, al = over ? Math.max(0, spr.alpha - dt * 4) : h.shown ? Math.min(1, spr.alpha + dt * 5) : 0;
         spr.setAlpha(al).setDepth(h.y);
-        if (spr.setFrame && spr.texture.key.startsWith('st_helper')) { const n = spr.texture.frameTotal - 1, t = H.age - h.delay; spr.setFrame(t < 0.25 ? Math.min(1, Math.floor(t * 8)) : 2 + (Math.floor(this.time.now / 90) % Math.max(1, n - 2))); }
+        if (spr.setFrame && spr.texture.key.startsWith('st_helper')) { const n = spr.texture.frameTotal - 1, t = H.age - h.delay; spr.setFrame(t < 0.25 ? Math.max(0, Math.min(1, Math.floor(t * 8))) : 2 + (Math.floor(this.time.now / 90) % Math.max(1, n - 2))); }
       });
       const g = over ? null : (H.g ||= this.add.graphics().setDepth(99000).setBlendMode(Phaser.BlendModes.ADD)); g?.clear();
       const live = H.helpers.filter(h => !over && H.age > h.delay + 0.35);   // each laser starts once its helper has landed
@@ -1597,11 +1984,14 @@ export class Arena extends Phaser.Scene {
     const comp = ['melee', 'melee', 'ranged']; if (this.waveN % 2 === 1) comp.push('heavy');   // a tank/automaton every 2nd wave
     const names = team === 0 ? { melee: 'minion_blue_melee', ranged: 'minion_blue_ranged', heavy: 'minion_blue_tank' }
                              : { melee: 'minion_red_melee', ranged: 'minion_red_ranged', heavy: 'minion_red_auto' };
-    comp.forEach((c, i) => {
-      const slot = { x: 0, y: (i - 2) * 24 }, back = (comp.length - i) * 46;
-      const m = new Fighter(this, names[c], team, team === 0 ? 260 + back : WORLD_W - 260 - back, LANE_MID + slot.y, { ai: true, slot });
-      m.ax = team === 0 ? 1 : -1;
-      this.fighters.push(m);
+    LANE_YS_N.forEach(li => {
+      const fp = this.flagPos(team, li), dir = team === 0 ? 1 : -1;
+      comp.forEach((c, i) => {
+        const slot = { x: 0, y: (i - 2) * 24 }, ahead = (comp.length - i) * 40, x = fp.x + dir * ahead;
+        const m = new Fighter(this, names[c], team, x, laneYAt(li, x) + slot.y, { ai: true, slot });
+        m.ax = dir; m.laneI = li;
+        this.fighters.push(m);
+      });
     });
   }
 
@@ -1658,7 +2048,6 @@ export class Arena extends Phaser.Scene {
     // minions: the champion that lands the kill gets the gold and most of the XP; allied champions near the minion only get a small share of XP (no gold).
     // Hitting a minion without killing it earns nothing. Every other kill (champions, towers...) keeps sharing the XP between the nearby team.
     const near = this.fighters.filter(c => c.isChamp && c.alive && c.team === team && dist(c, v) <= 700);
-    if (v.isMinion && this.fighters.some(m => m.key === 'maduro' && m.alive && m.team === v.team && dist(m, v) <= 700)) r.gold = Math.round(r.gold * (1 - CHAMPIONS.maduro.passive.minion));   // Maduro's passive: his nearby minions are worth 10 % less gold to the rivals
     near.forEach(c => {
       const xp = v.isMinion ? (c === kc ? r.xp : Math.round(r.xp * MINION_XP_SHARE)) : r.xp;
       if (xp <= 0) return; c.gainXp(xp);
@@ -1917,7 +2306,7 @@ export class Arena extends Phaser.Scene {
   }
   nearestEnemy(f, r) {
     let best = null, bd = r;
-    for (const t of this.enemiesOf(f)) { if ((t.invis || (t.antivirus && t.owner?.invis)) && !f.isTower) continue; const d = dist(t, f) - (t.br - BODY_R); if (d <= bd) { best = t; bd = d; } }
+    for (const t of this.enemiesOf(f)) { if ((t.invis || (t.antivirus && t.owner?.invis)) && !f.isTower) continue; if (t.inBush && t.hiddenInBush(f.baseTeam)) continue; const d = dist(t, f) - (t.br - BODY_R); if (d <= bd) { best = t; bd = d; } }
     return best;
   }
 
@@ -1936,6 +2325,8 @@ export class Arena extends Phaser.Scene {
     if (!target.alive) return 0;
     if (target.invulT > 0) return 0;   // Show principal: invulnerable
     if (!dot && src && src.team !== target.team && target.key === 'xeviche' && target.arepaBlocks()) return 0;   // Arepa reina pepiada: the shield swallows this hit
+    if (target.isTower && target.wallRef?.alive) return 0;   // the outer tower protects the inner one
+    if (target.isTower && src) { const at = src.owner || src, R = towerCircle(target), dx = at.x - target.x, dy = (at.y - target.y) / YR; if (dx * dx + dy * dy > R * R) return 0; }   // nobody can hit a structure from outside its circle
     if (target.isTower && !this.basicDmg) return 0;   // towers and nexus only take basic attacks
     if (!dot) this.audio.play(target.isNexus ? 'hit_heavy' : target.isTower ? 'hit_metal' : type === 'physical' ? 'hit_flesh' : 'debuff', { at: target, vol: target.isTower ? 0.5 : 0.55, gap: 90 });
     const resist = type === 'physical' ? target.armor : type === 'magic' ? target.mr : 0;
@@ -1945,7 +2336,6 @@ export class Arena extends Phaser.Scene {
     if (target.key === 'luis' && src?.isChamp) { const hz = this.zones.find(z => z.kind === 'hack' && z.owner === target); if (hz && !hz.free.has(src)) { hz.free.add(src); src.silenceT = 0; this.float(src.x, src.y - src.def.height - 30, 'LIBRE', '#ffffff'); } }
     if (src?.key === 'julio' && target.ink && !dot && !this.inInk) this.explodeInk(src, target);
     let dmg = Math.max(1, raw * 100 / (100 + resist));
-    { const so = src?.owner || src; if (so?.key === 'maduro' && target.isChamp && target.team !== so.team && !dot) { target.devalT = so.def.passive.mark; target.devalBy = so; } }   // Maduro's passive mark
     if (target.sShield && !dot && src && src.team !== target.team && this.sShieldBlock(target, dmg)) return 0;   // Escudo antimperialista: the first hit is absorbed
     if (target.drT > 0) dmg *= 1 - target.drPct;   // Colectivo protector
     if (target.isChamp && target.pas?.size) {
@@ -2165,8 +2555,10 @@ export class Arena extends Phaser.Scene {
     if (o.ang) { const c = Math.cos(o.ang), sn = Math.sin(o.ang); [ax, ay] = [ax * c - ay * sn, ax * sn + ay * c]; }   // fan shots
     const x = owner.x + ax * 45, y = owner.y + ay * 45, lift = owner.def.height * 0.55;
     let s;
-    if (o.obj && this.textures.exists(o.obj)) {   // sprite object (e.g. a laptop) instead of a vfx sheet
-      s = this.add.image(x, y - lift, o.obj).setScale(o.scale || 0.2);
+    if (o.animFx && this.anims.exists(o.animFx)) {   // animated sprite from generated frames (comb wave)
+      s = this.add.sprite(x, y - lift, 'comb_wave0').setScale(o.scale || 1).setRotation(Math.atan2(ay, ax)); s.play(o.animFx);
+    } else if (o.obj && this.textures.exists(o.obj)) {   // sprite object (e.g. a laptop) instead of a vfx sheet
+      s = this.add.image(x, y - lift, o.obj).setScale(o.scale || 0.2); if (o.face) s.setRotation(Math.atan2(ay, ax));
       if (o.tint) s.setTint(o.tint);
     } else {
       s = this.add.sprite(x, y - lift, 'vfx_' + (o.vfx || 'energy_bolt')).setScale(o.scale || 2).setRotation(Math.atan2(ay, ax)).setFlipY(ax < 0);
@@ -2195,14 +2587,14 @@ export class Arena extends Phaser.Scene {
   }
 
   // wall of 4 tires, perpendicular to the aim, blocks enemy projectiles
-  tires(owner, cx, cy, life) {
+  tires(owner, cx, cy, life, size = 1, hp = null) {   // size / hp scale with the ability level: small and fragile at first, full size and sturdy at max
     const px = -owner.ay, py = owner.ax;
     for (let i = 0; i < 4; i++) {
-      const x = cx + px * (i - 1.5) * 44, y = Phaser.Math.Clamp(cy + py * (i - 1.5) * 44, WALK_Y0, WALK_Y1);
+      const x = cx + px * (i - 1.5) * 84 * size, y = Phaser.Math.Clamp(cy + py * (i - 1.5) * 84 * size, WALK_Y0, WALK_Y1);
       const s = this.add.image(x, y, 'tire').setOrigin(0.5, 0.85).setDepth(y);
-      const sc = 62 / s.height; s.setScale(0);
+      const sc = 62 * size / s.height; s.setScale(0);
       this.tweens.add({ targets: s, scale: sc, duration: 140 + i * 40, ease: 'Back.Out' });
-      this.obstacles.push({ x, y, r: 26, team: owner.team, left: life, s, nx: owner.ax, ny: owner.ay });
+      this.obstacles.push({ x, y, r: 26 * size, team: owner.team, left: life, s, nx: owner.ax, ny: owner.ay, hp, maxHp: hp, life0: life, h: 62 * size });
     }
   }
 
@@ -2255,7 +2647,7 @@ export class Arena extends Phaser.Scene {
 
   update(time, delta) {
     const dt = Math.min(delta / 1000, 0.05);
-    if (Phaser.Input.Keyboard.JustDown(this.k.esc)) { const hs = this.scene.get('hud'); if (hs?.shopOpen) { hs.shopOpen = false; } else if (this.aimKey) this.cancelAim(); else if (!this.over) this.togglePause(); }
+    if (Phaser.Input.Keyboard.JustDown(this.k.esc)) { const hs = this.scene.get('hud'); if (this.paused && hs?.menuBack?.()) { /* back one menu level */ } else if (hs?.branchSel) { hs.branchSel = null; } else if (hs?.shopOpen) { hs.shopOpen = false; } else if (this.aimKey) this.cancelAim(); else if (!this.over) this.togglePause(); }
     if (this.paused && !this.net) return;
     if (this.net && !this.net.live) return;   // online: wait for every player to finish loading
     this.feed = this.feed.filter(e => (e.t -= dt) > 0);
@@ -2263,10 +2655,11 @@ export class Arena extends Phaser.Scene {
     if (this.banner && (this.banner.t -= dt) <= 0) this.banner = null;
     if (this.over) this.over.t += dt;
     const bm = this.pc.bomber, aboard = bm && (bm.phase === 'fly' || bm.phase === 'land');
-    const zn = Phaser.Math.Clamp(this.scale.height / VIEW_H, 0.6, 4), z = aboard ? zn / 1.5 : zn;   // aboard the ship: 50 % farther than the normal view
+    const zn = Phaser.Math.Clamp(this.scale.height / VIEW_H, 0.6, 4), ab = this.aimKey && this.pc.def.abilities[this.aimKey], far = ab?.wide && (ab.v !== 'leak' || this.pc.leakRe), z = aboard ? zn / 1.5 : far ? zn * 0.5 : zn * this.zoomK;   // aboard the ship: 50 % farther than the normal view
     if (!this.zoom || this.snapZoom || Math.abs(z - this.zoom) < 0.002) this.zoom = z; else this.zoom += (z - this.zoom) * Math.min(1, dt * 4);
     this.cameras.main.setZoom(this.zoom);
     if (aboard) { this.camTarget.x = bm.pt.x; this.camTarget.y = bm.pt.y; this.cameras.main.centerOn(bm.pt.x, bm.pt.y); } else { this.camTarget.x = this.pc.x; this.camTarget.y = this.pc.y - 30; }
+    if (this.pc.leakRe) { if (!this._leakAim && this.pc.free && !this.aimKey && !this.over) { this._leakAim = true; this.aimKey = 'ult'; } } else this._leakAim = false;   // Filtraciones: after the leak the enemy-selection view (zoom out + pick) opens by itself, no second press needed
     if (this.snapZoom) { this.snapZoom = false; this.cameras.main.centerOn(this.camTarget.x, this.camTarget.y); }
 
     if (!this.bot) {   // the headless host has no player of its own: every champion is a remote player or the AI
@@ -2287,13 +2680,13 @@ export class Arena extends Phaser.Scene {
     this.fighters.forEach(f => f.alive && !f.isTower && !f.def.static && f.def.bot !== 'wall' && this.resolveSolids(f));
     this.net?.smooth(dt);   // online client: remote units interpolated, our own position reconciled
     // AI champions spend their skill points (ultimate first when available)
-    this.champs.forEach(e => { if ((e === this.player && !this.bot) || e.pid != null || this.net?.role === 'client') return; while (e.points > 0) { const open = ABILITY_KEYS.filter(a => e.canSpend(a)); if (!open.length) break; e.spend(open.includes('ult') ? 'ult' : open[Math.random() * open.length | 0]); } });
+    this.champs.forEach(e => { if ((e === this.player && !this.bot) || e.pid != null || this.net?.role === 'client') return; while (e.points > 0) { const open = ABILITY_KEYS.filter(a => e.canSpend(a)); if (!open.length) break; e.spend(open.includes('ult') ? 'ult' : open[Math.random() * open.length | 0], Math.random() < 0.5 ? 1 : 0); } });
     if (this.control && this.net?.role !== 'client') { this.control.t -= dt; if (this.control.t <= 0 || !this.control.target.alive || !this.control.luis.alive) this.endControl(); }
     this.updateEliud(dt);
     this.updateMortars(dt);
     this.updateChains(dt);
     this.updateZones(dt);
-    this.updateProjectiles(dt);
+    this.updateProjectiles(dt); this.updateBushes(dt); this.updateMeet(dt); this.updateRecallFx(dt); this.drawCrates(); this.drawStains(dt); this.updateTireShots(dt); this.updateFireZones(dt); this.updateCages(dt); this.drawLeakRing(); this.drawLeakMarks();
     this.obstacles = this.obstacles.filter(o => { if (o.f && (!o.f.alive || o.f.dispose || !this.fighters.includes(o.f))) return false; /* the panel is gone (destroyed, expired or removed): its collision goes with it */ o.left -= dt; if (o.left <= 0) { o.s.destroy(); return false; } return true; });
     this.fighters = this.fighters.filter(f => { if (f.dispose) { f.destroy(); return false; } return true; });
     if (!this.bot) {   // drawing only (the headless host skips it; the gameplay below stays)
@@ -2426,17 +2819,17 @@ export class Arena extends Phaser.Scene {
       let dead = p.left <= 0 || p.x < 0 || p.x > WORLD_W || p.y < 0 || p.y > WORLD_H;
       if (!dead) {
         const wall = this.obstacles.find(o => o.team !== p.team && segDist(p.px, p.py, p.x, p.y, o.x, o.y) < o.r + (p.r || 14) * 0.5);
-        if (wall) { this.vfx('block', wall.x, wall.y - 40, { scale: 3 }); if (wall.f && !p.noDamage) this.damage(p.owner, wall.f, p.dmg * 0.7, p.type, true); dead = true; }
+        if (wall) { this.vfx('block', wall.x, wall.y - 40, { scale: 3 }); if (wall.f && !p.noDamage) this.damage(p.owner, wall.f, p.dmg * 0.7, p.type, true); else if (wall.hp != null && !p.noDamage) { wall.hp -= p.dmg * 0.7; if (wall.hp <= 0) { wall.left = 0; this.vfx('spark', wall.x, wall.y - 20, { scale: 3, tint: 0x555555 }); this.vfx('run_dust', wall.x, wall.y - 6, { scale: 2.6, alpha: 0.9 }); } } dead = true; }
       }
       if (!dead) {
-        const t = this.enemiesOf(p.owner).find(t => segDist(p.px, p.py, p.x, p.y, t.x, t.y) < t.br + (p.r || 14));
+        const t = this.enemiesOf(p.owner).find(t => !(p.pierce && p.hits?.has(t)) && segDist(p.px, p.py, p.x, p.y, t.x, t.y) < t.br + (p.r || 14));
         if (t) {
           if (!p.noDamage) { const pb = this.basicDmg; this.basicDmg = p.basic; this.damage(p.owner, t, p.dmg, p.type); this.basicDmg = pb; }
           this.castCtx = p.ctx || null;
           p.onImpact?.(p.x, p.y);
           this.vfx('spark', p.x, p.y - p.lift, { scale: p.big ? 4 : 2.5 });
           p.onHit?.(t); this.castCtx = null;
-          dead = true;
+          if (p.pierce) (p.hits ||= new Set()).add(t); else dead = true;   // piercing waves (Leandro's comb) cross every enemy once
         }
       }
       if (dead) p.s.destroy();
@@ -2470,6 +2863,8 @@ export class Arena extends Phaser.Scene {
         const pz = 0.6 + 0.4 * Math.sin(this.time.now / 110);
         g.fillStyle(0xffe14d, 1).fillRect(x, y, w * f.hp / tot, h).lineStyle(2, 0xffffff, pz).strokeRect(x - 2, y - 2, w + 4, h + 4).lineStyle(4, 0xffd23f, 0.35 * pz).strokeRect(x - 4, y - 4, w + 8, h + 8);
       }
+      if (f.def.bot === 'crate') { const bar = (o, c, v) => g.fillStyle(0x000000, 0.75).fillRect(x - 2, y + h + o, w + 4, 5).fillStyle(c, 1).fillRect(x, y + h + o + 1, w * Math.max(0, Math.min(1, v)), 3); bar(2, 0xffffff, f.life / f.life0); bar(8, 0xffd23f, f.bugFull || f.bugs?.length >= (f.bugCap || 99) ? 1 : 1 - (f.spawnT ?? 0) / (f.spawnMax || 1)); }   // crate: white = time left, yellow = time until the next bug
+      else if (f.isBot && f.key.startsWith('bot_')) { const lf = f.lfShow || [f.life, f.life0]; if (lf[1] > 0 && lf[1] < 1e8) g.fillStyle(0x000000, 0.75).fillRect(x - 2, y + h + 2, w + 4, 5).fillStyle(0xffffff, 1).fillRect(x, y + h + 3, w * Math.max(0, Math.min(1, lf[0] / lf[1])), 3); }   // white bar under the health: time left before the bot disappears
       if (sh > 0) g.fillStyle(0xffffff).fillRect(x + w * f.hp / tot, y, w * sh / tot, h).fillStyle(0xbfc8d8).fillRect(x + w * f.hp / tot, y + h * 0.65, w * sh / tot, h * 0.35);
       if (champ) {   // health ticks: a thin line every 100 HP and a thick one every 1000 HP; when the thin ones would be too close together only the thick ones are drawn
         const gap = w * 100 / tot, thin = gap >= 4.5;

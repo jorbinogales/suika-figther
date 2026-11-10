@@ -168,3 +168,5 @@ label.l{display:block;font-size:12px;letter-spacing:.2em;color:var(--mut);margin
 .si{width:15px;height:15px;vertical-align:-3px;margin:0 2px;image-rendering:pixelated}
 #tip .scb{margin-top:8px;padding-top:6px;border-top:1px solid rgba(63,208,255,.35)}#tip .scb em{display:block;font-style:normal;font-size:12px;color:#8aa0c8;margin-bottom:3px}
 #tip .scl{margin:2px 0;font-size:14px}#tip .scl small{display:block;font-size:12px;color:#8aa0c8;margin-left:2px}
+
+.abis.alts{align-items:center;gap:22px}.abi.alt{border-color:rgba(255,210,63,.6)}

@@ -1,0 +1,14 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--enable-unsafe-swiftshader', '--use-gl=angle', '--mute-audio'], defaultViewport: { width: 1280, height: 720 } });
+const p = await b.newPage(); const errs = []; p.on('pageerror', e => errs.push(e.message));
+await p.goto('http://localhost:5199/#char=maduro&train=1&keep=1&noai=1&nofog=1', { waitUntil: 'load' });
+await p.waitForFunction(() => window.__arena?.player && window.__arena.fighters?.length, { timeout: 90000 });
+const sleep = t => new Promise(r => setTimeout(r, t)); await sleep(2500);
+const info = () => p.evaluate(() => { const w = window.__arena, f = w.player; return JSON.stringify({ ranks: f.ranks, pts: f.points, lvl: f.level, mana: Math.round(f.mana), cdE: f.cds.p3, aim: w.aimKey, crates: w.fighters.filter(x => x.key === 'crate').length, castable: f.canCast?.('p3') }); });
+await p.mouse.click(640, 300); await sleep(300); console.log('start', await info());
+await p.evaluate(() => { const f = window.__arena.player; f.level = 3; f.points = 3; });
+await p.keyboard.press('Control'); await p.keyboard.down('Control'); await p.keyboard.press('KeyE'); await p.keyboard.up('Control'); await sleep(300);
+console.log('after learn', await info());
+await p.keyboard.down('KeyE'); await sleep(150); await p.keyboard.up('KeyE'); await sleep(300); console.log('after E', await info());
+await p.mouse.move(800, 380); await sleep(200); await p.keyboard.down('KeyE'); await sleep(150); await p.keyboard.up('KeyE'); await sleep(1500); console.log('after click', await info());
+console.log(errs.slice(0,3).join('\n') || 'no errors'); await b.close();
