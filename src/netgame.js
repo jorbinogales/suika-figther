@@ -16,7 +16,7 @@ const SNAP = 1 / 60, SNAP_P = 1 / 30, INP = 1 / 60, KF_MS = 1000;   // server ho
 const r1 = v => Math.round(v), r2 = v => Math.round(v * 100) / 100;
 const TYPES = ['physical', 'magic', 'true'];
 const BPH = ['', 'arrive', 'board', 'fly', 'land', 'leave'];   // Yonaiker's ship phases as sent in snapshots (o.bm = [phase, total time, elapsed])
-const TOP = ['m', 'g', 'ld', 'ctl', 'cp', 'wv', 'tr', 'sn', 'bs'];   // snapshot fields besides the units: sent only when they change
+const TOP = ['m', 'g', 'ld', 'ctl', 'cp', 'wv', 'tr', 'sn', 'bs', 'wz'];   // snapshot fields besides the units: sent only when they change
 const STILL = { mx: 0, my: 0, run: false }, NONE = {};
 const JUMP = 220, DEAD = 3;   // px: a step between two snapshots longer than JUMP is a teleport (no sliding); own errors below DEAD are ignored
 
@@ -161,7 +161,7 @@ export class NetGame {
     const w = this.w, c = w.control, ts = Math.round(performance.now());
     const l = this.ev.length ? this.ev : undefined; this.ev = [];   // the events since the last snapshot travel in it (one message per tick instead of two); applied before it
     if (!this.ld || ts - this.ldT >= 500) { this.ld = [r1((this.ftSum || 0) / Math.max(1, this.ftN || 1)), r1(this.ftMax || 0)]; this.ldT = ts; this.ftSum = this.ftN = this.ftMax = 0; }   // host frame time, every 0.5 s
-    const top = { m: w.mortars.map(m => [r1(m.x), r1(m.y)]), g: r1(w.gameT), ld: this.ld, ctl: c ? [c.luis.nid, c.target.nid, r2(c.t)] : 0, cp: (w.camps || []).map(k => [k.owner ?? -1, r2(k.prog[0]), r2(k.prog[1]), k.contested ? 1 : 0, r1(k.spawnT)]), wv: r1(w.waveT), tr: (w.traps || []).map(q => [r1(q.x), r1(q.y), q.team, q.r, r1(q.t)]), sn: (w.sentinels || []).map(q => [r1(q.x), r1(q.y), q.team, q.r, r1(q.t)]), bs: w.bosses ? ['beast', 'captain', 'robot'].map(k => { const b = w.bosses[k]; return [Math.max(0, Math.ceil(b.t)), !!b.f?.alive, b.phase || '']; }) : null };
+    const top = { m: w.mortars.map(m => [r1(m.x), r1(m.y)]), g: r1(w.gameT), ld: this.ld, ctl: c ? [c.luis.nid, c.target.nid, r2(c.t)] : 0, cp: (w.camps || []).map(k => [k.owner ?? -1, r2(k.prog[0]), r2(k.prog[1]), k.contested ? 1 : 0, r1(k.spawnT)]), wv: r1(w.waveT), tr: (w.traps || []).map(q => [r1(q.x), r1(q.y), q.team, q.r, r1(q.t)]), sn: (w.sentinels || []).map(q => [r1(q.x), r1(q.y), q.team, q.r, r1(q.t)]), bs: w.bosses ? ['beast', 'captain', 'robot'].map(k => { const b = w.bosses[k]; return [Math.max(0, Math.ceil(b.t)), !!b.f?.alive, b.phase || '']; }) : null, wz: w.warZone ? 1 : 0 };   // wz: the war zone is permanent terrain, so it rides every keyframe (rejoins / a missed 'wz' event still get it)
     const fs = w.fighters.map(f => this.packF(f)), P = this.prevF, cur = new Map(), msg = { k: 'snap', n: ++this.sn, ts, l }, tj = {};
     for (const k of TOP) tj[k] = JSON.stringify(top[k]);
     if (!P || this.wantKf || ts - this.kfT >= KF_MS) {   // keyframe: the whole state
@@ -327,6 +327,7 @@ export class NetGame {
     for (const f of w.fighters) if (f.nid >= 1000 && !seen.has(f.nid) && f.alive && !f.dispose) f.dispose = true;   // vanished on the host (expired summon, ...)
     if (s.cp) s.cp.forEach((k, i) => { const c = w.camps?.[i]; if (c) { c.owner = k[0] < 0 ? null : k[0]; c.prog = [k[1], k[2]]; c.contested = !!k[3]; c.spawnT = k[4]; } });
     if (s.wv != null) w.waveT = s.wv;
+    if (s.wz && !w.warZone) w.bossWarZone?.();
     if (s.bs && w.bosses) s.bs.forEach(([t, up, phase], i) => { const b = w.bosses[['beast', 'captain', 'robot'][i]]; if (b) { b.t = t; b.up = up; b.synced = true; if (phase) b.phase = phase; } });
     if (s.tr) { w.traps = s.tr.map((q, i) => Object.assign(w.traps?.[i] || {}, { x: q[0], y: q[1], team: q[2], r: q[3], t: q[4] })); }
     if (s.sn) { w.sentinels = s.sn.map((q, i) => Object.assign(w.sentinels?.[i] || { owner: { alive: true } }, { x: q[0], y: q[1], team: q[2], r: q[3], t: q[4] })); }
