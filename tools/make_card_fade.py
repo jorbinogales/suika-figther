@@ -15,7 +15,7 @@ def noise(octaves=((6, 1.0), (14, 0.55), (34, 0.28))):   # fractal value noise i
     return out / np.abs(out).max()
 
 y, x = np.mgrid[0:H, 0:W]
-d = np.minimum.reduce([x / W, (W - 1 - x) / W, y / H, (H - 1 - y) / H]) / 0.5          # 0 at the border -> 1 at the centre (per axis, so it follows the rectangle)
+d = np.minimum.reduce([x / W, (W - 1 - x) / W, (H - 1 - y) / H]) / 0.5          # only the left, right and bottom edges dissolve; the top edge stays solid
 d = np.clip(d, 0, 1)
 v = d + 0.22 * noise()                                                                   # irregular: some sides eat more, some less
 a = np.clip((v - 0.04) / 0.34, 0, 1); a = a * a * (3 - 2 * a)                             # smoothstep
