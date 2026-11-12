@@ -8,7 +8,7 @@ En el panel DNS de `hayai.com.ve` crea un registro **A**: nombre `suikafigther` 
 
 ## 2. Servidor (Ubuntu 22.04/24.04, 1 GB de RAM alcanza)
 ```bash
-sudo apt update && sudo apt install -y git curl build-essential python3 ufw
+sudo apt update && sudo apt install -y git curl build-essential python3 ufw chromium-browser fonts-dejavu-core   # chromium = anfitrión de las partidas online (sin él no arrancan partidas de 2+)
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt install -y nodejs
 sudo npm i -g pm2
 

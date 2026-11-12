@@ -372,9 +372,11 @@ const handlers = {
       pushRoom(room);
     };
     // 2+ players: the server hosts the match (headless Chromium) and nobody's browser simulates it; solo games stay local as always
-    if (!hostEnabled || room.players.size < 2) return begin();
-    startBot(room).then(() => { if (room.bot) { room.host = room.bot.id; begin(); } },
-      (e) => { console.error(`[host ${room.code}] could not start, the leader hosts:`, e.message); endBot(room); begin(); });
+    if (room.players.size < 2) return begin();
+    // never fall back to a player's browser: the server hosts or the match does not start
+    const abort = (why) => { console.error(`[host ${room.code}] could not start:`, why); endBot(room); if (room.state === 'loading') { room.state = 'lobby'; pushRoom(room); } err(ws, 'El servidor no pudo alojar la partida, inténtalo de nuevo'); };
+    if (!hostEnabled) return abort('no Chromium (set CHROME_PATH or install chromium)');
+    startBot(room).then(() => { if (room.bot) { room.host = room.bot.id; begin(); } }, (e) => abort(e.message));
   },
   loaded(ws, user) {
     const room = needRoom(ws, user); if (!room) return;
