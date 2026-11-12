@@ -207,7 +207,7 @@ label.l{display:block;font-size:12px;letter-spacing:.2em;color:var(--mut);margin
 /* champion card: no border, the picture dissolves toward its edges (irregular mask: tools/make_card_fade.py) */
 .panel.pick{border:0;box-shadow:none;background:transparent;overflow:visible}
 .panel.pick .bg{display:none}
-.panel.pick .sp,.panel.pick .cv{-webkit-mask-image:url(assets/ui/card_fade.png);mask-image:url(assets/ui/card_fade.png);-webkit-mask-size:100% 100%;mask-size:100% 100%;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat}
+.panel.pick .sp,.panel.pick .cv{-webkit-mask-image:url(/assets/ui/card_fade.png);mask-image:url(/assets/ui/card_fade.png);-webkit-mask-size:100% 100%;mask-size:100% 100%;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat}
 .panel.pick .ov{background:linear-gradient(transparent,rgba(0,0,0,.35) 60%,transparent)}
 
 /* room list: a confirmed champion shades the player's row with a team-coloured gradient */
