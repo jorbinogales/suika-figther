@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { inkPath } from './julio.js';
 import { CHAMPIONS, ABILITY_KEYS, MAX_RANK, COMBO_WINDOW, aimSpec, rk } from './data.js';
+import { preloadVideos } from './versus.js';
 import { Fighter, UNIT_DEFS, BODY_R, towerCircle, WORLD_W, WORLD_H, LANE_Y0, LANE_Y1, WALK_Y0, WALK_Y1, dist } from './fighter.js';
 import { walk, GW, GH, CELL, cellWalk, walkField, grassField, isWalk as isWalkM, CAMP_SITES, laneYAt, LANE_HALF, RIVER, riverOffset, TOWER_XS, BASE_X, BASE_Y, F } from './mapdata.js';
 import { Audio } from './audio.js';
@@ -71,7 +72,12 @@ export class Boot extends Phaser.Scene {
     this.load.on('loaderror', f => { if (!/^(manifest|uilayout)/.test(f.key)) console.warn('missing', f.src); });
   }
 
-  create() { this.finish((this.cache.json.get('manifest') || {}).sprites || {}); }
+  create() {
+    const sp = (this.cache.json.get('manifest') || {}).sprites || {};
+    if (BOT || location.hash) return this.finish(sp);   // test links and the server host need no videos
+    // the champion videos load now, behind the loading screen, so the champion card and the VS screen show them at once
+    (window.__swReady || Promise.resolve()).then(() => preloadVideos(Object.keys(CHAMPIONS), (i, n) => bootScreen.progress(100 * i / n, `CARGANDO VIDEOS... ${i}/${n}`))).finally(() => this.finish(sp));
+  }
 
   finish(sprites) {
     this.registry.set('sprites', sprites);

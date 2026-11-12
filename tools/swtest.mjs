@@ -1,0 +1,12 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--mute-audio', '--autoplay-policy=no-user-gesture-required'], defaultViewport: { width: 1280, height: 720 } });
+const p = await b.newPage(); const errs = []; p.on('pageerror', e => errs.push(e.message)); p.on('console', m => { if (m.type() === 'error') errs.push('c:' + m.text()); });
+const t0 = Date.now();
+await p.goto('http://localhost:3001/', { waitUntil: 'load' });
+await p.waitForFunction(() => !document.getElementById('loading') && document.querySelector('#ui'), { timeout: 120000 });
+console.log('1st load to launcher (s):', ((Date.now() - t0) / 1000).toFixed(1));
+console.log(await p.evaluate(async () => { const ks = await caches.keys(), c = ks.length ? await (await caches.open(ks[0])).keys() : []; const r = await fetch('/assets/champvideos/loop/luis.mp4', { headers: { Range: 'bytes=0-99' } }); return JSON.stringify({ ctrl: !!navigator.serviceWorker.controller, caches: ks, entries: c.length, videos: c.filter(x => /loop\//.test(x.url)).length, rangeStatus: r.status, rangeLen: (await r.arrayBuffer()).byteLength }); }));
+const t1 = Date.now(); await p.reload({ waitUntil: 'load' });
+await p.waitForFunction(() => !document.getElementById('loading') && document.querySelector('#ui'), { timeout: 120000 });
+console.log('2nd load to launcher (s):', ((Date.now() - t1) / 1000).toFixed(1));
+console.log('errors:', [...new Set(errs)].join('\n') || 'none'); await b.close();

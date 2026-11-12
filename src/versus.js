@@ -5,6 +5,13 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '
 export const videoTag = (k, cls = 'cv') => `<video class="${cls}" src="assets/champvideos/loop/${k}.mp4" autoplay loop muted playsinline preload="auto" onplaying="this.classList.add('on')" onerror="if(!this.dataset.f){this.dataset.f=1;this.src='assets/champvideos/${k}.mp4'}else this.remove()"></video>`;   // loop/ = forward + reversed (tools/make_pingpong.py): no cut when it repeats; falls back to the original, then to the splash art
 // one card per champion: splash art + video on top, champion name and player name
 const card = (p, t) => `<div class="vcard t${t}"><div class="vimg" style="background-image:url(assets/concept/${p.k}.webp)"></div>${videoTag(p.k, 'vvid')}<div class="vname"><b>${esc(CHAMPIONS[p.k]?.name || p.k)}</b><small>${esc(p.label || CLASSES[CHAMPIONS[p.k]?.cls]?.label || '')}</small></div></div>`;
+// downloads the champion videos while the interface loads (they end up in the service worker cache, see public/sw.js); never blocks for more than `ms`
+export const preloadVideos = (keys, onProgress, ms = 40000) => {
+  let done = 0; const n = keys.length, q = keys.slice();
+  const worker = async () => { while (q.length) { const k = q.shift(); try { const r = await fetch(`assets/champvideos/loop/${k}.mp4`); if (r.ok) await r.blob(); } catch (e) { /* missing video: the splash art is used */ } onProgress?.(++done, n); } };
+  return Promise.race([Promise.all([worker(), worker(), worker(), worker()]), new Promise(r => setTimeout(r, ms))]);
+};
+
 // teams = { blue: [{ k, label }], red: [{ k, label }] }
 export const vsHtml = ({ blue, red }) =>   // blue team on top, red below, VS between the two rows (card size follows the window, see launcher.css)
   `<div class="vsx"><div class="vteam tb"><h3>EQUIPO AZUL</h3><div class="vrow">${blue.map(p => card(p, 0)).join('')}</div></div><div class="vsmid"><span>VS</span></div><div class="vteam tr"><h3>EQUIPO ROJO</h3><div class="vrow">${red.map(p => card(p, 1)).join('')}</div></div></div>`;

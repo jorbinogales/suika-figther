@@ -7,6 +7,7 @@
     "tag": "MEJORA",
     "changes": [],
     "items": [
+      "CARGA MÁS RÁPIDA Y VIDEOS PRECARGADOS. Los videos de los campeones se descargan durante la pantalla de carga de la interfaz (\"CARGANDO VIDEOS...\") para que aparezcan al instante en la tarjeta y en el VS. Todo el juego (imágenes, sonidos, sprites, videos y scripts) se guarda en una caché del navegador ligada a la versión: las siguientes visitas cargan desde el disco y cada versión nueva borra la caché anterior y crea la suya.",
       "SALA: ELEGIR NO ES CONFIRMAR. Un clic en la tarjeta de un campeón solo lo previsualiza; se confirma con el botón SELECCIONAR o con doble clic sobre su cara. Al confirmar, la fila del jugador en la lista de la sala se sombrea con un degradado del color de su equipo. La partida solo puede iniciarla el anfitrión y únicamente cuando TODOS han confirmado su campeón (el servidor también lo exige). Se quitó el botón \"Estoy listo\".",
       "La tarjeta del campeón seleccionado ya no tiene bordes: la imagen (y su video) se disuelve hacia los bordes con una dispersión irregular, como si desapareciera.",
       "El robot de guerra vuelve a aparecer cada 5 minutos después de morir (la primera vez sigue siendo al minuto 8). Cada nueva aparición sube un nivel: más vida y daño.",
