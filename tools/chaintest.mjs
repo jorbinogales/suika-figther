@@ -1,0 +1,13 @@
+import puppeteer from 'puppeteer-core';
+const kind = process.argv[2] || 'beast';
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--enable-unsafe-swiftshader','--use-gl=angle','--mute-audio'], defaultViewport: { width: 1280, height: 720 } });
+const p = await b.newPage(); const errs = []; p.on('pageerror', e => errs.push(e.stack || e.message));
+await p.goto('http://localhost:5199/#char=luis&train=1&nofog=1&keep=1', { waitUntil: 'load' });
+await p.waitForFunction(() => window.__arena?.player, { timeout: 90000 });
+const sleep = t => new Promise(r => setTimeout(r, t)); await sleep(2000);
+await p.evaluate(k => { const w = window.__arena; w.bossForce(k); window.__t = setInterval(() => { const f = w.bosses[k].f; if (f) { f.bs.aggro.add(w.player); const q = w.player; q.hp = q.maxHp = 99999; q.x = f.x - 150; q.y = f.y + 20; } }, 100); window.__s = []; }, kind);
+await sleep(kind === 'robot' ? 9000 : 3000);
+await p.evaluate(k => { const w = window.__arena; window.__i = setInterval(() => { const f = w.bosses[k].f; if (f) window.__s.push(f.state === 'cast' ? 1 : 0); }, 100); }, kind);
+await sleep(20000);
+console.log(kind, await p.evaluate(k => { const s = window.__s, f = window.__arena.bosses[k].f; return JSON.stringify({ n: s.length, acting: +(s.reduce((a, b) => a + b, 0) / s.length).toFixed(2), keys: f ? Object.keys(f).filter(x => /act|state|curName/.test(x)) : null }); }, kind));
+console.log('errors:', [...new Set(errs)].join('\n') || 'none'); await b.close();

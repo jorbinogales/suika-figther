@@ -1,0 +1,11 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--enable-unsafe-swiftshader','--use-gl=angle','--mute-audio'], defaultViewport: { width: 1280, height: 720 } });
+const p = await b.newPage(); const errs = []; p.on('pageerror', e => errs.push(e.message));
+await p.goto('http://localhost:5199/#char=luis&train=1&nofog=1&keep=1', { waitUntil: 'load' });
+await p.waitForFunction(() => window.__arena?.player, { timeout: 90000 });
+const sleep = t => new Promise(r => setTimeout(r, t)); await sleep(2500);
+console.log(await p.evaluate(() => { const w = window.__arena; return JSON.stringify({ training: w.training, bosses: !!w.bosses, force: typeof w.bossForce }); }));
+await p.evaluate(() => { const w = window.__arena; const sp = []; const o = w.audio.play.bind(w.audio); w.audio.play = (n, a) => { sp.push(n); return o(n, a); }; window.__sp = sp; w.bossForce('beast'); w.bosses.beast.f.bs.aggro.add(w.player); const f = w.player; f.hp = f.maxHp = 99999; f.x = 3033 - 200; f.y = 2330; });
+await sleep(1500); console.log(await p.evaluate(() => { const w = window.__arena, f = w.bosses.beast.f; return JSON.stringify([f.x|0, f.y|0, w.player.x|0, w.player.y|0, f.curName, f.bs.cd, w.bossTargets(f, 1000).length]); })); await sleep(6000); await p.screenshot({ path: 'art/review_8dir/_boss_train.png' });
+console.log(await p.evaluate(() => JSON.stringify({ snd: [...new Set(window.__sp)], boss: !!window.__arena.bosses.beast.f?.alive })));
+console.log('errors:', [...new Set(errs)].join('\n') || 'none'); await b.close();

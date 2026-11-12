@@ -114,6 +114,13 @@ try {
   await c[0].room((m) => m.players.find((p) => p.id === users[1].id).team === 0);
   ok('set_team');
 
+  // the match cannot start until everybody confirmed a champion
+  c[0].mark(); c[0].send({ t: 'start_game' });
+  assert.match((await c[0].t('error')).msg, /confirm/);
+  c[0].send({ t: 'pick_champ', key: 'mage' });
+  await c[0].room((m) => m.players.every((p) => p.locked));
+  ok('start needs every champion confirmed');
+
   // start / loaded / go
   c[1].mark(); c[1].send({ t: 'start_game' });
   assert.match((await c[1].t('error')).msg, /anfitri/);
@@ -205,6 +212,8 @@ try {
   const rt = await c[0].room();
   c[1].send({ t: 'join_room', code: rt.code });
   await c[1].room();
+  c[0].send({ t: 'pick_champ', key: 'mage' }); c[1].send({ t: 'pick_champ', key: 'mage' });
+  await c[0].room((m) => m.players.every((p) => p.locked));
   c[0].send({ t: 'start_game' });
   c[0].send({ t: 'loaded' });
   await c[1].t('start');

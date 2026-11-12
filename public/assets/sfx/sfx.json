@@ -160,13 +160,13 @@
 "atk_yonaiker_0.wav"
 ],
 "a_yonaiker_p1": [
-"atk_yonaiker_0.wav"
+"a_yonaiker_p1_0.wav"
 ],
 "a_yonaiker_p2": [
 "a_yonaiker_p2_0.wav"
 ],
 "a_yonaiker_p3": [
-"a_yonaiker_p1_0.wav"
+"a_yonaiker_p3_0.wav"
 ],
 "a_yonaiker_ult": [
 "a_yonaiker_ult_0.wav"
@@ -260,6 +260,15 @@
 ],
 "v_ally_down": [
 "v_ally_down_0.mp3"
+],
+"v_boss_beast": [
+"v_boss_beast_0.mp3"
+],
+"v_boss_captain": [
+"v_boss_captain_0.mp3"
+],
+"v_boss_robot": [
+"v_boss_robot_0.mp3"
 ],
 "v_enemy_down": [
 "v_enemy_down_0.mp3"
@@ -473,6 +482,30 @@
 "minion_yell_7.wav",
 "minion_yell_8.wav",
 "minion_yell_9.wav"
+],
+"boss_roar": [
+"boss_roar_0.wav",
+"boss_roar_1.wav",
+"boss_roar_2.wav"
+],
+"boss_pound": [
+"boss_pound_0.wav",
+"boss_pound_1.wav"
+],
+"boss_alarm": [
+"boss_alarm_0.wav"
+],
+"mecha_servo": [
+"mecha_servo_0.wav"
+],
+"mecha_mg": [
+"mecha_mg_0.wav"
+],
+"mecha_flame": [
+"mecha_flame_0.wav"
+],
+"mecha_step": [
+"mecha_step_0.wav"
 ],
 "robot_beep": [
 "robot_beep_0.wav",

@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { inkPath } from './julio.js';
 import { CHAMPIONS, ABILITY_KEYS, MAX_RANK, COMBO_WINDOW, aimSpec, rk } from './data.js';
 import { Fighter, UNIT_DEFS, BODY_R, towerCircle, WORLD_W, WORLD_H, LANE_Y0, LANE_Y1, WALK_Y0, WALK_Y1, dist } from './fighter.js';
 import { walk, GW, GH, CELL, cellWalk, walkField, grassField, isWalk as isWalkM, CAMP_SITES, laneYAt, LANE_HALF, RIVER, riverOffset, TOWER_XS, BASE_X, BASE_Y, F } from './mapdata.js';
@@ -8,7 +9,9 @@ import { bootScreen } from './bootscreen.js';
 import { NetGame } from './netgame.js';
 import { BOT } from './net.js';
 import { botStart } from './launcher.js';
-import { isWalk } from './mapdata.js';
+import { isWalk, OPEN } from './mapdata.js';
+import { SurvivalMixin } from './survival.js';
+import { BossMixin, laneUnitIgnoresBoss, recordBossAttacker, campCanAttack } from './bosses.js';
 
 
 const ZOOM_MIN = 0.96, ZOOM_MAX = 1.4;   // default / farthest view = 80 % of the first closer view (1.2), closest = 1.4
@@ -19,7 +22,7 @@ const LANE_MID = BASE_Y;
 const VFX = ['energy_bolt', 'magic_missile', 'rock_throw', 'poison_dart', 'poison_cloud', 'heal', 'summon', 'shield', 'buff',
   'shockwave', 'punch', 'spark', 'block', 'poison_hit', 'levelup', 'run_dust', 'bullet_tracer', 'cannonball', 'plasma_shot', 'burning_ground', 'fire_trail'];
 const ANIM_FPS = { idle: 6, walk: 10, run: 14, attack: 12, power1: 12, power2: 12, power3: 12, ult: 12, death: 8, destroy: 7, transform: 12, attack3: 12, dash: 14, power1b: 12, power2b_pull: 12, power2b_push: 12, power3b: 12, ultb: 12 };
-const LOOPS = new Set(['idle', 'walk', 'run']);
+const LOOPS = new Set(['idle', 'walk', 'run', 'puddle_move', 'flame', 'mg']);
 // 8-direction sprites: sheets named <anim>_<dir> with dir in s/se/e/ne/n (sw/w/nw are the mirror of se/e/ne); looping cycles run at a fixed cycle time whatever their frame count
 const DIR_SUFFIX = new Set(['s', 'se', 'e', 'ne', 'n']);
 const CYCLE_SEC = { idle: 1.0, walk: 0.62, run: 0.46 };
@@ -77,7 +80,7 @@ export class Boot extends Phaser.Scene {
     if (BOT) return botStart(this);   // server-side match host: joins its room and starts the arena when the server says so
     if (location.hash) setTimeout(() => bootScreen.hide(), 300);   // test links go straight into the arena
     if (!location.hash) this.scene.start('launcher');   // no test hash: launcher
-    else this.scene.start('arena', { allies: h.get('allies') ? h.get('allies').split(',') : (+h.get('mode') > 1 ? ['luis', 'xeviche', 'julio', 'axel'].slice(0, +h.get('mode') - 1) : []), enemies: h.get('enemies') ? h.get('enemies').split(',') : (+h.get('mode') > 1 ? ['hector', 'jorbi', 'eliud', 'leandro', 'luis'].slice(0, +h.get('mode')) : null), player: h.get('char') || 'leandro', enemy: h.get('enemy'), team: +(h.get('team') || 0), training: !!h.get('train'), haveSprites: sprites });
+    else this.scene.start('arena', { allies: h.get('allies') ? h.get('allies').split(',') : (+h.get('mode') > 1 ? ['luis', 'xeviche', 'julio', 'axel'].slice(0, +h.get('mode') - 1) : []), enemies: h.get('enemies') ? h.get('enemies').split(',') : (+h.get('mode') > 1 ? ['hector', 'jorbi', 'eliud', 'leandro', 'luis'].slice(0, +h.get('mode')) : null), player: h.get('char') || 'leandro', enemy: h.get('enemy'), team: +(h.get('team') || 0), training: !!h.get('train'), survival: !!h.get('surv'), haveSprites: sprites });
   }
 }
 
@@ -88,7 +91,7 @@ export class Arena extends Phaser.Scene {
   init(data) {
     this.playerKey = data.player || 'leandro';
     this.allyKeys = data.allies || []; this.enemyKeys = data.enemies || (data.enemy ? [data.enemy] : null);
-    this.enemyKey = data.enemy || null; this.myTeam = data.team || 0; this.training = !!data.training;
+    this.enemyKey = data.enemy || null; this.myTeam = data.team || 0; this.training = !!data.training; this.survival = !!data.survival; OPEN.on = this.survival; this.sv = null;
     this.sprites = data.haveSprites || this.registry.get('sprites') || {};
     this.paused = false; this.over = null; this.feed = []; this.cfg = data; this.nidNext = 1000; this.byNid = new Map(); this.net = null;
     this.debugFree = false;
@@ -175,6 +178,7 @@ export class Arena extends Phaser.Scene {
     // spawn slots: staggered across the lane at each base (training zone: both at the map center)
     const pos = (team, i, n) => {
       if (this.training) return { x: WORLD_W / 2 + (team === 0 ? -140 : 140), y: LANE_MID };
+      if (this.survival) return { x: WORLD_W / 2, y: WORLD_H / 2 };
       const dirx = team === 0 ? 1 : -1, bx = team === 0 ? BASE_X + 170 : WORLD_W - BASE_X - 170;   // spawn / respawn / recall point: inside the base's healing + shop circle, next to the nexus
       return { x: bx + (i % 2) * 70 * dirx, y: Phaser.Math.Clamp(LANE_MID + (i - (n - 1) / 2) * 76, LANE_MID - 250, LANE_MID + 250) };
     };
@@ -183,12 +187,12 @@ export class Arena extends Phaser.Scene {
     else {
     this.player = new Fighter(this, this.playerKey, my, pm.x, pm.y);
     this.allies = allyKeys.map((k, i) => { const q = pos(my, i + 1, myN); const f = new Fighter(this, k, my, q.x, q.y, { ai: true }); f.aiLane = (i % 3) - 1; return f; });
-    this.enemies = enemyKeys.map((k, i) => { const q = pos(1 - my, i, enN); const f = new Fighter(this, k, 1 - my, q.x, q.y, { ai: true }); f.aiLane = (i % 3) - 1; return f; });
-    this.enemy = this.enemies[0];
+    this.enemies = this.survival ? [] : enemyKeys.map((k, i) => { const q = pos(1 - my, i, enN); const f = new Fighter(this, k, 1 - my, q.x, q.y, { ai: true }); f.aiLane = (i % 3) - 1; return f; });
+    this.enemy = this.enemies[0] || this.player;   // survival: no rival champions
     this.champs = [this.player, ...this.allies, ...this.enemies];
     }
     this.fighters.push(...this.champs);
-    if (!this.training) {
+    if (!this.training && !this.survival) {
     // nexus of each side + towers (middle lane: 2 each; top and bottom lanes: 1 each)
       this.fighters.push(new Fighter(this, 'nexus_blue', 0, BASE_X, LANE_MID), new Fighter(this, 'nexus_red', 1, WORLD_W - BASE_X, LANE_MID));
       this.fountains = [0, 1].map(t => ({ x: t === 0 ? BASE_X : WORLD_W - BASE_X, y: LANE_MID, team: t })); this.fountG = this.add.graphics().setDepth(-996);
@@ -200,13 +204,15 @@ export class Arena extends Phaser.Scene {
       this.fighters.filter(f => f.isTower).forEach((t, i) => this.setNid(t, 200 + i));   // structures: same id on every client
     }
     this.waveT = 4; this.waveN = 0; this.gameT = 0; this.firstBlood = false; this.streaks = new Map();
-    if (!this.training) this.after(1.2, () => this.audio.voice('v_welcome', 1, 'ann_goodluck', { title: '¡QUE COMIENCE EL COMBATE!', sub: 'Bienvenidos, campeones', team: 2 }));
+    if (!this.training && !this.survival) this.after(1.2, () => this.audio.voice('v_welcome', 1, 'ann_goodluck', { title: '¡QUE COMIENCE EL COMBATE!', sub: 'Bienvenidos, campeones', team: 2 }));
     if (this.training) {   // training zone: level 12, 12 skill points to spend, free mana/cooldowns, a passive dummy, no waves
       this.waveT = 1e9; this.debugFree = true; this.player.gold = 99999;
       for (let i = 1; i < 12; i++) this.player.levelUp();
       this.player.hp = this.player.maxHp; this.player.xp = 0;
       this.enemy.ai = false; this.enemy.x = this.enemy.spawn.x = this.player.x + (my === 0 ? 420 : -420); this.enemy.setAim(-this.player.ax, 0);
     }
+    if (this.survival) { this.waveT = 1e9; this.survInit(); }
+    if (!this.survival) this.bossInit();
     this.aiOn = true; this.mouseSeen = false; this.aimKey = null; this.selected = null; this.prevLeft = this.prevRight = false;
     this.aimG = this.add.graphics().setDepth(99990);
 
@@ -235,7 +241,7 @@ export class Arena extends Phaser.Scene {
      Enemy units are only shown while one of your units sees them (sight radius per unit type). The whole map is known (dimmed outside your sight).
      A 128x60 canvas (25 world units per texel, smoothly scaled) is the overlay; the same texture dims the minimap. Off in the training zone (and with #nofog). */
   setupFog() {
-    this.fogOn = !this.training && !this.bot && !new URLSearchParams(location.hash.slice(1)).has('nofog'); this.fog = null;
+    this.fogOn = !this.training && !this.survival && !this.bot && !new URLSearchParams(location.hash.slice(1)).has('nofog'); this.fog = null;
     if (!this.fogOn) return;
     const FW = 256, FH = 120;   // 12.5 world units per texel
     if (this.textures.exists('fogmask')) this.textures.remove('fogmask');
@@ -447,7 +453,7 @@ export class Arena extends Phaser.Scene {
     if (this.textures.exists('ground_baked')) this.textures.remove('ground_baked');
     const tex = this.textures.createCanvas('ground_baked', cols * T, rows * T), ctx = tex.getContext();
     const dm = new Uint8Array(cols * rows);
-    for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) dm[j * cols + i] = walkField((i + 0.5) * T * K, (j + 0.5) * T * K) >= 0.5 && grassField((i + 0.5) * T * K, (j + 0.5) * T * K) < 0.3 ? 1 : 0;
+    for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) dm[j * cols + i] = this.survival ? 0 : walkField((i + 0.5) * T * K, (j + 0.5) * T * K) >= 0.5 && grassField((i + 0.5) * T * K, (j + 0.5) * T * K) < 0.3 ? 1 : 0;
     const D = (i, j) => (i < 0 || j < 0 || i >= cols || j >= rows ? 0 : dm[j * cols + i]);
     for (let pass = 0; pass < 2; pass++) for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {   // close 1-tile gaps / notches so every fringe tile has a matching piece
       if (D(i, j)) continue; const n = D(i, j - 1), so = D(i, j + 1), w = D(i - 1, j), e = D(i + 1, j);
@@ -481,8 +487,20 @@ export class Arena extends Phaser.Scene {
     this.add.image(0, 0, 'ground_baked').setOrigin(0, 0).setScale(K).setDepth(-1000);
   }
 
+  // survival: one big open meadow (grass, flowers, mushrooms and stones that never block anything)
+  buildOpenMap() {
+    const R = rng(777), rnd = (a, b) => a + R() * (b - a), pick = a => a[R() * a.length | 0];
+    this.mapSprites = []; this.bakeGround();
+    const TUFT = ['f_flower1', 'f_flower2', 'f_flower3', 'f_mush1', 'f_mush2', 'f_mush3', 'f_mush4', 'f_mush5', 'f_mush6', 'f_stone1', 'f_stone3'], BIG = ['f_stone2', 'f_stone4', 'f_bush1', 'f_bush2'];
+    if (this.bakedDecor) this.bakedDecor.destroy();
+    const rt = this.bakedDecor = this.add.renderTexture(0, 0, WORLD_W / 2, WORLD_H / 2).setOrigin(0, 0).setScale(2).setDepth(-5);
+    for (let i = 0; i < 1400; i++) { const k = pick(TUFT); if (this.textures.exists(k)) rt.stamp(k, null, rnd(10, WORLD_W - 10) / 2, rnd(10, WORLD_H - 10) / 2, { originX: 0.5, originY: 0.8, scale: 1 }); }
+    for (let i = 0; i < 160; i++) { const k = pick(BIG); if (this.textures.exists(k)) rt.stamp(k, null, rnd(10, WORLD_W - 10) / 2, rnd(10, WORLD_H - 10) / 2, { originX: 0.5, originY: 1, scale: 1.2 }); }
+  }
+
   /* ---------- map: top-down, one horizontal lane ---------- */
   buildMap() {
+    if (this.survival) return this.buildOpenMap();
     const S = MAP_SCALE, R = rng(12345), rnd = (a, b) => a + R() * (b - a);
     this.mapSprites = [];   // live scenery (trees, bushes, stones...): hidden inside Leandro's virtual arena
     const img = (sheet, frame, x, y, depth = y, sc = S) => { const o = this.add.image(x, y, sheet, frame).setOrigin(0.5, 1).setScale(sc).setDepth(depth); this.mapSprites.push(o); return o; };
@@ -586,7 +604,7 @@ export class Arena extends Phaser.Scene {
     }
     ['i1', 'i2', 'i3', 'i4', 'i5', 'i6'].forEach((n, i) => J(k[n]) && p.useItem(i));
     if (J(k.shop)) this.scene.get('hud')?.toggleShop?.();
-    if (J(k.recall) && !this.paused && !this.over) { if (this.net?.role === 'client') this.net.op('recall'); else this.player.startRecall(); }   // B: return to the base
+    if (J(k.recall) && !this.paused && !this.over && !this.survival) { if (this.net?.role === 'client') this.net.op('recall'); else this.player.startRecall(); }   // B: return to the base
     if (J(k.lvl)) this.player.levelUp();
     if (J(k.ai)) this.aiOn = !this.aiOn;
     if (J(k.free)) this.debugFree = !this.debugFree;
@@ -617,7 +635,7 @@ export class Arena extends Phaser.Scene {
     if (d.passive) { this.float(p.x, p.y - p.def.height - 30, 'Habilidad pasiva', '#ffe066'); return; }
     if (p.silenceT > 0) { this.float(p.x, p.y - p.def.height - 30, 'SILENCIADO', '#c77dff'); this.audio.play('glitch', { gap: 250 }); return; }
     if (p.key === 'yonaiker' && p.abilityLocked(a)) { this.float(p.x, p.y - p.def.height - 30, a === 'p3' ? 'La nave llega al llenar la barra (dispara y acierta)' : 'Solo disponible a bordo de la nave', '#9fe8ff'); return; }   // Q gun on foot, F both, E / R aboard
-    if ((p.key === 'luis' && a !== 'ult') || (p.key === 'hector' && a !== 'p2') || (p.key === 'yonaiker' && (a !== 'p2' || p.bomber)) || (p.key === 'maduro' && (a === 'p2' || a === 'ult')) || (p.key === 'diosa' && (a === 'p2' || a === 'ult' || (a === 'p1' && p.qRe))) || (p.key === 'leandro' && (d.v === 'comb' || (d.v === 'leak' && !p.leakRe)))) { p.tryCast(a); return; }   // instant casts: no aiming step
+    if ((p.key === 'luis' && a !== 'ult') || (p.key === 'hector' && a !== 'p2') || (p.key === 'yonaiker' && (a !== 'p2' || p.bomber)) || (p.key === 'maduro' && (a === 'p2' || a === 'ult')) || (p.key === 'diosa' && (a === 'p2' || a === 'ult' || (a === 'p1' && p.qRe))) || (p.key === 'julio' && ((a === 'ult' && d.v === 'puddle') || (a === 'p2' && !d.v && rank >= 3))) || (p.key === 'leandro' && (d.v === 'comb' || (d.v === 'leak' && !p.leakRe)))) { p.tryCast(a); return; }   // instant casts: no aiming step
     if (p.key === 'junior' && a === 'p2') { const m = this.mouseGround(); if (!this.hoverKey) p.setAim(m.x - p.x, m.y - p.y); p.tryCast(a); return; }   // somersault is instant; the flamethrower is aimed (the triangle preview) and then locks that direction
     if (p.key === 'jorbi' && a === 'p2') {   // instant dash toward the cursor (no aim step)
       const m = this.mouseGround(); if (!this.hoverKey) p.setAim(m.x - p.x, m.y - p.y);
@@ -636,6 +654,7 @@ export class Arena extends Phaser.Scene {
     const p = this.pc, a = this.aimKey, spec = aimSpec(p.key, a, p.ranks[a], p);
     const m = this.mouseGround(); p.setAim(m.x - p.x, m.y - p.y);
     if (spec.type === 'dryer') p.castPoint = { x: this.k.run?.isDown ? 1 : 0, y: 0 };   // Shift while aiming = push (the cast point carries the mode to the host)
+    else if (spec.stroke) p.castPoint = { x: Math.hypot(m.x - p.x, m.y - p.y), y: 0 };   // Julio's stroke: how far was aimed (its shape depends on it)
     else p.castPoint = spec.type === 'wall' || spec.type === 'zone' || spec.type === 'rect' || spec.type === 'tirethrow' ? this.wallCenter(spec) : spec.type === 'pick' ? this.mouseGround() : null;
     if (spec.type === 'rect' && p.castPoint) p.castPoint.vert = Math.abs(p.ax) >= Math.abs(p.ay);   // aiming sideways -> vertical fence, aiming up/down -> horizontal fence
     this.cancelAim();
@@ -689,8 +708,8 @@ export class Arena extends Phaser.Scene {
       const ex = p.x + p.ax * spec.range, ey = p.y + p.ay * spec.range;
       this.aimObj('band', () => this.add.tileSprite(0, 0, 10, 10, 'aim_band').setOrigin(0, 0.5).setDepth(99990)).setVisible(true)
         .setPosition(p.x, p.y).setSize(spec.range, spec.width).setTileScale(spec.width / 128).setRotation(Math.atan2(p.ay, p.ax)).setTint(c).setAlpha(0.85);
-      if (p.key === 'julio' && key === 'p1') {   // show the S-shaped stroke
-        const pts = this.sPath(p, spec.range, p.def.abilities.p1.amp, 40), g = this.aimG;
+      if (p.key === 'julio' && key === 'p1' && spec.stroke) {   // show the S-shaped stroke
+        const m = this.mouseGround(), pts = inkPath(p, hov ? spec.range : Math.hypot(m.x - p.x, m.y - p.y), spec.range), g = this.aimG;
         g.lineStyle(spec.width, spec.color, 0.25).beginPath().moveTo(pts[0].x, pts[0].y); pts.forEach(q => g.lineTo(q.x, q.y)); g.strokePath();
         g.lineStyle(3, 0xffffff, 0.7).beginPath().moveTo(pts[0].x, pts[0].y); pts.forEach(q => g.lineTo(q.x, q.y)); g.strokePath();
         this.aimObj('band', () => this.add.tileSprite(0, 0, 10, 10, 'aim_band').setOrigin(0, 0.5)).setVisible(false);
@@ -812,7 +831,7 @@ export class Arena extends Phaser.Scene {
     const d = dist(t, f) || 1, r = Math.min(d, max);
     return { x: f.x + (t.x - f.x) / d * r, y: f.y + (t.y - f.y) / d * r };
   }
-  enemiesNear(team, x, y, r) { return this.fighters.filter(t => t.alive && t.team !== team && eDist(t.x, t.y, x, y) <= r); }
+  enemiesNear(team, x, y, r) { return this.fighters.filter(t => t.alive && !t.puddle && t.team !== team && eDist(t.x, t.y, x, y) <= r); }
 
   // tires are solid: nobody walks through them, anyone caught under a new wall is pushed out
   // Súper Bigote's shield: absorbs the first hit or crowd control and bursts, hurting the enemies around it for a part of what it blocked
@@ -897,9 +916,10 @@ export class Arena extends Phaser.Scene {
       const fade = Math.min(1, c.t * 2, (c.T - c.t) * 3), pulse = 0.5 + 0.5 * Math.sin(tt * 6), inside = c.inside.has(this.pc);
       // the virtual arena replaces the terrain: under the units for the two inside, an opaque dome over everything for the rest
       c.img ||= this.add.image(c.x, c.y, this.arenaTex()).setDisplaySize(c.r * 2, c.r * 2);
-      c.img.setDepth(inside ? -4 : 99970).setAlpha((inside ? 1 : 0.97) * fade).setRotation(inside ? 0 : Math.sin(tt * 0.5) * 0.02);
+      c.img.setDepth(-4).setAlpha(inside ? fade : 0).setRotation(0);
+      if (!inside) g.fillStyle(0x000000, fade).fillCircle(c.x, c.y, c.r);   // outsiders cannot see into the arena: a solid black dome
       if (inside) {   // everything outside the arena is pitch black for those inside
-        const R = 4000, N = 72; dk.fillStyle(0x000000, 0.97 * fade);
+        const R = 4000, N = 72; dk.fillStyle(0x000000, fade);
         for (let i = 0; i < N; i++) {   // ring of quads from the arena rim outwards (a polygon with a hole would be filled solid)
           const a0 = i / N * Math.PI * 2, a1 = (i + 1) / N * Math.PI * 2, c0 = Math.cos(a0), s0 = Math.sin(a0), c1 = Math.cos(a1), s1 = Math.sin(a1);
           dk.fillPoints([{ x: c.x + c0 * c.r, y: c.y + s0 * c.r }, { x: c.x + c1 * c.r, y: c.y + s1 * c.r }, { x: c.x + c1 * R, y: c.y + s1 * R }, { x: c.x + c0 * R, y: c.y + s0 * R }], true);
@@ -991,7 +1011,7 @@ export class Arena extends Phaser.Scene {
 
   // base: healing fountain + shop zone around each team's nexus
   inBase(f) { const n = this.fountains?.[f.baseTeam]; return !!n && f.alive && ((f.x - n.x) / 520) ** 2 + ((f.y - n.y) / 370) ** 2 < 1; }   // the base's healing circle
-  canShop(f) { return !!f.isChamp && (!f.alive || this.training || this.inBase(f)); }   // a dead champion can shop from anywhere while waiting
+  canShop(f) { return !this.survival && !!f.isChamp && (!f.alive || this.training || this.inBase(f)); }   // a dead champion can shop from anywhere while waiting
   drawFountain() {
     if (!this.fountG) return; const g = this.fountG, t = this.time.now / 1000; g.clear();
     this.fountains.forEach(n => {
@@ -1057,6 +1077,9 @@ export class Arena extends Phaser.Scene {
     if (f.isChamp && !f.owner && !f.antivirus) { runChampAi(this, f, dt); if (f.alive && !f.free) f.in = { mx: 0, my: 0, run: false }; return; }
     f.in = { mx: 0, my: 0, run: false };
     if (!f.alive || !f.free || f.away || f.drop) return;
+    if (f.surv) return this.runMob(f);
+    if (f.bossKind) return this.runBoss(f, dt);
+    if (f.campGuard) return this.runCamp(f);
     if (f.antivirus) return this.runAntivirus(f);
     if (f.def.bot === 'wall') return;
     if (f.def.guard && f.owner) {   // bodyguards never leave their formation around Maduro: they only strike what is already inside their reach
@@ -1196,7 +1219,7 @@ export class Arena extends Phaser.Scene {
   // where the minions of `team` leave in lane `li`: from the lane just in front of the base
   flagPos(team, li) { const x = 780 * F; return { x: team === 0 ? x : WORLD_W - x, y: laneYAt(li, x) }; }
   drawTowerFlags() {   // every tower carries the same waving flag that marks a captured camp (its team's colour)
-    if (this.training || this.bot) return;
+    if (this.training || this.survival || this.bot) return;
     for (const t of this.fighters) {
       if (!t.isTower || t.isNexus) continue;
       const fk = 'flag_' + (t.team === 0 ? 'blue' : 'red');
@@ -1206,7 +1229,8 @@ export class Arena extends Phaser.Scene {
     }
   }
   // bushes: patches of scenery where champions can hide (see Fighter.hiddenInBush)
-  buildBushes() {   // hiding places: clumps of the olive bushes of the map's Nature pack (Topdown RPG 32x32) on a patch of light grass, right on the borders of the lanes
+  buildBushes() {
+    if (this.survival) { this.bushes = []; return; }   // hiding places: clumps of the olive bushes of the map's Nature pack (Topdown RPG 32x32) on a patch of light grass, right on the borders of the lanes
     this.bushes = [];
     for (let li = 0; li < 3; li++) [[0.27, li === 0 ? 1 : -1], [0.43, li === 2 ? -1 : 1]].forEach(([fx, side]) => [fx * WORLD_W, (1 - fx) * WORLD_W].forEach(xx => this.bushes.push({ x: xx, y: laneYAt(li, xx) + side * LANE_HALF, rx: 140, ry: 80, side, li })));
     for (let li = 0; li < 3; li++) for (const sg of [-1, 1]) { const xx = WORLD_W / 2 + sg * 340, side = li === 0 ? 1 : -1; this.bushes.push({ x: xx, y: laneYAt(li, xx) + side * LANE_HALF, rx: 140, ry: 80, side, li }); }   // lane borders next to the river
@@ -1315,7 +1339,7 @@ export class Arena extends Phaser.Scene {
   }
   setupCamps() {
     this.camps = []; this.ships = []; this.campG = this.add.graphics().setDepth(-870); this.campR = 118;
-    if (this.training) return;
+    if (this.training || this.survival) return;
     const mk = (x, y, ln, owner, tower = null) => { const c = { i: this.camps.length, x, y, ln, lane: y < WORLD_H / 2 ? 'n' : 's', owner, prog: owner === 0 ? [1, 0] : owner === 1 ? [0, 1] : [0, 0], spawnT: 0, contested: false, flag: null, fx: 0, tower }; this.camps.push(c); return c; };
     [RIVER.y0 + 280 * F, RIVER.y1 - 280 * F].forEach((y, k) => mk(WORLD_W / 2 + riverOffset(y), y, k ? 2 : 0, null));   // neutral flags in the middle of the river, at both ends of the map
     for (const t of this.fighters) if (t.isTower && !t.isNexus) mk(t.x + 46, t.y + 46, t.laneI, t.team, t);   // every tower carries a flag; once the tower falls the enemy can capture it
@@ -1400,7 +1424,7 @@ export class Arena extends Phaser.Scene {
   }
   drawTimers() {
     for (const c of this.camps || []) { const own = c.owner != null && !(c.tower && (c.tower.alive || c.owner === c.tower.team)); this.timerLabel('c' + c.i, c.x, c.y + this.campR * 0.75 + 16, `REFUERZOS EN ${Math.max(0, Math.ceil(c.spawnT))}s`, c.owner === 0 ? '#8ab4ff' : '#ff8a8a', own); }
-    if (!this.training && this.waveT < 1e8) for (const n of this.fighters) if (n.isNexus) this.timerLabel('n' + n.baseTeam, n.x, n.y + 64, `SÚBDITOS EN ${Math.max(0, Math.ceil(this.waveT))}s`, n.baseTeam === 0 ? '#8ab4ff' : '#ff8a8a', n.alive);
+    if (!this.training && !this.survival && this.waveT < 1e8) for (const n of this.fighters) if (n.isNexus) this.timerLabel('n' + n.baseTeam, n.x, n.y + 64, `SÚBDITOS EN ${Math.max(0, Math.ceil(this.waveT))}s`, n.baseTeam === 0 ? '#8ab4ff' : '#ff8a8a', n.alive);
   }
   buildRiver() {   // shallow curved river (pixel-art look): drawn at half resolution and scaled up with nearest-neighbour. The water is see-through so the ground shows through the blue: it is not deep. No flowing animation.
     const P = 2, cx = (RIVER.x0 + RIVER.x1) / 2, y0 = RIVER.y0 - 20, H = Math.ceil((RIVER.y1 + 20 - y0) / P), halfW = Math.round(210 * F), W = halfW * 2 / P, HW = Math.round(84 * F), BANK = 18;
@@ -1981,14 +2005,17 @@ export class Arena extends Phaser.Scene {
     if (team === 0) this.net?.onWave(this.waveN);
     if (this.waveN === 0 && team === 0) this.audio.voice('v_minions', 1, 'ann_minions', { title: '¡MINIONS DESPLEGADOS!', sub: 'La primera oleada avanza por el carril', team: 2 });
     if (team === 0) this.audio.play('minion_yell', { at: { x: 260, y: LANE_MID }, vol: 0.5, gap: 200 });
-    const comp = ['melee', 'melee', 'ranged']; if (this.waveN % 2 === 1) comp.push('heavy');   // a tank/automaton every 2nd wave
+    const comp = ['melee', 'melee', 'ranged']; if (this.waveN % 2 === 1) comp.push('heavy');
+    if (this.eliteT?.[team] > 0) comp.push('eliteM', 'eliteR');   // captain reward: the captain's own camp soldiers (a knife one and a rifle one) fight for the team in every lane
     const names = team === 0 ? { melee: 'minion_blue_melee', ranged: 'minion_blue_ranged', heavy: 'minion_blue_tank' }
                              : { melee: 'minion_red_melee', ranged: 'minion_red_ranged', heavy: 'minion_red_auto' };
+    names.eliteM = 'camp_soldier_melee'; names.eliteR = 'camp_soldier_rifle';
     LANE_YS_N.forEach(li => {
       const fp = this.flagPos(team, li), dir = team === 0 ? 1 : -1;
       comp.forEach((c, i) => {
         const slot = { x: 0, y: (i - 2) * 24 }, ahead = (comp.length - i) * 40, x = fp.x + dir * ahead;
-        const m = new Fighter(this, names[c], team, x, laneYAt(li, x) + slot.y, { ai: true, slot });
+        const m = new Fighter(this, names[c], team, x, laneYAt(li, x) + slot.y, { ai: true, slot, hpMult: c.startsWith('elite') ? 1.8 : 1 });
+        if (c.startsWith('elite')) { m.dmgMult = 1.4; m.elite = true; }
         m.ax = dir; m.laneI = li;
         this.fighters.push(m);
       });
@@ -1997,6 +2024,8 @@ export class Arena extends Phaser.Scene {
 
   // gold to the champion that landed the kill, XP to every allied champion nearby
   reward(v, killer) {
+    if (v.surv) return this.survKill(v);
+    if (v.bossKind) this.bossDead(v, killer);
     if (v.isBot || v.summoned || v.owner) return;
     // kill credit: if a tower/minion lands the final blow on a champion, the kill goes to the last enemy champion that hit it (within 10 s)
     let kk = killer?.owner || killer;
@@ -2296,7 +2325,7 @@ export class Arena extends Phaser.Scene {
   }
 
   /* ---------- world API used by fighters ---------- */
-  enemiesOf(f) { return this.fighters.filter(t => t.alive && !t.away && !t.drop && t.team !== f.team); }
+  enemiesOf(f) { return this.fighters.filter(t => t.alive && !t.puddle && !t.away && !t.drop && t.team !== f.team && (!f.isBoss || this.bossCanAttack(f, t)) && (!f.camp || campCanAttack(f, t)) && !laneUnitIgnoresBoss(f, t)); }
   enemiesWithin(f, r) { return this.enemiesOf(f).filter(t => eDist(t.x, t.y, f.x, f.y) <= r); }
   meleeHits(f, reach) {
     return this.enemiesOf(f).filter(t => {
@@ -2323,7 +2352,11 @@ export class Arena extends Phaser.Scene {
   damage(src, target, raw, type, dot = false) {
     if (this.net?.role === 'client') return 0;   // online clients only show what the host reports
     if (!target.alive) return 0;
-    if (target.invulT > 0) return 0;   // Show principal: invulnerable
+    if (src?.isBoss && !this.bossCanAttack(src, target)) return 0;
+    if (src?.bossDmg) raw *= src.bossDmg;   // boss level: more damage in every attack
+    if (laneUnitIgnoresBoss(src, target)) return 0;
+    if (target.invulT > 0 || target.puddle) return 0;   // Show principal: invulnerable / Julio as an ink puddle: untargetable
+    recordBossAttacker(target, src);
     if (!dot && src && src.team !== target.team && target.key === 'xeviche' && target.arepaBlocks()) return 0;   // Arepa reina pepiada: the shield swallows this hit
     if (target.isTower && target.wallRef?.alive) return 0;   // the outer tower protects the inner one
     if (target.isTower && src) { const at = src.owner || src, R = towerCircle(target), dx = at.x - target.x, dy = (at.y - target.y) / YR; if (dx * dx + dy * dy > R * R) return 0; }   // nobody can hit a structure from outside its circle
@@ -2350,7 +2383,7 @@ export class Arena extends Phaser.Scene {
     if (target.shieldHp > 0) {   // temporary shield: a white bar in front of the health; it is consumed first, then the rest hits health
       const ab = Math.min(target.shieldHp, dmg); target.shieldHp -= ab; dmg -= ab;
       if (ab >= 1 && !dot) this.float(target.x + Phaser.Math.Between(-15, 15), target.y - target.def.height - 18, `${Math.round(ab)}`, '#ffffff');
-      if (target.shieldHp <= 0.5) { target.shieldHp = 0; target.shieldT = 0; }
+      if (target.shieldHp <= 0.5) { target.shieldHp = 0; target.shieldT = 0; if (target.inkSh) this.inkShBurst(target); }
       if (dmg <= 0) return 0;
     }
     target.hp -= dmg;
@@ -2477,6 +2510,30 @@ export class Arena extends Phaser.Scene {
     this.vfx('spark', t.x, t.cy, { scale: 3, tint: 0xb59cff });
     this.float(t.x, t.y - t.def.height - 44, '¡TINTA!', '#a58cff');
   }
+  inkSky(x, y, r, onLand) {   // a big ink blot falls from the sky (with a ground telegraph), then onLand() creates the puddle
+    if (this.bot) return onLand();
+    const mark = this.add.ellipse(x, y, r * 2, r * 2 * YR, 0x6a3cff, 0.18).setStrokeStyle(2, 0xb59cff, 0.8).setDepth(-898);
+    const tex = this.textures.exists('ink_drop') ? 'ink_drop' : 'ink_blot', drop = this.add.image(x, y - 520, tex).setDepth(100000).setDisplaySize(r * 0.9, r * 1.2).setTint(0x6a3cff);
+    this.tweens.add({ targets: drop, y: y - 30, duration: 520, ease: 'Quad.In', onComplete: () => {
+      drop.destroy(); mark.destroy(); this.shake(); this.audio.playAll('ev_julio_dropland', { at: { x, y }, vol: 0.9, gap: 120 });
+      this.vfx('poison_hit', x, y - 10, { scale: r / 24, tint: 0x6a3cff, below: true }); this.vfx('shockwave', x, y - 8, { scale: r / 40, below: true, tint: 0x8a5cff });
+      onLand();
+    } });
+    this.after(0.8, () => { if (mark.active) mark.destroy(); });
+  }
+  inkShBurst(t) {   // golden ink shield broken before it timed out: light AI damage + ink mark around it
+    const k = t.inkSh; t.inkSh = null; if (!k) return;
+    this.vfx('shockwave', t.x, t.y - 10, { scale: k.r / 34, below: true, tint: 0xffd23f }); this.vfx('spark', t.x, t.cy, { scale: 5, tint: 0xffd23f }); this.float(t.x, t.y - t.def.height - 40, '¡Explota la tinta!', '#ffd23f');
+    this.enemiesNear(k.owner.team, t.x, t.y, k.r).forEach(e => { this.damage(k.owner, e, k.dmg, 'magic'); this.applyInk(k.owner, e); });
+  }
+  inkBounce(src, from, left, dmg, jb, hits) {   // Julio's passive: the golden ink hops to the nearest enemy
+    if (left <= 0) return;
+    const next = this.enemiesOf(src).filter(e => !hits.has(e) && Math.hypot(e.x - from.x, e.y - from.y) <= jb.range).sort((p, q) => Math.hypot(p.x - from.x, p.y - from.y) - Math.hypot(q.x - from.x, q.y - from.y))[0];
+    if (!next) return; const skip = new Set(hits); hits.add(next); this.vfx('spark', from.x, from.cy ?? from.y - 40, { scale: 2.6, tint: 0xffd23f });
+    const dx = next.x - from.x, dy = next.y - from.y, d = Math.hypot(dx, dy) || 1;
+    this.projectile(src, { from: { x: from.x, y: from.y }, dir: { x: dx / d, y: dy / d }, lift: (from.def?.height || 60) * 0.55, skip, range: d + 160, speed: 700, dmg, type: 'magic', obj: 'ink_gold_drop', vfx: 'energy_bolt', tint: 0xffd23f, face: true, scale: 0.05, r: 12, basic: true,
+      onHit: t => { hits.add(t); this.inkBounce(src, t, left - 1, dmg * jb.keep, jb, hits); } });
+  }
   inkDrop(src, x, y, r, dmg) {   // telegraph then a falling ink drop
     const mark = this.add.image(x, y, this.textures.exists('ink_blot') ? 'ink_blot' : 'zone').setDepth(y - 3).setAlpha(0.5).setTint(0x6a3cff).setDisplaySize(r * 1.6, r * 1.6 * 0.8);
     const dropTex = this.textures.exists('ink_drop') ? 'ink_drop' : null;
@@ -2493,9 +2550,10 @@ export class Arena extends Phaser.Scene {
     return pts;
   }
   nearPath(pts, x, y, r) { for (let i = 1; i < pts.length; i++) if (segDist(pts[i - 1].x, pts[i - 1].y, pts[i].x, pts[i].y, x, y) <= r) return true; return false; }
-  inkTrail(pts, width, life) {   // pixel-art ink stroke on the ground (canvas rendered at 2px per pixel), revealed along the path, then fades
+  inkTrail(pts, width, life, bright = 0) {   // pixel-art ink stroke on the ground (canvas rendered at 2px per pixel), revealed along the path, then fades
     if (this.bot) return;   // pure decoration (and the headless host has no renderer to upload the canvas to)
     const K = 2, m = width * 0.9 + 12, r = width / 2;
+    const PAL = [{ b: '#1d0f4a', m: '#35208a', c: '#5a34d8', h: '#9a74ff' }, { b: '#2a1a70', m: '#4a2ec0', c: '#7a5cff', h: '#cdbcff' }, { b: '#3b2a9a', m: '#7a5cff', c: '#b8a4ff', h: '#ffffff' }][Math.max(0, Math.min(2, bright))];   // brighter ink with every rank
     let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
     pts.forEach(q => { x0 = Math.min(x0, q.x); y0 = Math.min(y0, q.y); x1 = Math.max(x1, q.x); y1 = Math.max(y1, q.y); });
     x0 = Math.floor(x0 - m); y0 = Math.floor(y0 - m);
@@ -2513,7 +2571,7 @@ export class Arena extends Phaser.Scene {
       const rr = r * (0.78 + 0.3 * hash(Math.floor(u * 90), 7)) , rough = hash(i, j);
       const edge = rr - d;
       let c = null;
-      if (edge > 0) c = edge < K * 1.6 ? '#0b0524' : edge < K * 3 && rough < 0.5 ? '#1d0f4a' : d < rr * 0.32 ? (rough < 0.12 ? '#9a74ff' : '#5a34d8') : (d < rr * 0.6 && rough < 0.35 ? '#35208a' : '#1d0f4a');
+      if (edge > 0) c = edge < K * 1.6 ? '#0b0524' : edge < K * 3 && rough < 0.5 ? PAL.b : d < rr * 0.32 ? (rough < 0.12 ? PAL.h : PAL.c) : (d < rr * 0.6 && rough < 0.35 ? PAL.m : PAL.b);
       else if (edge > -r * 0.5 && rough < 0.045) c = rough < 0.02 ? '#35208a' : '#0b0524';   // splatter dots
       if (c) px.push({ i, j, c, u });
     }
@@ -2552,8 +2610,8 @@ export class Arena extends Phaser.Scene {
 
   projectile(owner, o) {
     let { ax, ay } = owner;
-    if (o.ang) { const c = Math.cos(o.ang), sn = Math.sin(o.ang); [ax, ay] = [ax * c - ay * sn, ax * sn + ay * c]; }   // fan shots
-    const x = owner.x + ax * 45, y = owner.y + ay * 45, lift = owner.def.height * 0.55;
+    if (o.dir) { ax = o.dir.x; ay = o.dir.y; } else if (o.ang) { const c = Math.cos(o.ang), sn = Math.sin(o.ang); [ax, ay] = [ax * c - ay * sn, ax * sn + ay * c]; }   // fan shots / custom direction
+    const x = o.from ? o.from.x : owner.x + ax * 45, y = o.from ? o.from.y : owner.y + ay * 45, lift = o.lift ?? owner.def.height * 0.55;
     let s;
     if (o.animFx && this.anims.exists(o.animFx)) {   // animated sprite from generated frames (comb wave)
       s = this.add.sprite(x, y - lift, 'comb_wave0').setScale(o.scale || 1).setRotation(Math.atan2(ay, ax)); s.play(o.animFx);
@@ -2565,7 +2623,7 @@ export class Arena extends Phaser.Scene {
       if (o.tint) s.setTint(o.tint);
       s.play('vfx_' + (o.vfx || 'energy_bolt'));
     }
-    this.projs.push({ s, x, y, px: x, py: y, lift, ax, ay, owner, team: owner.team, left: o.range || 900, ctx: this.castCtx, basic: !!this.basicDmg, ...o });
+    this.projs.push({ s, x, y, px: x, py: y, lift, ax, ay, owner, team: owner.team, left: o.range || 900, ctx: this.castCtx, basic: !!this.basicDmg, ...(owner.isTower ? { showPath: true, trail: [] } : {}), ...o });
   }
 
   // cacti ring the zone and fill it (outer ring first, then the inside), then fade
@@ -2648,7 +2706,7 @@ export class Arena extends Phaser.Scene {
   update(time, delta) {
     const dt = Math.min(delta / 1000, 0.05);
     if (Phaser.Input.Keyboard.JustDown(this.k.esc)) { const hs = this.scene.get('hud'); if (this.paused && hs?.menuBack?.()) { /* back one menu level */ } else if (hs?.branchSel) { hs.branchSel = null; } else if (hs?.shopOpen) { hs.shopOpen = false; } else if (this.aimKey) this.cancelAim(); else if (!this.over) this.togglePause(); }
-    if (this.paused && !this.net) return;
+    if ((this.paused || this.curPick()) && !this.net) return;
     if (this.net && !this.net.live) return;   // online: wait for every player to finish loading
     this.feed = this.feed.filter(e => (e.t -= dt) > 0);
     this.audio.tick();
@@ -2670,6 +2728,7 @@ export class Arena extends Phaser.Scene {
     const due = []; this.timers = this.timers.filter(t => ((t.t -= dt) > 0) || (due.push(t), false)); due.forEach(t => { this.castCtx = t.ctx || null; t.fn(); this.castCtx = null; });
     if (this.training && this.enemy.alive && this.enemy.hp < this.enemy.maxHp) this.enemy.hp = Math.min(this.enemy.maxHp, this.enemy.hp + this.enemy.maxHp * 0.12 * dt);   // dummy regenerates
     this.gameT += dt;
+    if (this.survival) this.survTick(dt); else if (this.bosses) this.bossTick(dt);
     if (!this.over) this.waveT -= dt; if (this.waveT <= 0 && !this.over && this.net?.role !== 'client') { this.waveT = 28; this.spawnWave(0); this.spawnWave(1); this.waveN++; }
     if (!this.over && this.net?.role !== 'client') this.fighters.forEach(f => { if (this.control?.mode === 'remote' && f === this.control.target) return; if ((f.ai && this.aiOn && f !== this.ctrl) || f.isBot || f.isMinion || f.isTower || f.charmT > 0) this.runAi(f, dt); });
     this.recordHistory(dt);
@@ -2781,15 +2840,25 @@ export class Arena extends Phaser.Scene {
         this.fighters.forEach(f => { if (f.alive && f.isChamp && f.team !== o.team && !z.free.has(f) && eDist(f.x, f.y, o.x, o.y) <= z.r) { f.silenceT = Math.max(f.silenceT, 0.3); this.markSrc(f, 'silence'); } });
         return true;
       }
-      if (z.kind === 'puddle') {
-        if (z.t <= 0) { z.decal?.destroy(); return false; }
+      if (z.kind === 'puddle') {   // falls from the sky; stuns after a while (faster at rank 2+), rank 3 chains + pulls the stunned to the centre; the puddle vanishes when the stun ends
+        if (z.t <= 0) { z.decal?.destroy(); z.fx?.destroy(); return false; }
         z.decal ||= this.add.image(z.x, z.y, this.textures.exists('ink_blot') ? 'ink_blot' : 'zone').setTint(0x4a2cc0).setAlpha(0.85).setDepth(-899).setDisplaySize(z.r * 2.1, z.r * 2.1 * YR);
-        this.fighters.filter(f => f.alive && f.team !== o.team && !f.isTower).forEach(f => {
-          if (Math.hypot(f.x - z.x, (f.y - z.y) / 0.8) > z.r) { z.inside.delete(f); return; }
-          f.slow(z.slow, 0.15);
+        const inZ = f => Math.hypot(f.x - z.x, (f.y - z.y) / 0.8) <= z.r;
+        this.fighters.filter(f => f.alive && f.team !== o.team && !f.isTower && !f.puddle).forEach(f => {
+          if (!inZ(f)) { if (!z.pulls.has(f)) z.inside.delete(f); return; }
+          f.slow(z.slow + (z.rank >= 3 && f.isChamp ? 0.15 : 0), 0.15);
           const t = (z.inside.get(f) || 0) + dt; z.inside.set(f, t);
-          if (t >= z.stunAfter) { f.stun(z.stun); this.applyInk(o, f); z.inside.set(f, -3); }
+          if (t >= z.stunAfter) { f.stun(z.stun); this.applyInk(o, f); z.inside.set(f, -99); z.done = z.done || z.stun; z.t = Math.min(z.t, z.stun + 0.1); if (z.rank >= 3 && f.isChamp) z.pulls.set(f, z.stun); }
         });
+        z.pulls.forEach((tl, f) => {   // rank 3: pull the stunned champion to the middle
+          if (!f.alive || tl <= 0) return z.pulls.delete(f);
+          z.pulls.set(f, tl - dt); const dx = z.x - f.x, dy = z.y - f.y, d = Math.hypot(dx, dy); if (d > 12) { const m = Math.min(520 * dt, d); f.tryMove(f.x + dx / d * m, f.y + dy / d * m); }
+        });
+        if (!this.bot) {
+          const g = (z.fx ||= this.add.graphics().setDepth(z.y + 2)), T = this.time.now / 1000; g.clear();
+          if (z.rank >= 2) for (let i = 0; i < 9; i++) { const ph = (T * 0.9 + i * 0.37) % 1, a = i * 2.4 + Math.floor(T * 0.9 + i * 0.37) * 1.7, rr = Math.sqrt((i * 0.618) % 1) * z.r * 0.85; g.fillStyle(0xb59cff, 0.75 * (1 - ph)).fillCircle(z.x + Math.cos(a) * rr, z.y + Math.sin(a) * rr * 0.6 - ph * 34, 3 + 4 * Math.sin(ph * 3.1)).lineStyle(1.5, 0xffffff, 0.5 * (1 - ph)).strokeCircle(z.x + Math.cos(a) * rr, z.y + Math.sin(a) * rr * 0.6 - ph * 34, 3 + 4 * Math.sin(ph * 3.1)); }   // bubbles
+          if (z.rank >= 3) this.fighters.forEach(f => { if (!f.alive || f.team === o.team || !f.isChamp || f.puddle || !(inZ(f) || z.pulls.has(f))) return; const n = Math.max(3, Math.round(Math.hypot(f.x - z.x, f.y - z.y) / 16)); for (let i = 0; i <= n; i++) { const u = i / n, cx = z.x + (f.x - z.x) * u, cy = z.y + (f.y - z.y) * u + Math.sin(u * 9 + T * 6) * 3 - u * 26; g.fillStyle(i % 2 ? 0x2b2154 : 0x8a7cc8, 1).fillEllipse(cx, cy, i % 2 ? 11 : 7, i % 2 ? 6 : 10).lineStyle(1, 0x0b0524, 1).strokeEllipse(cx, cy, i % 2 ? 11 : 7, i % 2 ? 6 : 10); } });   // chains to every trapped champion
+        }
         return true;
       }
       if (z.t <= 0 || !o.alive) { z.decal?.destroy(); return false; }
@@ -2810,11 +2879,27 @@ export class Arena extends Phaser.Scene {
     this.castCtx = null;
   }
 
+  // tall units (bosses) are hit over their whole standing body, not only at the feet: def.hitR (half width) and def.hitUp (how far up the sprite reaches)
+  projHits(p, t) {
+    const r = (t.def.hitR || t.br) + (p.r || 14), u = t.def.hitUp || 0;
+    if (segDist(p.px, p.py, p.x, p.y, t.x, t.y) < r) return true;
+    return u > 0 && [1 / 3, 2 / 3, 1].some(k => segDist(p.px, p.py, p.x, p.y, t.x, t.y - u * k) < r);
+  }
+
   updateProjectiles(dt) {
-    this.projs = this.projs.filter(p => {
+    const tg = (this.trailG ||= this.add.graphics().setDepth(99500)); tg.clear();   // tower missiles: the path ahead and a fading trail stay visible
+    const cur = this.projs; this.projs = [];   // projectiles spawned by an impact (bounces) land in the new list instead of being dropped by the filter
+    const kept = cur.filter(p => {
       p.px = p.x; p.py = p.y;
       p.x += p.ax * p.speed * dt; p.y += p.ay * p.speed * dt; p.left -= p.speed * dt;
       p.s.setPosition(p.x, p.y - p.lift).setDepth(p.y + 1);
+      if (p.showPath && !this.bot) {
+        const col = p.tint ?? (p.owner.baseTeam === 1 ? 0xff4a3a : 0xffb347), len = Math.min(p.left, 520), y0 = p.y - p.lift;
+        tg.lineStyle(3, col, 0.4).lineBetween(p.x, y0, p.x + p.ax * len, y0 + p.ay * len);   // trajectory ahead
+        tg.fillStyle(col, 0.5).fillCircle(p.x + p.ax * len, y0 + p.ay * len, 5);
+        p.trail.push([p.x, y0]); if (p.trail.length > 9) p.trail.shift();
+        for (let i = 1; i < p.trail.length; i++) tg.lineStyle(2 + i * 0.7, 0xffffff, i / p.trail.length * 0.7).lineBetween(p.trail[i - 1][0], p.trail[i - 1][1], p.trail[i][0], p.trail[i][1]);
+      }
       if (p.spin) p.s.rotation += dt * (p.spinSpeed ?? 12) * (p.ax >= 0 ? 1 : -1);
       let dead = p.left <= 0 || p.x < 0 || p.x > WORLD_W || p.y < 0 || p.y > WORLD_H;
       if (!dead) {
@@ -2822,7 +2907,7 @@ export class Arena extends Phaser.Scene {
         if (wall) { this.vfx('block', wall.x, wall.y - 40, { scale: 3 }); if (wall.f && !p.noDamage) this.damage(p.owner, wall.f, p.dmg * 0.7, p.type, true); else if (wall.hp != null && !p.noDamage) { wall.hp -= p.dmg * 0.7; if (wall.hp <= 0) { wall.left = 0; this.vfx('spark', wall.x, wall.y - 20, { scale: 3, tint: 0x555555 }); this.vfx('run_dust', wall.x, wall.y - 6, { scale: 2.6, alpha: 0.9 }); } } dead = true; }
       }
       if (!dead) {
-        const t = this.enemiesOf(p.owner).find(t => !(p.pierce && p.hits?.has(t)) && segDist(p.px, p.py, p.x, p.y, t.x, t.y) < t.br + (p.r || 14));
+        const t = this.enemiesOf(p.owner).find(t => !(p.pierce && p.hits?.has(t)) && !p.skip?.has(t) && this.projHits(p, t));
         if (t) {
           if (!p.noDamage) { const pb = this.basicDmg; this.basicDmg = p.basic; this.damage(p.owner, t, p.dmg, p.type); this.basicDmg = pb; }
           this.castCtx = p.ctx || null;
@@ -2835,6 +2920,7 @@ export class Arena extends Phaser.Scene {
       if (dead) p.s.destroy();
       return !dead;
     });
+    this.projs = kept.concat(this.projs);
   }
 
   /* ---------- bars above heads: HP + mana (champions), HP only (bots) ---------- */
@@ -2881,6 +2967,8 @@ export class Arena extends Phaser.Scene {
         g.fillStyle(cb ? 0x0a2a24 : rb ? 0x3a1a0a : f.def.farandula ? 0x3a0f26 : 0x12264a).fillRect(x, y + h + 2, w, mh).fillStyle(cb ? 0x4fe0c0 : rb ? (f.hen ? 0xffd23f : 0xff7a2a) : f.def.farandula ? 0xff4fa3 : 0x3b8cff).fillRect(x, y + h + 2, w * Phaser.Math.Clamp(fr, 0, 1), mh);
         if (f.ride) g.fillStyle(0x000000, 0.75).fillRect(x - 2, y + h + mh + 3, w + 4, 6).fillStyle(0xffffff).fillRect(x, y + h + mh + 4, w * Phaser.Math.Clamp(f.ride.t / f.ride.T, 0, 1), 3);   // bike lifetime
         if (f.flame) g.fillStyle(0x000000, 0.75).fillRect(x - 2, y + h + mh + 3, w + 4, 6).fillStyle(0xffffff).fillRect(x, y + h + mh + 4, w * Phaser.Math.Clamp(f.flame.t / f.flame.T, 0, 1), 3);   // flamethrower time left
+        if (f.recall) g.fillStyle(0x000000, 0.75).fillRect(x - 2, y + h + mh + 3, w + 4, 6).fillStyle(0x7ee0ff).fillRect(x, y + h + mh + 4, w * Phaser.Math.Clamp(1 - f.recall.t / (f.recall.T || 10), 0, 1), 3);   // recall progress
+        if (f.burst) g.fillStyle(0x000000, 0.75).fillRect(x - 2, y + h + mh + 3, w + 4, 6).fillStyle(0xffffff).fillRect(x, y + h + mh + 4, w * Phaser.Math.Clamp(f.burst.t / f.burst.T, 0, 1), 3);   // Julio's golden burst: time left
         { // basic attack combo: a framed counter box next to the bars (hit 1 / 2 / 3); it disappears when the click window runs out
           const live = f === me && f.cstepN > 0 && this.gameT - (f.comboEnd || 0) <= (f.comboStep > 0 ? COMBO_WINDOW : 0.25), ct = (f.bt.cmb ||= this.add.text(0, 0, '', { fontFamily: 'monospace', fontSize: '15px', fontStyle: 'bold', color: '#fff', stroke: '#000', strokeThickness: 3, resolution: 3 }).setOrigin(0.5).setDepth(100001));
           if (live) {
@@ -2916,3 +3004,5 @@ export class Arena extends Phaser.Scene {
     }
   }
 }
+
+Object.assign(Arena.prototype, SurvivalMixin, BossMixin);

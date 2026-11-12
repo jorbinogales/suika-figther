@@ -1,5 +1,6 @@
-import { maduroSB, COMBOS, LUNGES, COMBO_WINDOW, CHAMPIONS, ABILITY_KEYS, MAX_LEVEL, MAX_RANK, ULT_LEVELS, rk } from './data.js';
-import { ITEM_BY_ID, MINI_OF, SLOTS, sellValue, buyPlan, PERM_KEYS, PERM_BY_ID, PERM_COST, STAT_CAP } from './items.js';
+import { maduroSB, SV_MAX_LEVEL, COMBOS, LUNGES, COMBO_WINDOW, CHAMPIONS, ABILITY_KEYS, MAX_LEVEL, MAX_RANK, ULT_LEVELS, rk } from './data.js';
+import { JulioMixin } from './julio.js';
+import { fmtStat, STAT_LABEL as STAT_LABEL_B, ITEM_BY_ID, MINI_OF, SLOTS, sellValue, buyPlan, PERM_KEYS, PERM_BY_ID, PERM_COST, STAT_CAP } from './items.js';
 
 // World geometry: top-down map, one horizontal lane.
 import { WORLD_W, WORLD_H, CAMPS, isWalk } from './mapdata.js';
@@ -34,7 +35,15 @@ const DIR_SRC = { e: ['e', false], se: ['se', false], s: ['s', false], ne: ['ne'
 
 const w2g = f => f.w.gameT || 0;
 
+// bosses (neutral team 2). `art` = their own sprite set (Codex, art/BOSS_SPEC.md); until it is packed the game draws `artFallback` tinted with `phTint`.
+const mkBoss = (art, fb, tint, name, height, stats, attack, reward, hb = {}) => ({ kind: 'boss', name, ref: art, tex: art, art, artFallback: fb, phTint: tint, height, stats: { mana: 0, atk: 0, ap: 0, mr: 10, run: stats.speed, ...stats }, attack, reward, ...hb });
+const mkCamp = (art, fb, name, stats, attack, reward) => ({ ...mkMinion(art, name, 110, stats, attack, reward), art, artFallback: fb, phTint: 0xe0c98a });
 export const UNIT_DEFS = {
+  boss_beast:    mkBoss('boss_beast', 'minion_red_auto', 0xa8784a, 'Bestia peluda', 330, { hp: 3400, armor: 28, mr: 12, speed: 92, range: 150, atkCd: 2.2 }, { type: 'melee', dmg: 70, dmgType: 'physical', reach: 190 }, { gold: 0, xp: 260 }, { hitR: 80, hitUp: 210 }),
+  boss_captain:  mkBoss('boss_captain', 'minion_blue_melee', 0xd8b86a, 'Capitán', 118, { hp: 2700, armor: 30, mr: 20, speed: 110, range: 330, atkCd: 1.0 }, { type: 'ranged', dmg: 34, dmgType: 'physical', proj: { vfx: 'bullet_tracer', speed: 640, scale: 1.4, r: 10 } }, { gold: 0, xp: 220 }),
+  boss_robot:    mkBoss('boss_robot', 'minion_red_auto', 0x6a7078, 'Robot de guerra', 340, { hp: 9500, armor: 55, mr: 40, speed: 0, range: 0, atkCd: 9 }, { type: 'melee', dmg: 0, dmgType: 'physical', reach: 0 }, { gold: 0, xp: 500 }, { hitR: 95, hitUp: 230 }),
+  camp_soldier_melee: mkCamp('camp_soldier_melee', 'minion_blue_melee', 'Soldado del campamento', { hp: 340, armor: 18, speed: 112, range: 70, atkCd: 1.0 }, { type: 'melee', dmg: 16, dmgType: 'physical', reach: 80 }, { gold: 0, xp: 20 }),
+  camp_soldier_rifle: mkCamp('camp_soldier_rifle', 'minion_blue_ranged', 'Fusilero del campamento', { hp: 240, armor: 10, speed: 112, range: 320, atkCd: 1.1 }, { type: 'ranged', dmg: 15, dmgType: 'physical', proj: { vfx: 'bullet_tracer', speed: 560, scale: 1.3, r: 10 } }, { gold: 0, xp: 18 }),
   minion_blue_melee:  mkMinion('minion_blue_melee', 'Soldado', 110, { hp: 320, armor: 15, speed: 105, range: 70, atkCd: 1.0 }, { type: 'melee', dmg: 12, dmgType: 'physical', reach: 80 }, { gold: 20, xp: 28 }),
   minion_blue_ranged: mkMinion('minion_blue_ranged', 'Fusilero', 110, { hp: 220, armor: 8, speed: 105, range: 300, atkCd: 1.1 }, { type: 'ranged', dmg: 12, dmgType: 'physical', proj: { vfx: 'bullet_tracer', speed: 560, scale: 1.3, r: 10 } }, { gold: 16, xp: 22 }),
   minion_blue_tank:   mkMinion('minion_blue_tank', 'Tanque de guerra', 124, { hp: 500, armor: 20, mr: 20, speed: 85, range: 360, atkCd: 2.0 }, { type: 'ranged', dmg: 13.5, dmgType: 'physical', proj: { vfx: 'cannonball', speed: 420, scale: 2.2, r: 16 } }, { gold: 50, xp: 70 }),
@@ -61,10 +70,11 @@ export class Fighter {
     this.def = CHAMPIONS[key] || BOT_DEFS[key] || UNIT_DEFS[key];
     if (key === 'maduro') { this.defN = this.def; this.defSB = maduroSB(this.def); }   // normal / Súper Bigote kits (the transformation swaps this.def)
     this.isBot = !!this.def.isBot;
-    this.isMinion = this.def.kind === 'minion'; this.isNexus = this.def.kind === 'nexus'; this.isTower = this.def.kind === 'tower' || this.isNexus;
+    this.isBoss = this.def.kind === 'boss'; this.isMinion = this.def.kind === 'minion' || this.isBoss; this.isNexus = this.def.kind === 'nexus'; this.isTower = this.def.kind === 'tower' || this.isNexus;
     this.isChamp = !this.isBot && !this.isMinion && !this.isTower;
+    { const a = this.def.art; this.art = a && world.sprites[a] ? a : this.def.artFallback || key; this.placeholder = !!a && this.art !== a; }   // bosses / camp units: their own art once it is packed, a tinted stand-in until then
     this.xp = 0; this.gold = this.isChamp ? 500 : 0;
-    this.inv = Array(SLOTS).fill(null); this.pas = new Map(); this.perm = {}; this.it = this.zeroStats(); this.potions = []; this.potionCd = 0; this.recall = null; this.skin = key; this.buff = null;
+    this.inv = Array(SLOTS).fill(null); this.pas = new Map(); this.perm = {}; this.it = this.zeroStats(); this.potions = []; this.potionCd = 0; this.recall = null; this.skin = this.art; this.bonus = {}; this.buff = null;
     this.team = team; this.baseTeam = team;
     this.x = x; this.y = y;
     this.spawn = { x, y };
@@ -91,6 +101,7 @@ export class Fighter {
   recomputeItems() {
     const hpR = this.hp / (this.maxHp || 1), mR = this.maxMana ? this.mana / this.maxMana : 0, t = this.zeroStats();
     this.inv.forEach(sl => { if (!sl) return; const st = ITEM_BY_ID[sl.id].stats; for (const k in st) t[k] += st[k]; });
+    for (const k in this.bonus) t[k] += this.bonus[k];   // boss upgrades
     for (const k in this.perm) t[k] += this.perm[k] * PERM_BY_ID['p_' + k].per;   // permanent upgrades
     for (const k in STAT_CAP) t[k] = Math.min(t[k], STAT_CAP[k]);
     this.it = t; this.pas = new Map(); this.inv.forEach(q => { if (!q) return; const it = ITEM_BY_ID[q.id]; if (!it.passive) return; const key = it.passive.mini ? MINI_OF[q.id] : q.id, v = it.passive.mini ? 0.5 : 1; this.pas.set(key, Math.max(this.pas.get(key) || 0, v)); });   // ids of the items carried (unique passives look here)
@@ -176,14 +187,15 @@ export class Fighter {
   startRecall() {   // B: go back to the base after 4 s (taking damage cancels it; pressing it again cancels it too)
     if (!this.alive || !this.isChamp) return;
     if (this.recall) { this.recall = null; this.w.float(this.x, this.y - this.def.height - 34, 'Teletransporte cancelado', '#ff9a7a'); return; }
-    if (this.w.inBase(this)) return;
+    if (this.w.inBase(this)) { this.w.float(this.x, this.y - this.def.height - 34, 'Ya estás en la base', '#9fb4d0'); return; }
     this.recall = { t: 10, T: 10 }; this.w.float(this.x, this.y - this.def.height - 34, 'Volviendo a la base...', '#7ee0ff'); this.w.vfx('summon', this.x, this.y - 10, { scale: 3, tint: 0x7ee0ff });
   }
+  cancelRecall() { if (this.recall) { this.recall = null; this.w.float(this.x, this.y - this.def.height - 34, 'Teletransporte cancelado', '#ff9a7a'); } }
   hiddenInBush(viewerTeam) {   // inside a bush: invisible to the other team unless it attacked / cast a moment ago or an enemy stands next to the bush
     if (!this.inBush || this.brRevealT > 0) return false;
     return !this.w.fighters.some(e => e.alive && !e.away && e.baseTeam === viewerTeam && Math.hypot(e.x - this.x, e.y - this.y) < 200);
   }
-  hiddenFor(me) { return this.away || this.fogHidden || (this.baseTeam !== me.baseTeam && this.hiddenInBush(me.baseTeam)) || ((this.invis || (this.antivirus && this.owner?.invis)) && this.baseTeam !== me.baseTeam); }
+  hiddenFor(me) { return this.away || this.w.cages?.some(c => c.inside.has(me) !== c.inside.has(this)) || this.fogHidden || (this.baseTeam !== me.baseTeam && this.hiddenInBush(me.baseTeam)) || ((this.invis || (this.antivirus && this.owner?.invis)) && this.baseTeam !== me.baseTeam); }
   breakInvis() { if (this.invis) { this.invis = null; if (this.isBot) { this.w.vfx('run_dust', this.x, this.y - 6, { scale: 3, alpha: 0.9, below: true }); this.w.vfx('summon', this.x, this.y - 10, { scale: 2 }); return; } if (this.key === 'luis') this.stab = 2.5; this.w.float(this.x, this.y - this.def.height - 30, 'visible', '#9be37a'); } }
   tryMove(nx, ny) {   // forest (trees / bushes) is impassable: slide along walls
     if (isWalk(nx, this.y)) this.x = nx;
@@ -256,13 +268,13 @@ export class Fighter {
     this.in = { mx: 0, my: 0, run: false };
     this.flame?.spr?.destroy(); this.flame = null; this.bomber = null; this.charge = 0; this.harem = null; this.lure = null; this.gun = false; this.gunT = 0; this.arepaGrace = 0; this.setupStacks = 0; this.setupHits = 0; this.rw = null; this.mshield = 0; this.mshieldCd = 0; this.backupCd = 0; this.moveT = 0; this.punchN = 0; this.combatT = 0; this.atkSlowT = 0; this.coreT = undefined;
     this.cds = { p1: 0, p2: 0, p3: 0, ult: 0, basic: 0 };
-    this.ink = null; this.inkDash = null; this.silenceT = 0; this.blindT = 0; this.shieldHp = 0; this.shieldT = 0; this.speedBoost = 0; this.speedT = 0; this.charmT = 0; this.team = this.baseTeam; this.malware = null;
+    this.guardInit = false; this.ink = null; this.inkDash = null; this.burst = null; this.inkFree = null; this.puddle = null; this.inkSh = null; this.silenceT = 0; this.blindT = 0; this.shieldHp = 0; this.shieldT = 0; this.speedBoost = 0; this.speedT = 0; this.charmT = 0; this.team = this.baseTeam; this.malware = null;
     this.rage = 0; this.hen = false;
     this.dashCharges = this.key === 'jorbi' && this.ranks.p2 > 0 ? 3 : 0; this.dashTimers = []; this.dashV = null; this.castPoint = null;
     if (this.buff) { this.buff = null; this.setSkin(this.key); }
     this.hen = false; this.rage = 0; this.pkBuffs = {}; this.protein = null; this.pullTo = null; this.bike = null; this.ride = null;
     this.qRe = null; this.cdrT = 0; this.invulT = 0; this.drT = 0; this.sShield = null; this.atkSlowT = 0; this.armorShredT = 0; this.devalT = 0; this.shove = null; this.pullMe = null; this.comb = null; this.leakRe = null; this.revealT = 0; if (this.sb) this.setSB(0);
-    if (this.skin !== this.key) this.setSkin(this.key);
+    if (this.skin !== this.art) this.setSkin(this.art);
   }
 
   // sprite set in use ('jorbi' or 'jorbi_buff' while transformed)
@@ -311,18 +323,20 @@ export class Fighter {
   }
 
   get respawnTime() { return 4 + this.level * 1.2; }
-  get xpNeed() { return Math.round(110 * Math.pow(1.3, this.level - 1)); }   // each level needs ~30% more XP than the last (about 55 % more XP in total than before: levelling is slower)
+  get maxLv() { return this.w.survival ? SV_MAX_LEVEL : MAX_LEVEL; }
+  get xpNeed() { return this.w.survival ? Math.round(70 + 55 * Math.pow(this.level - 1, 1.15)) : Math.round(110 * Math.pow(1.3, this.level - 1)); }   // each level needs ~30% more XP than the last (about 55 % more XP in total than before: levelling is slower)
   gainXp(n) {
-    if (!this.isChamp || this.level >= MAX_LEVEL) return;
+    if (!this.isChamp || this.level >= this.maxLv) return;
     this.xp += n;
-    while (this.level < MAX_LEVEL && this.xp >= this.xpNeed) { this.xp -= this.xpNeed; this.levelUp(); }
-    if (this.level >= MAX_LEVEL) this.xp = 0;
+    while (this.level < this.maxLv && this.xp >= this.xpNeed) { this.xp -= this.xpNeed; this.levelUp(); }
+    if (this.level >= this.maxLv) this.xp = 0;
   }
 
   levelUp() {
-    if (this.level >= MAX_LEVEL) return false;
+    if (this.level >= this.maxLv) return false;
     const ratio = this.hp / this.maxHp;
     this.level++; this.points++;
+    if (this.w.survival && this.isChamp) { this.points--; this.w.sv.picks++; }   // survival: every level is a card to choose instead of a free skill point
     this.w.audio.play('levelup', { at: this, vol: this === this.w.player ? 1 : 0.5, gap: 0 });
     this.hp = Math.min(this.maxHp, this.maxHp * ratio + this.maxHp * 0.1);
     this.w.vfx('levelup', this.x, this.y - 20, { scale: 3.2 });
@@ -389,10 +403,10 @@ export class Fighter {
   }
   _tryBasic() {
     const w = this.w;
-    if (!(this.free || this.chaining()) || this.cds.basic > 0 || this.flame || this.ride || this.lure || this.bomber) {   // no basic attacks while the flamethrower is active
+    if (!(this.free || this.chaining()) || this.cds.basic > 0 || this.flame || this.ride || this.lure || this.bomber || this.burst || this.inkFree) {   // no basic attacks while the flamethrower / Julio's golden burst / ink glide is active
       return false;
     }
-    this.bufferT = 0; this.fIdle = 0; this.brRevealT = 1.6;   // attacking pauses the Farándula recharge; attacking from a bush gives away the position
+    this.cancelRecall(); this.bufferT = 0; this.fIdle = 0; this.brRevealT = 1.6;   // attacking pauses the Farándula recharge; attacking from a bush gives away the position
     this.cds.basic = (this.comb?.atkCd || this.def.stats.atkCd) * (this.enraged ? 0.6 : 1) / (1 + this.pk('aspd') + this.it.aspd) / (this.atkSlowT > 0 ? 1 - this.atkSlow : 1);
     if (this.invis) this.breakInvis();
     if (this.isBot) { this.startAction('attack', 0.2, 0.4, () => this.basicDo(() => this.botAttack())); return true; }
@@ -426,6 +440,7 @@ export class Fighter {
   _tryCast(k) {
     const a = this.def.abilities?.[k], rank = this.ranks[k];
     if (!a || !rank || a.passive || this.silenceT > 0 || this.charmT > 0) return false;
+    if (this.burst || this.inkFree) return false;   // Julio: golden burst and the ink glide lock every other ability
     if (this.flame || this.ride || this.lure || (this.bomber && this.key !== 'yonaiker') || this.abilityLocked(k)) return false;   // while the flamethrower burns / the bike runs / lured by a heart: no other ability and no recast
     if (this.key === 'jorbi' && k === 'p2') {   // instant dash, uses one charge
       if (!this.free || this.dashCharges <= 0) return false;
@@ -435,6 +450,9 @@ export class Fighter {
       if (location.hash) console.log('dbg cast', k, rank);
       this.startDash(); return true;
     }
+    if (this.puddle && a.v === 'shield') return false;
+    if (this.recall && this.free && this.cds[k] <= 0 && this.mana >= rk(a.mana, rank)) this.cancelRecall();   // any action cancels the return   // as an ink puddle he cannot shield himself
+    if (this.puddle && a.v === 'puddle') { this.endPuddle(); return true; }   // 2nd press: back to normal form
     if (!this.free || this.cds[k] > 0) return false;
     const cost = (this.key === 'diosa' && k === 'p1' && this.qRe) || (this.leakRe && k === 'ult') ? 0 : rk(a.mana, rank);   // Diosa: the Q recast (backflip) is free
     if (this.mana < cost && !this.w.debugFree) return false;
@@ -444,6 +462,8 @@ export class Fighter {
     if (this.invis && !(this.key === 'luis' && k === 'p2')) this.breakInvis();
     const map = { p1: 'power1', p2: 'power2', p3: 'power3', ult: 'ult' };
     if (this.key === 'leandro' && a.v) { const nm = a.v === 'comb' ? 'power1b' : a.v === 'dryer' ? (this.castPoint?.x === 1 ? 'power2b_push' : 'power2b_pull') : a.v === 'throw' ? 'power3b' : 'ultb'; if (this.w.anims.exists('leandro_' + nm)) map[k] = nm; }   // branch-B cast animations (fall back to the normal ones until drawn)
+    if (this.key === 'julio' && a.v === 'puddle' && this.w.anims.exists('julio_puddle_in')) map.ult = 'puddle_in';
+    if (this.key === 'julio' && a.v === 'shield') map.p2 = this.w.anims.exists('julio_power2b') ? 'power2b' : 'ult';   // golden shield: its own casting pose (not the dash)
     if (this.key === 'axel' && k === 'p1') { this.malware = ['virus', 'trojan', 'worm'][Math.random() * 3 | 0]; map.p1 = 'power1_' + this.malware; }
     const re = this.key === 'leandro' && a.v === 'leak' && this.leakRe;   // 2nd activation of Filtraciones: no animation, it cancels the activation pose
     this.startAction(re ? 'idle' : map[k], re ? 0.05 : a.windup, re ? 0.25 : a.dur, () => { this.w.castCtx = { f: this, k }; this.fireAbility(k, a, rank); this.w.castCtx = null; });
@@ -474,7 +494,8 @@ export class Fighter {
     const n = cs.shots || 1, spread = cs.spread ?? 0.1, gap = cs.gap ?? 0.09;
     const shoot = (ang) => {
       if (b.obj || !b.every3) {   // generic ranged physical attack (axel's laptop, yonaiker's bolts, julio's drawings, eliud's eggs)
-        w.projectile(this, { ang, range: this.def.stats.range, onHit: this.key === 'eliud' ? () => this.addRage(this.def.hen.rageHit) : null, speed: (this.basicSpeed || b.speed) * (cs.speed || 1), dmg: (b.alt || (b.apScale != null && b.atkScale == null) ? b.base + this.ap * b.apScale : b.base + this.atk * b.atkScale) * cs.dmg, type: b.type, obj: cs.obj || b.obj, vfx: b.vfx, spin: !!b.obj && !b.alt, scale: (b.scale ? b.scale : b.alt ? 0.2 : this.key === 'eliud' ? 0.12 : 0.17) * (cs.scale || 1), r: 14 * (cs.scale > 1 ? 1.3 : 1) });
+        const jb = this.key === 'julio' ? this.inkBounces() : null, jd = (b.base + this.ap * b.apScale) * cs.dmg;   // Tinta rebotona (passive): golden ink that bounces to the nearest enemy
+        w.projectile(this, { ang, range: this.def.stats.range, onHit: jb ? t => w.inkBounce(this, t, rk(jb.bounces, this.ranks.p3), jd * jb.keep, jb, new Set([t])) : this.key === 'eliud' ? () => this.addRage(this.def.hen.rageHit) : null, speed: jb ? 900 : (this.basicSpeed || b.speed) * (cs.speed || 1), dmg: (b.alt || (b.apScale != null && b.atkScale == null) ? b.base + this.ap * b.apScale : b.base + this.atk * b.atkScale) * cs.dmg, type: b.type, obj: this.puddle && w.textures.exists('ink_bubble') ? 'ink_bubble' : jb && w.textures.exists('ink_gold_drop') ? 'ink_gold_drop' : cs.obj || b.obj, tint: jb && !this.puddle ? 0xffd23f : null, ...(this.puddle ? { lift: 12 } : {}), vfx: b.vfx, spin: !!b.obj && !b.alt, scale: this.puddle || jb ? 0.05 : (b.scale ? b.scale : b.alt ? 0.2 : this.key === 'eliud' ? 0.12 : 0.17) * (cs.scale || 1), r: 14 * (cs.scale > 1 ? 1.3 : 1) });
         return;
       }
       const big = !!cs.fin;   // leandro / xeviche: the finisher is their big magic missile
@@ -531,9 +552,10 @@ export class Fighter {
   }
 
   // ---- Maduro: bodyguards (W) ----
-  guardTick(dt) {   // one more bodyguard every `interval` seconds until the cap; they are permanent
+  guardTick(dt) {   // passive: the first 2 appear when learned, then one more every `interval` s (the HUD shows the countdown over the icon)   // one more bodyguard every `interval` seconds until the cap; they are permanent
     if (this.w.net?.role === 'client') return;
     const a = CHAMPIONS.maduro.abilities.p2, r = this.ranks.p2; this.guards = (this.guards || []).filter(g => g.alive && !g.dispose);
+    if (!this.guardInit) { this.guardInit = true; for (let i = 0; i < a.initial; i++) this.spawnGuard(); this.guardT = rk(a.interval, r); this.w.vfx('shockwave', this.x, this.y - 6, { scale: 4, below: true, tint: 0x7ee0ff }); }
     const dmg = rk(a.dmg, r) + this.atk * a.atkScale, hp = rk(a.hp, r);
     this.guards.forEach((q, i) => { const t = i / this.guards.length * Math.PI * 2; q.slot = { x: Math.cos(t) * 95, y: Math.sin(t) * 62 }; });   // evenly spread around Maduro, also after a loss
     this.guards.forEach(g => { g.botAp = dmg; if (g.def.stats.hp !== hp) { g.hp += hp - g.def.stats.hp; g.def = { ...g.def, stats: { ...g.def.stats, hp } }; } });   // upgrades also improve the ones already out
@@ -678,6 +700,7 @@ export class Fighter {
     const w = this.w;
     w.audio.ability(this, k);
     if (this.key === 'leandro' && a.v) return this.fireLeandroB(k, a, rank);
+    if (this.key === 'julio' && (k !== 'ult' || a.v)) return this.fireJulio(k, a, rank);   // julio.js
     switch (this.key + ':' + k) {
       case 'diosa:p1': case 'diosa:p2': case 'diosa:p3': case 'diosa:ult': this.fireDiosa(k, a, rank); break;
       case 'maduro:p1': case 'maduro:p2': case 'maduro:p3': case 'maduro:ult': this.fireMaduro(k, a, rank); break;
@@ -711,26 +734,6 @@ export class Fighter {
       case 'leandro:ult': {
         w.vfx('summon', this.x, this.y - 10, { scale: 4 });
         w.summonBots(this, { melee: rk(a.melee, rank), ranged: rk(a.ranged, rank) }, a.life, a.botApScale * this.ap, 1 + this.ap / 100 * a.botHpScale);   // the more AI power Leandro has, the more damage AND health his bots have
-        break;
-      }
-      case 'julio:p1': {   // S-shaped ink laser: pierces everyone on the stroke
-        const dmg = rk(a.dmg, rank) + this.ap * a.apScale, pts = w.sPath(this, a.length, a.amp, 40);
-        w.inkTrail(pts, a.width, 2.4);
-        w.enemiesOf(this).forEach(t => { if (w.nearPath(pts, t.x, t.y, a.width / 2 + BODY_R * 0.6)) { w.damage(this, t, dmg, 'magic'); w.applyInk(this, t); } });
-        break;
-      }
-      case 'julio:p2': {   // ink-wave dash: hits everything crossed, marks
-        const dist2 = rk(a.dashDist, rank), dur = 0.24;
-        this.state = 'cast'; this.anim = 'power2'; this.stateT = 0.15; this.stateDur = dur + 0.15; this.fired = true;
-        this.dashV = { x: this.ax * dist2 / dur, y: this.ay * dist2 / dur };
-        this.inkDash = { hit: new Set(), dmg: rk(a.dmg, rank) + this.ap * a.apScale, ox: this.x, oy: this.y };
-        break;
-      }
-      case 'julio:p3': {   // ink puddle
-        const c = this.castPoint || w.aiPoint(this, a.range); this.castPoint = null;
-        const r = rk(a.radius, rank);
-        w.zones.push({ ctx: w.castCtx, kind: 'puddle', owner: this, x: c.x, y: c.y, r, t: rk(a.life, rank), slow: rk(a.slow, rank), stunAfter: rk(a.stunAfter, rank), stun: rk(a.stun, rank), inside: new Map(), decal: null });
-        w.vfx('poison_hit', c.x, c.y - 10, { scale: 4, tint: 0x6a3cff, below: true });
         break;
       }
       case 'julio:ult': {   // ink rain on every enemy champion, up to N rounds, 1s apart
@@ -914,8 +917,9 @@ export class Fighter {
     w.audio.attack(this);
     if (this.isMinion && this.key.includes('blue') && Math.random() < 0.07) w.audio.play('minion_grunt', { at: this, vol: 0.45, gap: 400 });   // only the human soldiers shout; robots stay quiet
     if (this.isTower) w.vfx('spark', this.x + this.ax * 70, this.y + this.ay * 40 - this.def.height * 0.5, { scale: 2.6 });
-    if (a.type === 'melee') { w.damage(this, t, a.dmg, a.dmgType); w.vfx('spark', t.x, t.cy, { scale: 2.2 }); }
-    else w.projectile(this, { range: this.def.stats.range + 60, speed: a.proj.speed, dmg: a.dmg, type: a.dmgType, vfx: a.proj.vfx, scale: a.proj.scale, tint: a.proj.tint, r: a.proj.r });
+    const dm = this.dmgMult || 1;
+    if (a.type === 'melee') { w.damage(this, t, a.dmg * dm, a.dmgType); w.vfx('spark', t.x, t.cy, { scale: 2.2 }); }
+    else w.projectile(this, { range: this.def.stats.range + 60, speed: a.proj.speed, dmg: a.dmg * dm, type: a.dmgType, vfx: a.proj.vfx, scale: a.proj.scale, tint: a.proj.tint, r: a.proj.r });
   }
 
   botAttack() {
@@ -943,7 +947,9 @@ export class Fighter {
     if (!on) { this.shieldG?.setVisible(false); return; }
     const g = (this.shieldG ||= w.add.graphics()), t = w.time.now, h = this.def.height, rx = h * 0.34, ry = rx * 0.4, N = 34, top = h * 1.1, step = top / N, pulse = 0.85 + 0.15 * Math.sin(t / 170);
     g.setVisible(true).clear().setDepth(this.y + 1).setBlendMode('ADD');
-    for (let k = 0; k < N; k++) g.fillStyle(0xffffff, (1 - k / N) ** 1.3 * 0.07 * pulse).fillEllipse(this.x, this.y - k * step, rx * 2, ry * 2);
+    const gold = this.inkSh ? this.inkSh.rank : 0, col = gold ? 0xffc83a : 0xffffff;   // golden ink shield: thicker (more layers, a solid rim) with rank
+    if (gold) { g.fillStyle(0xffd23f, 0.1 + 0.07 * gold).fillEllipse(this.x, this.y - h * 0.5, rx * 2.3, h * 1.0); g.lineStyle(1 + gold, 0xfff0a0, 0.55 + 0.1 * gold).strokeEllipse(this.x, this.y - h * 0.5, rx * 2.3, h * 1.0); }
+    for (let k = 0; k < N; k++) g.fillStyle(col, (1 - k / N) ** 1.3 * (0.07 + 0.03 * gold) * pulse).fillEllipse(this.x, this.y - k * step, rx * 2, ry * 2);
     for (let i = 0; i < 2; i++) { const ph = ((t / 2400) + i / 2) % 1; g.lineStyle(1, 0xdff2ff, 0.45 * (1 - ph)).strokeEllipse(this.x, this.y - ph * top, rx * 1.9, ry * 1.9); }   // curved bands rising and fading
   }
   drawStun() {   // stunned champion: two little pixel birds circling the head (behind it on the far side) and the word STUN
@@ -1024,7 +1030,7 @@ export class Fighter {
   statusList() {
     const L = [], me = this, add = (id, label, t, bad, desc, extra = {}) => {
       const sr = me.srcs?.[id] || null;
-      L.push({ id, label, t, bad, icon: sr?.icon || extra.icon || null, name: sr ? sr.name : (extra.name || label), by: sr ? sr.champ : (extra.by || null), desc: sr ? sr.desc : (extra.desc || desc), tint: extra.tint || (bad ? 0xff5a5a : 0x5dff8a) });
+      L.push({ id, label, t, bad, count: extra.count || 0, icon: sr?.icon || extra.icon || null, name: sr ? sr.name : (extra.name || label), by: sr ? sr.champ : (extra.by || null), desc: sr ? sr.desc : (extra.desc || desc), tint: extra.tint || (bad ? 0xff5a5a : 0x5dff8a) });
     };
     if (this.arepaUp) add('invul', 'Invulnerable', null, false, 'Ningún ataque ni habilidad te afecta: el escudo se rompe con el primero y se recarga.', { icon: 'icon_invul', name: 'Invulnerable', tint: 0xffd23f });
     if (this.rootT > 0) add('root', 'Atrapado', this.rootT, true, 'No puedes moverte, pero sí atacar y usar poderes.', { icon: 'icon_yonaiker_p2', name: 'Trampa invisible', by: 'Yonaiker' });
@@ -1056,6 +1062,9 @@ export class Fighter {
     if (this.buff && !this.hen) add('buff', 'Transformación', this.buff.t, false, 'Más vida y ataque, poderes más rápidos.');
     if (this.pkBuffs) for (const k in this.pkBuffs) { const N = { hp: 'Vida extra', atk: 'Daño +', aspd: 'Vel. ataque +', def: 'Defensa +' }[k]; add('pk_' + k, N, this.pkBuffs[k].t, false, 'Mejora temporal de un paquete.', { icon: 'icon_eliud_ult', name: 'Paquete sorpresa', by: 'Eliud' }); }
     if (this.key === 'xeviche' && this.setupStacks > 0) add('setup', `Setup x${this.setupStacks}`, null, false, 'Piezas de setup: más armadura y resistencia a IA.', { icon: 'icon_xeviche_p3', name: 'Setup', by: this.def.name });
+    if (this.buffs) for (const id in this.buffs) { const bi = this.w.buffInfo?.(id); if (bi) add('bb_' + id, bi.name, null, false, bi.desc, { count: this.buffs[id], icon: 'icon_' + bi.icon, name: bi.name, by: 'Robot de guerra', tint: bi.col }); }   // upgrades from the war robot
+    for (const k of Object.keys(this.perm || {})) { const n = this.perm[k], pm = PERM_BY_ID['p_' + k]; if (n > 0 && pm) add('perm_' + k, STAT_LABEL_B[k], null, false, `Mejora permanente comprada (Prompt): ${fmtStat(k, pm.per * n)} ${STAT_LABEL_B[k]} en total.`, { count: n, icon: 'stat_' + k, name: pm.name, by: 'Prompt', tint: 0xffe27a }); }   // permanent prompts live in the effects bar
+    if (this.beastUp) { const n = Object.values(this.beastUp).reduce((a, b) => a + b, 0); add('beast_up', 'Bendición de la bestia', null, false, 'Mejoras permanentes ganadas al derrotar a la bestia: ' + Object.entries(this.beastUp).map(([k, v]) => `${STAT_LABEL_B[k] || k} x${v}`).join(', ') + '.', { count: n, icon: 'icon_boss_beast', name: 'Bendición de la bestia', by: 'Bestia peluda', tint: 0xd9a05a }); }
     return L;
   }
 
@@ -1120,7 +1129,7 @@ export class Fighter {
     if (!this.alive) {
       this.deadT += dt; this.stateT += dt;
       if (this.isBot || this.isMinion) { if (this.deadT > 2.6) this.dispose = true; }   // corpse stays ~2s, then fades
-      else if (!this.isTower && this.deadT > this.respawnTime && this.w.net?.role !== 'client') {
+      else if (!this.isTower && !this.w.survival && this.deadT > this.respawnTime && this.w.net?.role !== 'client') {
         const keep = { ...this.cds };   // cooldowns freeze while dead and resume where they were
         this.x = this.spawn.x; this.y = this.spawn.y; this.reset(); this.cds = keep; this.playAnim('idle');
       }
@@ -1202,7 +1211,7 @@ export class Fighter {
     if (this.pullMe) { const pm = this.pullMe, by = pm.by, dx = by.x + by.ax * 62 - this.x, dy = by.y + by.ay * 62 - this.y, dd = Math.hypot(dx, dy) || 1; pm.t -= dt; this.carriedT = 0.12; if (dd < 14 || pm.t <= 0 || !by.alive || !this.dashStep(dx / dd * 1100 * dt, dy / dd * 1100 * dt)) this.pullMe = null; }
     if (this.blindT > 0) this.blindT -= dt;
     if (this.speedT > 0 && (this.speedT -= dt) <= 0) this.speedBoost = 0;
-    if (this.shieldT > 0 && (this.shieldT -= dt) <= 0) this.shieldHp = 0;
+    if (this.shieldT > 0 && (this.shieldT -= dt) <= 0) { this.shieldHp = 0; this.inkSh = null; }
     this.shieldMaxT = this.shieldT > 0 && this.shieldT < 1e6 && this.shieldHp > 0 ? Math.max(this.shieldMaxT || 0, this.shieldT) : 0;   // for the white duration bar
     if (this.charmT > 0 && (this.charmT -= dt) <= 0) { this.team = this.baseTeam; this.w.float(this.x, this.y - this.def.height - 28, 'libre', '#ffffff'); }
     if (this.key === 'jorbi' && this.dashTimers.length) {   // per-charge recharge (faster while transformed)
@@ -1221,6 +1230,7 @@ export class Fighter {
       if (p.tick >= 0.5) { p.tick -= 0.5; w.damage(p.src, this, p.dps * 0.5, p.type || 'true', p.burn ? 'burn' : 'poison'); if (p.burn && Math.random() < 0.35) w.vfx('burning_ground', this.x + (Math.random() - 0.5) * 30, this.y - 6, { scale: 1.4, alpha: 0.8, below: true }); }
       return p.t > 0 && this.alive;
     });
+    if (this.key === 'julio' || this.inkSh) this.julioTick(dt);
     if (!this.alive) return;
 
     if (this.stunT > 0) {
@@ -1251,7 +1261,7 @@ export class Fighter {
       if (this.dashV) {   // dashing: fast move along the aim
         if (!this.dashStep(this.dashV.x * dt, this.dashV.y * dt)) this.stateT = this.stateDur;   // hit a wall / tire / the edge: the dash ends there
         if (Math.random() < 0.5 && !this.dashShield) w.vfx('run_dust', this.x, this.y - 6, { scale: 1.6, alpha: 0.6, below: true });
-        if (this.stateT >= this.stateDur) { if (this.dashV && this.dashShield) { const d = this.dashShield; this.dashShield = null; this.shieldHp = Math.max(this.shieldHp, d.sh); this.shieldT = d.t; this.w.markSrc(this, 'shield'); } this.dashV = null; if (this.inkDash) this.inkDash = null; if (this.bike) { this.bike = null; this.setSkin(this.key); } }
+        if (this.stateT >= this.stateDur) { if (this.dashV && this.dashShield) { const d = this.dashShield; this.dashShield = null; this.shieldHp = Math.max(this.shieldHp, d.sh); this.shieldT = d.t; this.w.markSrc(this, 'shield'); } this.dashV = null; if (this.inkDash) { if (this.inkDash.trail) w.inkTrail([{ x: this.inkDash.ox, y: this.inkDash.oy }, { x: this.x, y: this.y }], 34, 3, 1); this.inkDash = null; } if (this.bike) { this.bike = null; this.setSkin(this.key); } }
       }
       if (this.lunge) { const L = this.lunge; L.t -= dt; if (this.rootT <= 0 && !this.dashStep(L.vx * dt, L.vy * dt)) L.t = 0; if (Math.random() < 0.6) w.vfx('run_dust', this.x - this.ax * 14, this.y - 6, { scale: 1.2, alpha: 0.5, below: true }); if (L.t <= 0) this.lunge = null; }
       if (!this.fired && this.stateT >= this.windup) { this.fired = true; this.pending?.(); }
@@ -1291,8 +1301,11 @@ export class Fighter {
       }
     }
     if (this.rootT > 0) { this.rootT -= dt; this.in = { mx: 0, my: 0, run: false }; }   // snared: can still attack and cast, cannot move
+    if (this.burst) this.in = { mx: 0, my: 0, run: false };   // golden burst: Julio stands still while it lasts
+    if (this.inkFree) { const l = Math.hypot(this.in.mx, this.in.my); if (l > 0) { this.inkFree.dx = this.in.mx / l; this.inkFree.dy = this.in.my / l; } this.in = { mx: this.inkFree.dx, my: this.inkFree.dy, run: true }; }   // Ola de tinta nv3: he always keeps sliding (never stands) until the effect ends
     const { mx, my, run } = this.in, len = Math.hypot(mx, my);
     this.running = run && len > 0;
+    if (len > 0 && this.recall) this.cancelRecall();   // moving cancels the return
     if (len > 0) {
       // walking against where you aim: the character turns to face where it walks (no backpedaling, no slowdown); attacks and powers still aim at the cursor
       const nx = mx / len, ny = my / len, dot = nx * this.ax + ny * this.ay;
@@ -1313,27 +1326,29 @@ export class Fighter {
   buildSprite() {
     const s = this.w;
     this.dirFrames = this.isTower && !!s.sprites[this.key]?.aim;       // tower: 8 aim directions (E,SE,S,SW,W,NW,N,NE)
-    this.hasAnims = !this.dirFrames && s.hasAnims(this.key);
-    const sp = s.sprites[this.key], tex = this.dirFrames || this.hasAnims ? 'atl_' + this.key : (this.def.ref || this.key), fr = this.dirFrames ? 'aim/0' : this.hasAnims ? (sp.idle ? 'idle/0' : 'walk/0') : undefined;   // atlas frame for towers / animated units
+    this.hasAnims = !this.dirFrames && s.hasAnims(this.art);
+    const sp = s.sprites[this.art], tex = this.dirFrames || this.hasAnims ? 'atl_' + this.art : (this.def.ref || this.key), fr = this.dirFrames ? 'aim/0' : this.hasAnims ? (sp.idle ? 'idle/0' : 'walk/0') : undefined;   // atlas frame for towers / animated units
     this.shadow = s.add.image(this.x, this.y, 'shadow').setAlpha(0.45).setScale(this.def.height / 32 * 0.8, this.def.height / 32 * 0.4);
     this.spr = s.add.sprite(this.x, this.y, tex, fr);
     if (this.dirFrames) {
       this.spr.setOrigin(0.5, 0.89).setScale(this.def.height / 190);
     } else if (this.hasAnims) {
       this.spr.setOrigin(0.5, 0.89).setScale(this.def.height / 190);
-      this.spr.play(`${this.key}_idle`);
+      this.spr.play(`${this.art}_idle`);
     } else if (this.isBot || this.isMinion || this.isTower) {
       this.spr.setOrigin(0.5, 0.95).setScale(this.def.height / this.spr.height);
     } else {
       this.spr.setOrigin(0.5, 0.97).setScale(this.def.height / 1330);
     }
     this.baseScale = this.spr.scaleX;
+    // The beast's idle and walk art is larger than the first frames of its attacks.
+    if (this.art === 'boss_beast' && this.hasAnims) this.spr.setScale(this.baseScale * 0.86);
     this.tintBot();
     // ground ring under every champion: green = in use, blue = ally, red = enemy (always below the sprite)
     if (this.isChamp) this.ring = s.add.ellipse(this.x, this.y, this.def.height * 0.85, this.def.height * 0.34, 0xffffff, 0.1).setStrokeStyle(3, 0xffffff, 0.85);
   }
 
-  tintBot() { if (this.def.guard || this.def.bot === 'crate' || this.key === 'roach') return; if (this.antivirus && this.hasAnims) return; if (this.antivirus) { this.spr.setTint(0xa0ffc0); return; } if (this.isBot && !this.hasAnims) this.spr.setTint(this.team === 0 ? 0xb8fff0 : 0xffb8a8); }
+  tintBot() { if (this.placeholder && this.def.phTint) { this.spr.setTint(this.def.phTint); return; } if (this.def.guard || this.def.bot === 'crate' || this.key === 'roach') return; if (this.antivirus && this.hasAnims) return; if (this.antivirus) { this.spr.setTint(0xa0ffc0); return; } if (this.isBot && !this.hasAnims) this.spr.setTint(this.team === 0 ? 0xb8fff0 : 0xffb8a8); }
 
   // direction the sprite faces: where it walks while moving, else where it aims. Sector changes need to pass the sector edge by a margin (no flicker on the diagonals).
   curDir() {
@@ -1348,6 +1363,7 @@ export class Fighter {
   playAnim(name, dur, reverse = false, keep = false) {
     if (!this.hasAnims) return;
     if (name === 'idle' && this.key === 'leandro' && this.leakRe && this.w.anims.exists('leandro_ultb_loop')) name = 'ultb_loop';   // while the Filtraciones window is open Leandro keeps the activation pose cycling (frames 3+)
+    if (this.puddle && this.key === 'julio') name = /^(idle|walk|run)$/.test(name) ? 'puddle_move' : /^(attack|lunge|power)/.test(name) ? (this.w.anims.exists('julio_puddle_cast') ? 'puddle_cast' : 'puddle_move') : name;   // puddle form: only the puddle art
     const held = this.flame && (name === 'idle' || name === 'walk' || name === 'run');   // flamethrower stays in his hands while it is active
     if (held) name = 'power3';
     const d = this.curDir(), [sfx, mir] = DIR_SRC[d];
@@ -1360,6 +1376,7 @@ export class Fighter {
       if (!this.w.anims.exists(key)) { if (/^attack\d$/.test(name) || name === 'lunge') return this.playAnim('attack', dur, reverse, keep); return; }   // combo hits without their own art yet reuse the basic attack
     }
     const anim = this.w.anims.get(key);
+    if (this.art === 'boss_beast') this.spr.setScale(this.baseScale * (name === 'idle' ? 0.86 : name === 'walk' ? 0.81 : 1));
     const cfg = { key, repeat: held ? -1 : anim.repeat };
     if (dur) cfg.frameRate = anim.getTotalFrames() / dur;
     if (!/^attack/.test(name)) this.holdPose = false;
@@ -1483,3 +1500,5 @@ export class Fighter {
 }
 
 export { ABILITY_KEYS };
+
+Object.assign(Fighter.prototype, JulioMixin);

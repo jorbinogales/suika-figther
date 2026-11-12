@@ -1,0 +1,10 @@
+import puppeteer from 'puppeteer-core';
+const n = +(process.argv[2] || 3);
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--enable-unsafe-swiftshader','--use-gl=angle','--mute-audio','--autoplay-policy=no-user-gesture-required'], defaultViewport: { width: 1280, height: 720 } });
+const p = await b.newPage(); const errs = []; p.on('pageerror', e => errs.push(e.message)); p.on('requestfailed', r => errs.push('fail ' + r.url()));
+await p.goto('http://localhost:5199/#char=luis&noai=1&nofog=1&keep=1', { waitUntil: 'load' });
+await p.waitForFunction(() => window.__arena?.player, { timeout: 90000 });
+await p.evaluate(async n => { const m = await import('/src/bootscreen.js'); const ks = ['luis', 'jorbi', 'maduro', 'diosa', 'julio'], pk = (a, l) => a.map((k, i) => ({ k, label: l(i) })); m.bootScreen.next = { blue: pk(ks.slice(0, n), i => i ? 'Aliado' : 'Tú'), red: pk(ks.slice(5 - n), () => 'IA') }; document.getElementById('loading')?.remove(); m.bootScreen.show(); m.bootScreen.progress(55, 'CONSTRUYENDO EL MAPA...'); }, n);
+await new Promise(r => setTimeout(r, 3500)); await p.screenshot({ path: 'art/review_8dir/_vs' + n + '.png' });
+console.log(await p.evaluate(() => [...document.querySelectorAll('video')].map(v => [v.src.split('/').slice(-2).join('/'), +v.duration.toFixed(1), v.readyState, v.paused, +v.currentTime.toFixed(1), v.videoWidth + 'x' + v.videoHeight, v.className].join(' ')).join(' | ')));
+console.log('errors:', errs.join('\n') || 'none'); await b.close();

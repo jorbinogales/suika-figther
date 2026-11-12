@@ -103,6 +103,7 @@ def build(K, RV, RP, OG, SND, short_yells):
      "buff": RP("13_Ice_explosion_01.wav"), "debuff": RP("21_Debuff_01.wav"), "stun": KP("impactBell_heavy_*.ogg"),
      "levelup": RV("RV_Stinger_LevelUp.wav"), "champ_death": RP("69_Enemy_death_01.wav"), "death_soft": KP("impactSoft_heavy_*.ogg"),
      "minion_grunt": sorted(glob.glob(str(SND / "OpenGameArt/yelling/yelling sounds/3grunt*.wav"))), "minion_yell": short_yells("*yell*.wav", 1.8, 12),
+     "boss_roar": [CU("boss_roar_1"), CU("boss_roar_2"), CU("boss_roar_3")], "boss_pound": [CU("boss_pound_1"), CU("boss_pound_2")], "boss_alarm": [CU("boss_alarm")], "mecha_servo": [CU("mecha_servo")], "mecha_mg": [CU("mecha_mg")], "mecha_flame": [CU("mecha_flame")], "mecha_step": [CU("mecha_step")],
      "robot_beep": [CU("beep_1"), CU("beep_2"), CU("beep_3")], "step": KP("footstep_grass_*.ogg"),
      "ui_click": [CU("ui_click_1"), CU("ui_click_2")], "ui_hover": RP("001_Hover_01.wav"), "ui_confirm": RP("013_Confirm_03.wav") + RV("RV_UI_Confirm.wav"),
      "ui_error": RP("033_Denied_03.wav"), "ui_back": [CU("ui_back_1")], "ui_open": RV("RV_UI_MenuOpen.wav"), "ui_pause": RP("092_Pause_04.wav"),

@@ -1,0 +1,12 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--enable-unsafe-swiftshader','--use-gl=angle','--mute-audio'], defaultViewport: { width: 1280, height: 720 } });
+const p = await b.newPage(); const errs=[]; p.on('pageerror', e => errs.push(e.message)); p.on('console', m => console.log('page:', m.text()));
+await p.goto('http://localhost:5199/#char=julio&train=1&keep=1&noai=1&nofog=1&br=1000', { waitUntil: 'load' });
+await p.waitForFunction(() => window.__arena?.player, { timeout: 90000 });
+const sleep = t => new Promise(r => setTimeout(r, t)); await sleep(5000); await p.mouse.click(640, 300); await sleep(500);
+const t = () => p.evaluate(() => { const f = window.__arena.player; f.cds.basic = 0; f.cds.p2 = 0; f.cds.p3 = 0; return [f.tryCast('p2'), f.tryCast('p3'), f._tryBasic()].join(','); });
+await p.evaluate(() => { const f = window.__arena.player; f.ranks = { p1: 1, p2: 3, p3: 1, ult: 0 }; f.mana = 999; f.setAim(1, 0); f.tryCast('p1'); });
+await p.evaluate(()=>{window.__arena.player.in={mx:1,my:0,run:true}}); const x0 = await p.evaluate(()=>window.__arena.player.x); await sleep(1200); console.log('moved', Math.round(await p.evaluate(()=>window.__arena.player.x)-x0)); await p.screenshot({path:'art/review_8dir/_julio_bar.png'}); console.log('burst?', await p.evaluate(() => !!window.__arena.player.burst)); console.log('during burst (p2,p3,basic):', await t());
+await sleep(3500); console.log('after burst:', await p.evaluate(() => { const f = window.__arena.player; f.cds.basic = 0; return [!!f.burst, f._tryBasic()].join(','); }));
+await p.evaluate(() => { const f = window.__arena.player; f.state = 'idle'; f.cds.p2 = 0; f.def = { ...f.def, abilities: { ...f.def.abilities, p2: window.__arena.player.def.abilities.p2 } }; });
+console.log(errs.join('\n') || 'no errors'); await b.close();

@@ -50,4 +50,32 @@ clip("yon_p3", "SCIEnrg_Energy Orb_05.wav", 0, 1.2, 0.3); clip("yon_ult", "Raise
 # Junior
 clip("jr_p1", "Blade Metal Impact Recoil 01.wav", 0, 1.0, 0.3); clip("jr_p2", "WHOOSH_ARM_SWING_01_WIDE.wav"); clip("jr_p3", "GUNArtl_Grenade Launcher Fire_05.wav", 0, 0.9, 0.3)
 clip("jr_ult", "EXPLDsgn_Implode_15.wav", 0, 2.4, 0.6); clip("jr_atk", "PUNCH_CLEAN_HEAVY_10.wav")
+
+# ---- bosses (real 24-bit recordings, only trimmed / pitched / layered) ----
+def pitch(x, r):   # r < 1 = lower and longer (bigger creature)
+    from fractions import Fraction
+    q = Fraction(r).limit_denominator(20); return resample_poly(x, q.denominator, q.numerator)
+def boss(out, srcs, fade=0.15, gain=1.0, tail=None):   # srcs: [(file, rate, start_s, end_s, level, offset_s)] layered together
+    sr0 = 48000; parts = []
+    for f, r, a, b, lv, off in srcs:
+        sr, x = load(FIND(f)); x = x[int(a * sr):int((b if b else len(x) / sr) * sr)]; x = pitch(x, r) if r != 1 else x
+        if sr != sr0: x = resample_poly(x, sr0, sr)
+        parts.append((x * lv, int(off * sr0)))
+    y = np.zeros(max(len(x) + o for x, o in parts))
+    for x, o in parts: y[o:o + len(x)] += x
+    if tail: y = y[:int(tail * sr0)]
+    n = min(len(y), int(fade * sr0)); y[-n:] *= np.linspace(1, 0, n); y[:64] *= np.linspace(0, 1, 64); save24(out + ".wav", y * gain, sr0)
+B1, B2 = "CREAMnstr_Beast Vocalisation_09.wav", "ANMLBat_Creature Vocalisation_01.wav"
+boss("boss_roar_1", [(B1, 0.7, 0, None, 1.0, 0), (B2, 0.5, 0, None, 0.5, 0.05)], 0.3)
+boss("boss_roar_2", [(B1, 0.55, 0, None, 1.0, 0), (B1, 0.8, 0, None, 0.4, 0.1)], 0.3)
+boss("boss_roar_3", [(B2, 0.45, 0, None, 1.0, 0), (B1, 0.65, 0.2, None, 0.6, 0.1)], 0.3)
+boss("boss_pound_1", [("04_Impact_Heavy.wav.wav", 0.6, 0, 1.6, 1.0, 0), ("EXPLDsgn_Explosion Rumble Distorted_01.wav", 0.7, 0, 1.4, 0.45, 0.03)], 0.4)
+boss("boss_pound_2", [("06_Impact_Object_Drop.wav.wav", 0.6, 0, 1.8, 1.0, 0), ("Impact Asteroid Debris Tail_03.wav", 0.7, 0, 1.6, 0.5, 0.02)], 0.4)
+# captain alarm: two-tone real "lock on" beep alternating (24-bit source, no synthesis)
+LK = "UIBeep_Lock On_05.wav"; boss("boss_alarm", [(LK, 0.75 if i % 2 == 0 else 1.0, 0, None, 1.0, i * 0.42) for i in range(4)], 0.15, tail=1.7)
+# giant robot
+boss("mecha_servo", [("Servo Charge Spin Down Combined_04.wav", 0.8, 0, None, 1.0, 0)], 0.3)
+boss("mecha_mg", [("GUNMech_Arm Weapon Rattle_10.wav", 1, 0, None, 1.0, 0), ("GUNMech_Mechanical_12.wav", 0.7, 0, None, 0.6, 0.02)], 0.05)
+boss("mecha_flame", [("Thruster Ignite Oneshot_02.wav", 0.8, 0, 3.0, 1.0, 0)], 0.5)
+boss("mecha_step", [("MECHClik_Mine Deploy_02.wav", 0.5, 0, None, 0.9, 0), ("04_Impact_Heavy.wav.wav", 0.5, 0, 1.2, 0.8, 0)], 0.3)
 print("custom 24-bit clips:", len(list(OUT.glob("*.wav"))))

@@ -15,7 +15,7 @@ export const CLASS_TABS = ['todos', 'ai', 'hacker', 'cyber', 'soporte', 'program
 export const classLabel = id => (id === 'todos' ? 'Todos' : CLASSES[id]?.label || id);
 
 export const ABILITY_KEYS = ['p1', 'p2', 'p3', 'ult'];
-export const MAX_LEVEL = 12;
+export const MAX_LEVEL = 12, SV_MAX_LEVEL = 30;   // survival mode levels up to 30
 export const MAX_RANK = 3;
 export const ULT_LEVELS = [4, 8, 12];   // the ultimate can only be learned/upgraded at these levels
 
@@ -134,18 +134,33 @@ CHAMPIONS.julio = {
            slow: { windup: 0.36, dur: 0.6, speed: 380, cd: 0.95 }, fast: { windup: 0.14, dur: 0.3, speed: 760, cd: 0.45 } },
   ink: { time: 7, apScale: 0.55, base: 25 },   // the explosion when ink is consumed
   abilities: {
-    p1: { name: 'Trazo', icon: 'julio_p1', cd: [9, 8, 7], mana: [55, 60, 65], windup: 0.45, dur: 0.8,
-          desc: 'Traza una S de tinta que atraviesa a los enemigos como un láser, dejando el suelo marcado, y causa enorme daño de IA. Los marca con tinta.',
-          dmg: [90, 140, 190], apScale: 0.8, length: 620, width: 70, amp: 80 },
+    p1: { name: 'Trazo', icon: 'julio_p1', cd: [9, 8, 7], mana: [55, 60, 65], windup: 0.45, dur: 0.8, stroke: true,
+          desc: 'Traza una línea de tinta en el suelo cuyo largo y forma dependen de dónde apuntas: lejos, la línea sale derecha; cerca, se acorta y se enrosca. Si choca con una pared, REBOTA. Atraviesa a los enemigos con daño de IA y los marca con tinta. Nivel 1: pintura muy fina y débil. Nivel 2: grosor moderado. Nivel 3: trazo grueso. Cuanto más nivel, más brilla la pintura.',
+          dmg: [90, 140, 190], apScale: 0.8, length: 620, minLen: 160, width: [26, 48, 80], life: [2.2, 3, 3.8] },
     p2: { name: 'Ola de tinta', icon: 'julio_p2', cd: [12, 11, 10], mana: [45, 50, 55], windup: 0.15, dur: 0.5,
-          desc: 'Dash hacia el frente que daña a todos los que atraviesa y los marca con tinta.',
-          dmg: [50, 80, 110], apScale: 0.5, dashDist: [320, 350, 380] },
+          desc: 'Nivel 1: dash muy corto que daña y marca a quien atraviesa. Nivel 2: el dash llega más lejos y deja tinta en el suelo. Nivel 3: ya no es un dash: te desplazas libremente (más rápido) durante unos segundos, dejando un rastro de tinta que daña y marca.',
+          dmg: [50, 80, 110], apScale: 0.5, dashDist: [150, 330, 0], free: [0, 0, 2.4], freeSpeed: 0.85 },
     p3: { name: 'Charco de tinta', icon: 'julio_p3', cd: [14, 13, 12], mana: [50, 50, 50], windup: 0.3, dur: 0.65,
-          desc: 'Crea un charco de tinta: ralentiza a los enemigos dentro y, si permanecen varios segundos, los stunea.',
-          radius: [110, 125, 140], life: [8, 9, 10], slow: [0.35, 0.45, 0.55], stunAfter: [2.5, 2.2, 1.9], stun: [1.0, 1.2, 1.4], range: 340 },
+          desc: 'Un gran charco de tinta cae desde el cielo. Ralentiza a los enemigos dentro y, si se quedan, los stunea; al terminar el stun el charco desaparece. Nivel 2: el charco burbujea (efecto visual) y stunea más rápido. Nivel 3: unas cadenas atrapan y ralentizan a los campeones enemigos del área y, al llegar el stun, los JALAN hacia el centro.',
+          radius: [110, 125, 140], life: [8, 9, 10], slow: [0.35, 0.45, 0.55], stunAfter: [2.5, 1.7, 1.3], stun: [1.0, 1.2, 1.4], range: 340 },
     ult: { name: 'El arte de las gotas', icon: 'julio_ult', cd: [90, 80, 70], mana: [100, 100, 100], windup: 0.8, dur: 1.4,
            desc: 'Caen gotas de tinta del cielo sobre todos los campeones enemigos del mapa (1 segundo entre cada ronda, hasta 3 veces), causando daño de IA y marcándolos.',
            dmg: [90, 140, 190], apScale: 0.6, drops: [1, 2, 3], radius: 80 },
+  },
+  // second branch (chosen the first time the ability is learned): golden ink
+  alt: {
+    p1: { name: 'Ráfaga dorada', icon: 'julio_p1b', v: 'burst', cd: [14, 13, 12], mana: [60, 65, 70], windup: 0.3, dur: 0.5,
+          desc: 'Una ráfaga de pintura dorada: durante unos segundos Julio dispara, SIEMPRE en la dirección que apuntó, una metralleta de disparos de tinta que causan daño de IA (puede moverse mientras dispara). Mejorarla hace que la pintura salga más rápido.',
+          time: [3, 3.5, 4], rate: [0.16, 0.11, 0.075], speed: 860, range: 640, dmg: [9, 12, 15], apScale: 0.14 },
+    p2: { name: 'Escudo de tinta dorada', icon: 'julio_p2b', v: 'shield', cd: [16, 15, 14], mana: [55, 60, 65], windup: 0.25, dur: 0.5,
+          desc: 'Un escudo de tinta dorada sobre ti o sobre un aliado (apúntalo), que además lo cura. Si la tinta es DESTRUIDA antes de agotarse el tiempo, explota: daño de IA leve a los enemigos cercanos y los deja marcados con tinta. Más nivel: más escudo, más curación, más daño y un escudo más espeso.',
+          range: 600, shield: [70, 120, 180], apShield: 0.5, heal: [40, 70, 100], apHeal: 0.3, time: [6, 6.5, 7], boomR: 170, dmg: [30, 50, 70], apScale: 0.35 },
+    p3: { name: 'Tinta rebotona', icon: 'julio_p3b', v: 'bounce', passive: true,
+          desc: 'Pasiva: tu ataque básico dispara tinta dorada que, al impactar, REBOTA hacia el enemigo más cercano. Más nivel, más rebotes.',
+          bounces: [1, 2, 3], range: 420, keep: 0.8 },
+    ult: { name: 'Charco viviente', icon: 'julio_ultb', v: 'puddle', cd: [80, 70, 60], mana: [100, 100, 100], windup: 0.6, dur: 0.8,
+           desc: 'Julio se transforma en un charco de tinta: no se le puede apuntar, se desplaza más rápido y daña (daño de IA) a los enemigos por los que pasa. Puede usar sus habilidades mientras es un charco. Activa la ultimate otra vez para volver a su forma.',
+           time: [6, 7, 8], speed: [0.3, 0.4, 0.5], dmg: [45, 70, 95], apScale: 0.35, radius: 70 },
   },
 };
 
@@ -228,8 +243,8 @@ CHAMPIONS.maduro = {
     p1: { name: 'Decreto presidencial', icon: 'maduro_p1', cd: [10, 9, 8], mana: [60, 65, 70], windup: 0.3, dur: 0.6,
           desc: 'Lanza un discurso por un megáfono gigante en línea recta. Nivel 1: daño mágico y SILENCIO 1.5 s (el segundo campeón golpeado se ralentiza un 40 %). Nivel 2: las ondas se vuelven de un amarillo intenso y además ATURDEN 1 s. Nivel 3: las ondas son rojas, aturden 1.5 s, hacen mucho más daño y dejan manchas en el suelo.',
           dmg: [60, 100, 190], apScale: 0.6, length: 640, width: 84, silence: 1.5, stun: [0, 1, 1.5], slowPct: 0.4, slowTime: 2, stainTime: 7 },
-    p2: { name: 'Colectivo protector', icon: 'maduro_p2', cd: [20, 18, 16], mana: [50, 55, 60], windup: 0.1, dur: 0.5,
-          desc: 'Invoca guardaespaldas que lo siguen y lo rodean siempre. Al activarla aparecen 2 al instante; después invoca uno nuevo cada 15 s hasta llegar al límite (5 en el nivel 1), y al llegar al máximo no invoca más. Atacan con daño físico a los enemigos cercanos, tienen vida y son permanentes. Al mejorarla aumentan su daño, su vida, su cantidad máxima (5 → 7) y la invocación es más rápida.',
+    p2: { name: 'Colectivo protector', icon: 'maduro_p2', passive: true,
+          desc: 'Pasiva: invoca guardaespaldas por sí sola que lo siguen y lo rodean siempre (sobre el ícono ves el tiempo para el próximo). Al aprenderla aparecen 2 al instante; después invoca uno nuevo cada 15 s hasta llegar al límite (5 en el nivel 1), y al llegar al máximo no invoca más. Atacan con daño físico a los enemigos cercanos, tienen vida y son permanentes. Al mejorarla aumentan su daño, su vida, su cantidad máxima (5 → 7) y la invocación es más rápida.',
           initial: 2, cap: [5, 6, 7], interval: [15, 12, 10], hp: [260, 380, 520], dmg: [14, 22, 32], atkScale: 0.25 },
     p3: { name: 'La cesta básica', icon: 'maduro_p3', cd: [14, 13, 12], mana: [60, 65, 70], windup: 0.25, dur: 0.6,
           desc: 'Arroja una caja de recursos vacía que, al caer, queda en el mapa durante 1 minuto con su propia vida (desaparece al llegar a 0). Va soltando cucarachas que atacan al objetivo más cercano, y el área alrededor de la caja ENVENENA a los enemigos. Al mejorarla la caja tiene más vida, suelta más bichos y estos son MÁS GRANDES, con más vida y más armadura, y el veneno es más fuerte.',
@@ -342,10 +357,10 @@ export function aimSpec(champ, key, rank, f) {
     case 'leandro:ult': return a.v === 'leak' ? { type: 'pick', radius: 1800, color: 0x66ffcc } : { type: 'circle', radius: 160, color: 0x66ffcc };
     case 'xeviche:p1':  return { type: 'line', range: 620, width: 46, color: 0xffd23f };
     case 'xeviche:p3':  return { type: 'line', range: a.range, width: 44, color: 0xff3b60 };
-    case 'julio:p1':    return { type: 'line', range: a.length, width: a.width, color: 0x8a5cff };
-    case 'julio:p2':    return { type: 'line', range: rk(a.dashDist, rank), width: 56, color: 0x6a8cff };
+    case 'julio:p1':    return a.v === 'burst' ? { type: 'line', range: 620, width: 34, color: 0xffd23f } : { type: 'line', range: a.length, width: rk(a.width, rank), color: 0x8a5cff, stroke: true };
+    case 'julio:p2':    return a.v === 'shield' ? { type: 'pick', radius: a.range, color: 0xffd23f } : rank >= 3 ? { type: 'circle', radius: 60, color: 0x6a8cff } : { type: 'line', range: rk(a.dashDist, rank), width: 56, color: 0x6a8cff };
     case 'julio:p3':    return { type: 'zone', max: a.range, radius: rk(a.radius, rank), color: 0x7a4cff };
-    case 'julio:ult':   return { type: 'circle', radius: 70, color: 0x8a5cff };
+    case 'julio:ult':   return { type: 'circle', radius: a.v === 'puddle' ? 60 : 70, color: a.v === 'puddle' ? 0xffd23f : 0x8a5cff };
     case 'luis:p1':     return { type: 'circle', radius: 70, color: 0x5dff8a };
     case 'luis:p2':     return { type: 'circle', radius: 60, color: 0x7ee0ff };
     case 'luis:p3':     return { type: 'circle', radius: rk(a.radius, rank), color: 0x33ff88 };

@@ -1,0 +1,12 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--enable-unsafe-swiftshader','--use-gl=angle','--mute-audio'], defaultViewport: { width: 1280, height: 720 } });
+const p = await b.newPage(); const errs = []; p.on('pageerror', e => errs.push(e.stack || e.message));
+await p.goto('http://localhost:5199/#char=luis&noai=1&nofog=1&keep=1&mode=2', { waitUntil: 'load' });
+await p.waitForFunction(() => window.__arena?.player && window.__arena.bosses, { timeout: 90000 });
+const sleep = t => new Promise(r => setTimeout(r, t)); await sleep(2500);
+console.log(await p.evaluate(() => { const w = window.__arena, f = w.player; f.perm = { ap: 2, aspd: 1, speed: 3 }; f.recomputeItems(); w.bossGrant(f, 'purple'); w.bossGrant(f, 'yellow'); f.beastUp = { atk: 2, hp: 1 }; const e = w.champs.find(c => c.baseTeam !== f.baseTeam); w.bossGrant(e, 'red'); w.selected = e; return JSON.stringify([f.statusList().map(x => x.name), e.statusList().map(x => x.name)]); }));
+await sleep(800); await p.screenshot({ path: 'art/review_8dir/_bossfx1.png' });
+await p.evaluate(() => { window.__arena.selected = null; }); await p.evaluate(() => { const h = window.__arena.scene.get('hud'); h.shopOpen = true; h.shopAuto = true; }); await sleep(1500);
+await p.screenshot({ path: 'art/review_8dir/_shoprec.png' });
+await p.evaluate(() => { const h = window.__arena.scene.get('hud'); h.shopOpen = false; }); await p.keyboard.down('Tab'); await sleep(900); await p.screenshot({ path: 'art/review_8dir/_tab.png' }); await p.keyboard.up('Tab');
+console.log('errors:', [...new Set(errs)].join('\n') || 'none'); await b.close();

@@ -170,3 +170,47 @@ label.l{display:block;font-size:12px;letter-spacing:.2em;color:var(--mut);margin
 #tip .scl{margin:2px 0;font-size:14px}#tip .scl small{display:block;font-size:12px;color:#8aa0c8;margin-left:2px}
 
 .abis.alts{align-items:center;gap:22px}.abi.alt{border-color:rgba(255,210,63,.6)}
+
+/* champion videos + VS loading screen */
+.panel.pick .cv{position:absolute;top:0;left:50%;height:100%;max-width:100%;transform:translateX(-50%);object-fit:contain;z-index:1;opacity:0;transition:opacity .4s}.panel.pick .cv.on{opacity:1}
+#loading.vsmode{justify-content:center;gap:18px;background:linear-gradient(90deg,rgba(24,92,230,.42) 0,rgba(10,30,90,.18) 40%,rgba(80,10,20,.18) 60%,rgba(235,40,52,.42) 100%),repeating-linear-gradient(0deg,rgba(63,208,255,.06) 0 1px,transparent 1px 44px),repeating-linear-gradient(90deg,rgba(63,208,255,.06) 0 1px,transparent 1px 44px),radial-gradient(ellipse at 50% 40%,#0a1a38,#02050c 75%);overflow:hidden}
+#loading.vsmode::after{content:'';position:absolute;left:0;right:0;height:140px;top:-140px;background:linear-gradient(transparent,rgba(63,208,255,.14),transparent);animation:vscan 5s linear infinite;pointer-events:none}
+@keyframes vscan{to{transform:translateY(calc(100vh + 280px))}}
+#loading .vsx{display:flex;align-items:center;justify-content:center;width:100%;gap:2vw;padding:0 2vw;position:relative;z-index:1}
+#loading .vteam{display:flex;flex-direction:column;align-items:center;gap:10px;flex:1;min-width:0}
+#loading .vteam h3{margin:0;font:900 clamp(15px,1.7vw,24px) 'Orbitron',sans-serif;letter-spacing:.22em;text-shadow:0 0 14px currentColor}
+#loading .vteam.tb h3{color:#5aa8ff}#loading .vteam.tr h3{color:#ff5a68}
+#loading .vrow{display:flex;flex-wrap:wrap;gap:12px;justify-content:center}
+#loading .vcard{position:relative;width:var(--cw);aspect-ratio:2/3;overflow:hidden;background:#0a1020;border:2px solid var(--tc);box-shadow:0 0 22px var(--tg);clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px)}
+#loading .vcard.t0{--tc:#3f93ff;--tg:rgba(63,147,255,.55)}#loading .vcard.t1{--tc:#ff4a5a;--tg:rgba(255,74,90,.55)}
+#loading .vteam.tb .vcard{animation:vcinL .6s both}#loading .vteam.tr .vcard{animation:vcinR .6s both}
+@keyframes vcinL{from{opacity:0;transform:translateX(-60px)}}@keyframes vcinR{from{opacity:0;transform:translateX(60px)}}
+#loading .vimg,#loading .vvid{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}#loading .vimg{background:center/cover no-repeat}
+#loading .vvid{opacity:0;transition:opacity .5s}#loading .vvid.on{opacity:1}
+#loading .vname{position:absolute;left:0;right:0;bottom:0;padding:22px 4px 6px;text-align:center;background:linear-gradient(transparent,rgba(0,0,0,.92));font:900 clamp(11px,1.1vw,16px) 'Orbitron',sans-serif;color:#fff;letter-spacing:.06em}
+#loading .vname small{display:block;font:600 clamp(9px,.8vw,12px) 'Rajdhani',sans-serif;color:#9fe8ff;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#loading .vsmid{flex:none;display:flex;align-items:center;justify-content:center}
+#loading .vsmid span{font:900 clamp(56px,9vw,140px) 'Orbitron',sans-serif;background:linear-gradient(90deg,#3f93ff,#fff 50%,#ff4a5a);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 16px rgba(255,255,255,.45));animation:vsPulse 1.6s ease-in-out infinite}
+@keyframes vsPulse{50%{transform:scale(1.08)}}
+#loading.vsmode .logo,#loading.vsmode .bar,#loading.vsmode .st,#loading.vsmode .tip{position:relative;z-index:1}
+#loading .vteam.few .vrow{flex-wrap:nowrap}
+/* VS loading screen, vertical layout: blue team on top, red team below, VS in the middle */
+#loading.vsmode{gap:1.2vh;background:linear-gradient(180deg,rgba(24,92,230,.45) 0,rgba(10,30,90,.16) 38%,rgba(80,10,20,.16) 62%,rgba(235,40,52,.45) 100%),repeating-linear-gradient(0deg,rgba(63,208,255,.06) 0 1px,transparent 1px 44px),repeating-linear-gradient(90deg,rgba(63,208,255,.06) 0 1px,transparent 1px 44px),radial-gradient(ellipse at 50% 50%,#0a1a38,#02050c 75%)}
+#loading.vsmode .logo{font-size:clamp(18px,3.4vh,34px);margin:0}
+#loading .vsx{flex-direction:column;gap:.4vh;padding:0}
+#loading .vteam{flex:none;width:100%;gap:.8vh}
+#loading .vteam h3{font-size:clamp(12px,1.9vh,20px)}
+#loading .vrow{flex-wrap:nowrap;gap:1.2vh 1vw}
+#loading .vcard{width:min(15vw,18.5vh)}
+#loading .vsmid span{font-size:clamp(34px,8vh,90px)}
+#loading.vsmode .bar{margin-top:.6vh}
+/* champion card: no border, the picture dissolves toward its edges (irregular mask: tools/make_card_fade.py) */
+.panel.pick{border:0;box-shadow:none;background:transparent;overflow:visible}
+.panel.pick .bg{display:none}
+.panel.pick .sp,.panel.pick .cv{-webkit-mask-image:url(assets/ui/card_fade.png);mask-image:url(assets/ui/card_fade.png);-webkit-mask-size:100% 100%;mask-size:100% 100%;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat}
+.panel.pick .ov{background:linear-gradient(transparent,rgba(0,0,0,.35) 60%,transparent)}
+
+/* room list: a confirmed champion shades the player's row with a team-coloured gradient */
+.team.t0 .pl.lk{background:linear-gradient(90deg,rgba(63,147,255,.62),rgba(63,147,255,.14) 70%,rgba(10,24,46,.8))}
+.team.t1 .pl.lk{background:linear-gradient(90deg,rgba(255,74,90,.62),rgba(255,74,90,.14) 70%,rgba(10,24,46,.8))}
+.pl.lk .nm{text-shadow:0 0 8px rgba(0,0,0,.8)}.pl .rd.on{color:#5dff9a}

@@ -1,10 +1,13 @@
 // Full-screen loading screen shown while the game downloads its resources (Boot scene) and until the launcher is ready.
 import './launcher.css';
+import { vsHtml } from './versus.js';
 let el = null, bar = null, st = null;
 export const bootScreen = {
   show() {
     el = document.getElementById('loading');   // already in index.html so something shows while the scripts download
     if (!el) { el = document.createElement('div'); el.id = 'loading'; el.style.zIndex = 120; el.innerHTML = '<div class="logo">SUIKA <b>FIGTHER</b></div><div class="bar"><i></i></div><div class="st">CARGANDO...</div><div class="tip">Preparando campeones, mapa, objetos y sonidos</div>'; document.body.appendChild(el); }
+    if (bootScreen.next && !el.querySelector('.vsx')) { el.classList.add('vsmode'); el.innerHTML = `<div class="logo">SUIKA <b>FIGTHER</b></div>${vsHtml(bootScreen.next)}<div class="bar"><i></i></div><div class="st">CARGANDO...</div><div class="tip">Preparando campeones, mapa, objetos y sonidos</div>`; }
+    bootScreen.next = null;
     bar = el.querySelector('.bar i'); st = el.querySelector('.st');
   },
   progress(pct, text) { if (!el || !bar) return; if (pct != null) bar.style.width = Math.max(2, Math.min(100, pct)) + '%'; if (text) st.textContent = text; },

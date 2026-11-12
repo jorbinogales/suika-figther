@@ -167,7 +167,7 @@ const send = (ws, msg) => sendRaw(ws, JSON.stringify(msg));
 const err = (ws, msg) => send(ws, { t: 'error', msg });
 const teamCount = (room, t) => [...room.players.values()].filter((p) => p.team === t).length;
 const playerList = (room) => [...room.players.values()].map((p) => ({
-  id: p.id, name: p.name, team: p.team, champ: p.champ, ready: p.ready, host: p.id === room.host, connected: p.connected,
+  id: p.id, name: p.name, team: p.team, champ: p.champ, locked: !!p.locked, ready: p.ready, host: p.id === room.host, connected: p.connected,
 }));
 // serialised once for the whole room (snapshots go to up to 10 sockets); the room's headless host gets it too
 const toRoom = (room, msg, except) => {
@@ -332,7 +332,13 @@ const handlers = {
     const room = needRoom(ws, user); if (!room) return;
     if (room.state !== 'lobby') return err(ws, 'La partida ya ha comenzado');
     if (typeof m.key !== 'string' || !m.key || m.key.length > 40) return err(ws, 'Campeón no válido');
-    room.players.get(user.id).champ = m.key;
+    const p = room.players.get(user.id); p.champ = m.key; p.locked = true;   // choosing = confirming (the client only sends this on 'Seleccionar' / double click)
+    pushRoom(room);
+  },
+  unlock_champ(ws, user) {
+    const room = needRoom(ws, user); if (!room) return;
+    if (room.state !== 'lobby') return err(ws, 'La partida ya ha comenzado');
+    room.players.get(user.id).locked = false;
     pushRoom(room);
   },
   set_ready(ws, user, m) {
@@ -355,6 +361,7 @@ const handlers = {
     const room = needRoom(ws, user); if (!room) return;
     if (room.host !== user.id) return err(ws, 'Solo el anfitrión puede iniciar la partida');
     if (room.state !== 'lobby') return err(ws, 'La partida ya ha comenzado');
+    if (![...room.players.values()].every((p) => p.locked && p.champ)) return err(ws, 'Todos los jugadores deben confirmar su campeón');
     room.state = 'loading';
     room.loaded = new Set();
     room.seed = crypto.randomInt(2 ** 31); room.startPlayers = playerList(room);

@@ -1,0 +1,18 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--enable-unsafe-swiftshader','--use-gl=angle','--mute-audio'], defaultViewport: { width: 1280, height: 720 } });
+const p = await b.newPage(); const errs=[]; p.on('console', m => { if (/bounce|bproj/.test(m.text())) console.log(m.text()); }); p.on('pageerror', e => errs.push(e.message));
+await p.goto('http://localhost:5199/#char=julio&mode=3&noai=1&nofog=1&keep=1&br=0010&enemies=luis,axel', { waitUntil: 'load' });
+await p.waitForFunction(() => window.__arena?.player && window.__arena.fighters.length > 3, { timeout: 90000 });
+const sleep = t => new Promise(r => setTimeout(r, t)); await sleep(5000); await p.mouse.click(640, 300); await sleep(500);
+const r = await p.evaluate(() => { const w = window.__arena, f = w.player; f.setBranch('p3', 1); f.ranks = { p1: 0, p2: 0, p3: 3, ult: 0 };
+  const es = w.fighters.filter(x => x.team !== f.team && x.isChamp).slice(0, 3); f.x = 3000; f.y = 1300; f.setAim(1, 0);
+  es.forEach((e, i) => { e.x = f.x + 260 + i * 140; e.y = f.y + (i % 2 ? 90 : -40); e.hp = e.maxHp; e.invulT = 0; e.ai = false; });
+  window.__es = es; return es.map(e => e.key); });
+console.log(r);
+await p.evaluate(() => { const f = window.__arena.player; f.cds.basic = 0; f.state = 'idle'; f.setAim(1, 0); f._tryBasic(); });
+await sleep(450); console.log(await p.evaluate(() => JSON.stringify(window.__arena.projs.map(q => [Math.round(q.x), Math.round(q.y), Math.round(q.ax*100)/100, Math.round(q.ay*100)/100, q.skip?.size, Math.round(q.left), q.s.active])))); console.log(await p.evaluate(() => JSON.stringify(window.__es.map(e => [Math.round(e.x), Math.round(e.y), e.br]))));
+await sleep(1400); console.log('end projs', await p.evaluate(() => JSON.stringify(window.__arena.projs.map(q => [Math.round(q.x), Math.round(q.y), q.skip?.size, Math.round(q.left)]))), await p.evaluate(() => JSON.stringify(window.__es.map(e => [e.hp, e.maxHp, e.alive, e.invulT, !!e.shieldHp]))));
+console.log(await p.evaluate(() => window.__es.map(e => Math.round(e.maxHp - e.hp))));
+await p.screenshot({ path: 'art/review_8dir/_julio_bounce.png' });
+console.log('direct', await p.evaluate(() => { const w = window.__arena, e = window.__es[1], h = e.hp; w.damage(w.player, e, 50, 'magic'); return [h, e.hp, window.__es[1].key]; }));
+console.log(errs.join('\n') || 'no errors'); await b.close();

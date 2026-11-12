@@ -16,7 +16,7 @@ const SNAP = 1 / 60, SNAP_P = 1 / 30, INP = 1 / 60, KF_MS = 1000;   // server ho
 const r1 = v => Math.round(v), r2 = v => Math.round(v * 100) / 100;
 const TYPES = ['physical', 'magic', 'true'];
 const BPH = ['', 'arrive', 'board', 'fly', 'land', 'leave'];   // Yonaiker's ship phases as sent in snapshots (o.bm = [phase, total time, elapsed])
-const TOP = ['m', 'g', 'ld', 'ctl', 'cp', 'wv', 'tr', 'sn'];   // snapshot fields besides the units: sent only when they change
+const TOP = ['m', 'g', 'ld', 'ctl', 'cp', 'wv', 'tr', 'sn', 'bs'];   // snapshot fields besides the units: sent only when they change
 const STILL = { mx: 0, my: 0, run: false }, NONE = {};
 const JUMP = 220, DEAD = 3;   // px: a step between two snapshots longer than JUMP is a teleport (no sliding); own errors below DEAD are ignored
 
@@ -79,6 +79,7 @@ export class NetGame {
     else if (d.k === 'op') {
       if (['buy', 'sell', 'perm'].includes(d.op) && !w.canShop(f)) return;   // the shop only works in the base
       if (d.op === 'recall') { f.startRecall(); return; }
+      if (d.op === 'bpick') { w.bossVoteChoose?.(f, +d.a); return; }   // the war robot's upgrade vote
       if (d.op === 'use') { if (w.control?.target !== f) this.actor(r).useItem(d.a); return; }   // items: those of the champion being driven (like offline)
       if (d.op === 'perm') f.buyPerm(d.a); else if (d.op === 'buy') f.buyItem(d.a); else if (d.op === 'sell') f.sellItem(d.a); else if (d.op === 'spend') { const [kk, bb] = String(d.a).split(':'); f.spend(kk, bb ? 1 : 0); }
     }
@@ -117,6 +118,7 @@ export class NetGame {
   onRecap(v, rc) { if (this.role === 'host') this.ev.push(['rc', v.nid, rc]); }
   onWave(n) { if (this.role === 'host') this.ev.push(['w', n]); }
   onRewind(lines, dur, owner, back) { if (this.role === 'host') this.ev.push(['r', r2(dur), owner.nid, back, lines.map(l => [l.team, l.pts.filter((p, i) => i % 3 === 0 || i === l.pts.length - 1).flat()])]); }
+  onBoss(k, a, b, voice = null) { if (this.role === 'host') this.ev.push(['bs', k, a, b, voice]); }   // boss banners / the war zone appearing: clients replay them
   onShip(i, team) { if (this.role === 'host') this.ev.push(['sh', i, team]); }
   onCamp() { if (this.role === 'host') this.ev.push(['cc']); }
   onShell(sx, sy, tx, ty) { if (this.role === 'host') this.ev.push(['s', r1(sx), r1(sy), r1(tx), r1(ty)]); }
@@ -129,7 +131,7 @@ export class NetGame {
     if (f.pid != null) { const r = this.remote.get(f.pid); if (r?.q) o.q = r.q; }   // ack: the last input of that player already applied
     if (f.team !== f.baseTeam) o.tm = f.team;
     if (f.rootT > 0) o.rt = r2(f.rootT); if (f.stunT > 0) o.st = r2(f.stunT); if (f.silenceT > 0) o.sl = r2(f.silenceT); if (f.blindT > 0) o.bl = r2(f.blindT); if (f.charmT > 0) o.ch = r2(f.charmT);
-    if (f.shieldHp > 0) o.sd = [r1(f.shieldHp), f.shieldT > 1e6 ? 1e7 : r2(f.shieldT)]; if (f.speedT > 0) o.sp = [r2(f.speedBoost), r2(f.speedT)];
+    if (f.shieldHp > 0) o.sd = [r1(f.shieldHp), f.shieldT > 1e6 ? 1e7 : r2(f.shieldT)]; if (f.inkSh) o.is = f.inkSh.rank; if (f.puddle) o.pd = 1; if (f.speedT > 0) o.sp = [r2(f.speedBoost), r2(f.speedT)];
     if (f.slows.length) o.sw = f.slows.map(s => [r2(s.pct), r2(s.t)]);
     if (f.poisons.length) o.pn = r2(Math.max(...f.poisons.map(p => p.t)));
     if (f.lure?.src) o.lr = [f.lure.src.nid, r2(f.lure.t)];   // Xeviche's heart: who the target walks to
@@ -139,7 +141,7 @@ export class NetGame {
     if (f.def.bot === 'crate' || f.key === 'roach' || f.def.guard) { o.mh = r1(f.maxHp); if (f.bugK) o.bs = r2(f.bugK); }   // summons with upgraded health / size (Maduro)
     if (f.invis) o.iv = f.invis.t === Infinity ? -1 : r2(f.invis.t); if (f.ink) o.ik = r2(f.ink.t); if (f.away) o.aw = 1;
     if (this.w.control?.mode === 'remote' && this.w.control.target === f) o.ch = r2(this.w.control.t);   // shows 'controlled' on that player's screen
-    if (f.recall) o.rc = r2(f.recall.t); if (f.recallFx) o.rf = [f.recallFx.phase === 'out' ? 1 : 2, r2(f.recallFx.t)]; if (f.protein) o.pr = r2(f.protein.t);
+    if (f.recall) o.rc = r2(f.recall.t); if (f.recallFx) o.rf = [f.recallFx.phase === 'out' ? 1 : 2, r2(f.recallFx.t)]; if (f.protein) o.pr = r2(f.protein.t); if (f.key === 'maduro') { o.gt = r1(f.guardT ?? 0); o.gn = f.guards?.length || 0; }
     if (f.isChamp) {
       o.kd = [f.kills, f.deaths, f.assists]; o.m = r1(f.mana); o.lv = f.level; o.xp = r1(f.xp); o.gd = r1(f.gold); o.pt = f.points;
       o.rk = ABILITY_KEYS.map(a => f.ranks[a]); o.cd = [...ABILITY_KEYS.map(a => r2(f.cds[a])), r2(f.cds.basic)];
@@ -159,7 +161,7 @@ export class NetGame {
     const w = this.w, c = w.control, ts = Math.round(performance.now());
     const l = this.ev.length ? this.ev : undefined; this.ev = [];   // the events since the last snapshot travel in it (one message per tick instead of two); applied before it
     if (!this.ld || ts - this.ldT >= 500) { this.ld = [r1((this.ftSum || 0) / Math.max(1, this.ftN || 1)), r1(this.ftMax || 0)]; this.ldT = ts; this.ftSum = this.ftN = this.ftMax = 0; }   // host frame time, every 0.5 s
-    const top = { m: w.mortars.map(m => [r1(m.x), r1(m.y)]), g: r1(w.gameT), ld: this.ld, ctl: c ? [c.luis.nid, c.target.nid, r2(c.t)] : 0, cp: (w.camps || []).map(k => [k.owner ?? -1, r2(k.prog[0]), r2(k.prog[1]), k.contested ? 1 : 0, r1(k.spawnT)]), wv: r1(w.waveT), tr: (w.traps || []).map(q => [r1(q.x), r1(q.y), q.team, q.r, r1(q.t)]), sn: (w.sentinels || []).map(q => [r1(q.x), r1(q.y), q.team, q.r, r1(q.t)]) };
+    const top = { m: w.mortars.map(m => [r1(m.x), r1(m.y)]), g: r1(w.gameT), ld: this.ld, ctl: c ? [c.luis.nid, c.target.nid, r2(c.t)] : 0, cp: (w.camps || []).map(k => [k.owner ?? -1, r2(k.prog[0]), r2(k.prog[1]), k.contested ? 1 : 0, r1(k.spawnT)]), wv: r1(w.waveT), tr: (w.traps || []).map(q => [r1(q.x), r1(q.y), q.team, q.r, r1(q.t)]), sn: (w.sentinels || []).map(q => [r1(q.x), r1(q.y), q.team, q.r, r1(q.t)]), bs: w.bosses ? ['beast', 'captain', 'robot'].map(k => { const b = w.bosses[k]; return [Math.max(0, Math.ceil(b.t)), !!b.f?.alive, b.phase || '']; }) : null };
     const fs = w.fighters.map(f => this.packF(f)), P = this.prevF, cur = new Map(), msg = { k: 'snap', n: ++this.sn, ts, l }, tj = {};
     for (const k of TOP) tj[k] = JSON.stringify(top[k]);
     if (!P || this.wantKf || ts - this.kfT >= KF_MS) {   // keyframe: the whole state
@@ -325,6 +327,7 @@ export class NetGame {
     for (const f of w.fighters) if (f.nid >= 1000 && !seen.has(f.nid) && f.alive && !f.dispose) f.dispose = true;   // vanished on the host (expired summon, ...)
     if (s.cp) s.cp.forEach((k, i) => { const c = w.camps?.[i]; if (c) { c.owner = k[0] < 0 ? null : k[0]; c.prog = [k[1], k[2]]; c.contested = !!k[3]; c.spawnT = k[4]; } });
     if (s.wv != null) w.waveT = s.wv;
+    if (s.bs && w.bosses) s.bs.forEach(([t, up, phase], i) => { const b = w.bosses[['beast', 'captain', 'robot'][i]]; if (b) { b.t = t; b.up = up; b.synced = true; if (phase) b.phase = phase; } });
     if (s.tr) { w.traps = s.tr.map((q, i) => Object.assign(w.traps?.[i] || {}, { x: q[0], y: q[1], team: q[2], r: q[3], t: q[4] })); }
     if (s.sn) { w.sentinels = s.sn.map((q, i) => Object.assign(w.sentinels?.[i] || { owner: { alive: true } }, { x: q[0], y: q[1], team: q[2], r: q[3], t: q[4] })); }
     // Luis' mind control: the controller's camera and HUD follow the controlled champion
@@ -348,7 +351,7 @@ export class NetGame {
     // statuses
     const stun = o.st || 0; if (stun > 0 && f.stunT <= 0) { f.state = 'stun'; f.pending = null; } f.stunT = stun; if (stun <= 0 && f.state === 'stun') { f.state = 'idle'; f.playAnim('idle'); }
     f.rootT = o.rt || 0; f.silenceT = o.sl || 0; f.blindT = o.bl || 0; f.charmT = o.ch || 0; f.team = o.tm ?? f.baseTeam;
-    f.shieldHp = o.sd ? o.sd[0] : 0; f.shieldT = o.sd ? o.sd[1] : 0; f.speedBoost = o.sp ? o.sp[0] : 0; f.speedT = o.sp ? o.sp[1] : 0;
+    f.shieldHp = o.sd ? o.sd[0] : 0; f.shieldT = o.sd ? o.sd[1] : 0; f.inkSh = o.is ? { rank: o.is } : null; if (o.pd) f.puddle ||= { t: 9, r: 0, hit: new Map() }; else f.puddle = null; f.speedBoost = o.sp ? o.sp[0] : 0; f.speedT = o.sp ? o.sp[1] : 0;
     f.slows = (o.sw || []).map(a => ({ pct: a[0], t: a[1] }));
     f.poisons = o.pn ? [{ dps: 0, t: o.pn, tick: 0, src: f }] : [];
     { const ls = o.lr && this.fighter(o.lr[0]); f.lure = ls ? { src: ls, t: o.lr[1] } : null; const fo = o.fs && this.fighter(o.fs[0]); f.fist = fo ? { owner: fo, n: o.fs[1], t: o.fs[2] } : null; }
@@ -358,7 +361,7 @@ export class NetGame {
     if (o.lf) { f.lfShow = o.lf; f.enraged = !!o.en; }
     const ivT = o.iv < 0 ? Infinity : o.iv; f.invis = o.iv != null ? (f.invis ? Object.assign(f.invis, { t: ivT }) : { t: ivT, trail: 0.15 }) : null;   // keep the trail timer: resetting it every snapshot meant Luis' silhouettes never appeared
     f.ink = o.ik ? { t: o.ik, src: null } : null; f.away = !!o.aw;
-    f.recall = o.rc != null ? { t: o.rc, T: f.recall?.T || Math.max(o.rc, 10) } : null; f.recallFx = o.rf ? { phase: o.rf[0] === 1 ? 'out' : 'in', t: o.rf[1] } : null; f.protein = o.pr != null ? { t: o.pr, tick: 0, hps: 0 } : null;
+    f.recall = o.rc != null ? { t: o.rc, T: f.recall?.T || Math.max(o.rc, 10) } : null; f.recallFx = o.rf ? { phase: o.rf[0] === 1 ? 'out' : 'in', t: o.rf[1] } : null; if (o.gt != null) { f.guardT = o.gt; f.guards = Array(o.gn || 0).fill(0); } f.protein = o.pr != null ? { t: o.pr, tick: 0, hps: 0 } : null;
     if (f.isChamp) {
       if (!first && o.lv > f.level) { w.audio.play('levelup', { at: f, vol: local ? 1 : 0.5, gap: 0 }); w.vfx('levelup', f.x, f.y - 20, { scale: 3.2 }); w.float(f.x, f.y - f.def.height - 30, `NIVEL ${o.lv}`, '#ffe066'); }
       if (o.kd) [f.kills, f.deaths, f.assists] = o.kd;
@@ -423,6 +426,8 @@ export class NetGame {
     } else if (e[0] === 'r') {   // Jorbi's rewind trails
       w.announceRewind(this.fighter(e[2]) || w.player, e[3], e[1]);
       w.showRewind(e[4].map(([team, flat]) => ({ team, pts: Array.from({ length: flat.length / 2 }, (_, i) => [flat[i * 2], flat[i * 2 + 1]]) })), e[1]);
+    } else if (e[0] === 'bs') {
+      if (e[1] === 'bn') { const banner = { title: e[2], sub: e[3], team: 2 }; if (e[4]) w.audio.voice(e[4], 4, null, banner); else w.showBanner(banner, 3200); w.audio.play('explosion_big', { gap: 0, vol: 0.55 }); } else if (e[1] === 'wz') { w.bossLandFx?.(); w.bossWarZone?.(); } else if (e[1] === 'pl') w.bossPlaneVisual?.(); else if (e[1] === 'bp') { const v = e[2]; if (w.player?.team === v.team) w.bossPick = { cards: v.opts.map(id => ({ type: 'buff', id })), title: '¡ROBOT DESTRUIDO!', sub: 'Elige una de las tres mejoras: la recibe todo tu equipo' }; } else if (e[1] === 'bpd') w.bossPick = null; else if (e[1] === 'tl') { const [x, y, r, t, col, cone] = e[2]; w.tel?.(x, y, r, t, col, cone ? { a: cone[0], h: cone[1] } : null); }
     } else if (e[0] === 'sh') {   // reinforcement ship (the minions arrive in the next snapshot)
       const c = w.camps?.[e[1]]; if (c) w.shipVisual(c, e[2]);
     } else if (e[0] === 's') {

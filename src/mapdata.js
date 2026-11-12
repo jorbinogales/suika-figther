@@ -38,6 +38,15 @@ for (const sx of [1, -1]) for (const li of [0, 2]) {   // curved ramps from each
 CONNECTORS.forEach(([a, b, x]) => poly([[x, laneYAt(a, x), 120 * F], [x, (laneYAt(a, x) + laneYAt(b, x)) / 2, 100 * F], [x, laneYAt(b, x), 120 * F]]));   // paths between lanes
 
 
+// Boss places. Beast lair: a clearing cut into the blue-side forest right next to the river, between the middle and bottom lanes (opens to the river).
+// Captain camp mirrors the beast clearing between top and middle on the red side, with an opening to the river.
+export const LAIR_BEAST = (() => { const x = CX - 270 * F - 360; return { x, y: (laneYAt(1, x) + laneYAt(2, x)) / 2, r: 300 }; })();
+export const CAMP_CAPTAIN = (() => { const x = WORLD_W - LAIR_BEAST.x; return { x, y: (laneYAt(0, x) + laneYAt(1, x)) / 2, r: LAIR_BEAST.r }; })();
+export const ARENA_ROBOT = { x: CX, y: WORLD_H / 2, r: 560 };
+circle(LAIR_BEAST.x, LAIR_BEAST.y, LAIR_BEAST.r); poly([[LAIR_BEAST.x + 160, LAIR_BEAST.y, 170], [CX + riverOffset(LAIR_BEAST.y) - 80, LAIR_BEAST.y, 130]]);
+circle(CAMP_CAPTAIN.x, CAMP_CAPTAIN.y, CAMP_CAPTAIN.r); poly([[CAMP_CAPTAIN.x - 160, CAMP_CAPTAIN.y, 170], [CX + riverOffset(CAMP_CAPTAIN.y) + 80, CAMP_CAPTAIN.y, 130]]);
+
+
 // Small trails through the forest: narrow, walkable, no trees, drawn with the same grass as the forest floor (not dirt). Each one winds from a lane to the next lane (always with an exit at both ends).
 export const grass = new Uint8Array(GW * GH);
 const carveGrass = (cx, cy, r) => {
@@ -69,7 +78,8 @@ export const walkField = (x, y) => {
   return (sm(i, j) * (1 - fx) + sm(i + 1, j) * fx) * (1 - fy) + (sm(i, j + 1) * (1 - fx) + sm(i + 1, j + 1) * fx) * fy;
 };
 // walkable where the cell grid says so OR where the ground is painted as path (never blocks anything that used to be open)
-export const isWalk = (x, y) => x >= 0 && y >= 0 && x < WORLD_W && y < WORLD_H && (cellWalk(Math.floor(x / CELL), Math.floor(y / CELL)) || walkField(x, y) >= 0.46);
+export const OPEN = { on: false };   // survival mode: the whole map is open ground (no forest, no lanes)
+export const isWalk = (x, y) => OPEN.on ? x >= 0 && y >= 0 && x < WORLD_W && y < WORLD_H : x >= 0 && y >= 0 && x < WORLD_W && y < WORLD_H && (cellWalk(Math.floor(x / CELL), Math.floor(y / CELL)) || walkField(x, y) >= 0.46);
 
 const smoothG = new Float32Array(GW * GH);
 for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) {

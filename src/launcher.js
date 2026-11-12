@@ -4,8 +4,10 @@ import { net, BOT } from './net.js';
 import { STAT_STYLE, statCss, scaleRows, rowStat, pct } from './stats.js';
 import { CHAMPIONS, CLASSES, CLASS_TABS, classLabel, ABILITY_KEYS } from './data.js';
 import { ITEM_BY_ID } from './items.js';
+import { svBest } from './survival.js';
 import { vol, saveVol, gv } from './audio.js';
 import { bootScreen } from './bootscreen.js';
+import { vsHtml, videoTag } from './versus.js';
 
 // Launcher: login / register, news, room buttons, lobby with champion pick and the loading screen.
 // It is plain HTML/CSS over the (idle) Phaser canvas; the Phaser scene only owns its lifetime.
@@ -114,7 +116,7 @@ function send(t, o) { if (!net.online) { toast('Sin conexión con el servidor. R
 
 const champTabs = () => `<div class="ctabs">${CLASS_TABS.map(c => `<button class="ctab ${clsFilter === c ? 'on' : ''}" data-cls="${c}" title="${esc(classLabel(c))}"><img src="assets/classes/${c}.png" alt="" onerror="this.style.display='none'"><span>${esc(classLabel(c))}</span><i>${c === 'todos' ? KEYS.length : KEYS.filter(k => CHAMPIONS[k].cls === c).length}</i></button>`).join('')}</div>`;
 const champGrid = (sel, taken = () => false) => `<div class="champs" id="champs">${KEYS.filter(k => clsFilter === 'todos' || CHAMPIONS[k].cls === clsFilter).map(k => `<div class="cc ${k === sel ? 'sel' : ''} ${taken(k) ? 'taken' : ''}" data-k="${k}"><div class="im" style="${faceCss(k)}"></div><div class="lb">${esc(CHAMPIONS[k].name)}</div></div>`).join('')}</div>`;
-const lockedCard = (k, d) => { const fx = fxNext; fxNext = false; return `<div class="panel pick ${fx ? 'fx' : ''}"><div class="bg" style="background-image:url(assets/concept/${k}.webp)"></div><img class="sp" src="assets/concept/${k}.webp" alt=""><div class="ov"><div class="sn">${esc(d.name)}<small>${esc(CLASSES[d.cls]?.label || '')}</small></div>${abilityStrip(d)}<button class="btn ghost" data-a="unlock">Cambiar campeón</button></div>${fx ? '<div class="glt"></div>' : ''}</div>`; };
+const lockedCard = (k, d) => { const fx = fxNext; fxNext = false; return `<div class="panel pick ${fx ? 'fx' : ''}"><div class="bg" style="background-image:url(assets/concept/${k}.webp)"></div><img class="sp" src="assets/concept/${k}.webp" alt="">${videoTag(k)}<div class="ov"><div class="sn">${esc(d.name)}<small>${esc(CLASSES[d.cls]?.label || '')}</small></div>${abilityStrip(d)}<button class="btn ghost" data-a="unlock">Cambiar campeón</button></div>${fx ? '<div class="glt"></div>' : ''}</div>`; };
 const splash = (k, d) => `<div class="splash" style="background-image:url(assets/concept/${k}.webp)"><div class="sn">${esc(d.name)}<small>${esc(CLASSES[d.cls]?.label || '')}</small></div></div>`;
 const si = k => `<img class="si" src="assets/stats/${k}.png?v=${BUILD}" alt="">`;
 const scaleHtml = (ab, st) => {   // [stat icon] (value at rank 1 -> rank 3) in the stat color + formula; uses the champion's level-1 stats
@@ -132,28 +134,29 @@ function lobbyScreen() {
   const keep = { txt: $('#chatin', view)?.value || '', focus: document.activeElement?.id === 'chatin', sc: $('#champs', view)?.parentElement?.scrollTop || 0 };
   const first = screen !== 'lobby'; screen = 'lobby';
   const me = net.me, host = me?.host || r.host === net.user.id, pl = r.players || [];
-  const sel = picked || me?.champ || KEYS[0], d = CHAMPIONS[sel], st = d.stats;
+  const sel = (me?.locked && me.champ) || picked || me?.champ || KEYS[0], d = CHAMPIONS[sel], st = d.stats;
   const team = t => { const ps = pl.filter(p => p.team === t); let h = '';
-    for (let i = 0; i < PER_TEAM; i++) { const p = ps[i]; h += p ? `<div class="pl ${p.id === net.user.id ? 'me' : ''}">${face(p.champ)}<div class="nm">${p.host ? '<span class="crown">♛</span> ' : ''}${esc(p.name)}<div class="ch">${p.champ ? esc(CHAMPIONS[p.champ]?.name || p.champ) : 'Sin campeón'}${p.connected === false ? ' · desconectado' : ''}</div></div><span class="rd ${p.ready ? 'on' : ''}">${p.ready ? 'LISTO' : 'ESPERA'}</span></div>` : '<div class="pl empty"><div class="face"></div><div class="nm ch">Libre</div></div>'; }
+    for (let i = 0; i < PER_TEAM; i++) { const p = ps[i]; h += p ? `<div class="pl ${p.id === net.user.id ? 'me' : ''} ${p.locked ? 'lk' : ''}">${face(p.locked ? p.champ : null)}<div class="nm">${p.host ? '<span class="crown">♛</span> ' : ''}${esc(p.name)}<div class="ch">${p.locked && p.champ ? esc(CHAMPIONS[p.champ]?.name || p.champ) : 'Eligiendo campeón...'}${p.connected === false ? ' · desconectado' : ''}</div></div><span class="rd ${p.locked ? 'on' : ''}">${p.locked ? 'CONFIRMADO' : 'ELIGIENDO'}</span></div>` : '<div class="pl empty"><div class="face"></div><div class="nm ch">Libre</div></div>'; }
     return `<div class="team t${t}"><h4>${t === 0 ? 'EQUIPO AZUL · MILITARES' : 'EQUIPO ROJO · ROBOTS'} (${ps.length}/${PER_TEAM}) ${me && me.team !== t && ps.length < PER_TEAM ? `<button class="btn sm ghost" style="padding:3px 10px" data-a="team" data-t="${t}">Unirme</button>` : ''}</h4>${h}</div>`; };
-  const allPicked = pl.length && pl.every(p => p.champ), allReady = pl.filter(p => !p.host).every(p => p.ready);
+  const nLocked = pl.filter(p => p.locked && p.champ).length, allPicked = pl.length > 0 && nLocked === pl.length;   // the match can start only when everybody confirmed a champion
+  const lk = !!me?.locked;
   view.innerHTML = `<div class="scr ${first ? '' : 'noanim'}">${header()}<div class="lobby">
     <div class="col"><div class="panel"><h2>CÓDIGO DE SALA</h2><div class="code" data-a="copy" title="Clic para copiar">${esc(r.code)}</div><div style="text-align:center;color:var(--mut);font-size:14px;margin-top:4px">${pl.length}/${MAXP} jugadores · clic para copiar</div></div>
       <div class="panel scroll">${team(0)}${team(1)}</div></div>
-    <div class="col">${locked ? lockedCard(sel, d) : `<div class="panel scroll"><h2>ELIGE TU CAMPEÓN</h2>
+    <div class="col">${lk ? lockedCard(sel, d) : `<div class="panel scroll"><h2>ELIGE TU CAMPEÓN</h2>
       ${champTabs()}
-      ${champGrid(sel, k => pl.some(p => p.champ === k && p.id !== net.user.id))}
+      ${champGrid(sel, k => pl.some(p => p.locked && p.champ === k && p.id !== net.user.id))}
 </div>
       <div class="panel info">${abilityStrip(d)}${altStrip(d)}<button class="btn go" data-a="lock">Seleccionar</button></div>`}</div>
     <div class="col"><div class="panel chat"><h2>CHAT</h2><div class="log" id="log"></div><input class="fld" id="chatin" maxlength="200" placeholder="Escribe y pulsa Enter" autocomplete="off"></div>
-      <div class="panel"><div class="row" style="margin-bottom:10px"><button class="btn ${me?.ready ? 'warn' : 'go'}" data-a="ready">${me?.ready ? 'Cancelar listo' : 'Estoy listo'}</button><button class="btn ghost" data-a="leave">Salir</button></div>
-      ${host ? `<button class="btn go" style="width:100%" data-a="start" ${allPicked ? '' : 'disabled'}>Iniciar partida${allReady ? '' : ' (hay jugadores sin marcar listo)'}</button>` : '<div style="text-align:center;color:var(--mut)">Esperando a que el anfitrión inicie la partida...</div>'}
+      <div class="panel"><div class="row" style="margin-bottom:10px"><button class="btn ghost" data-a="leave">Salir</button></div>
+      ${host ? `<button class="btn go" style="width:100%" data-a="start" ${allPicked ? '' : 'disabled'}>Iniciar partida${allPicked ? '' : ` (campeones confirmados: ${nLocked}/${pl.length})`}</button>` : `<div style="text-align:center;color:var(--mut)">${allPicked ? 'Esperando a que el anfitrión inicie la partida...' : `Esperando a que todos confirmen su campeón (${nLocked}/${pl.length})`}</div>`}
       <div class="err"></div></div></div></div></div>`;
   renderChat();
   const ci = $('#chatin', view); ci.value = keep.txt; if (keep.focus) ci.focus();
   ci.addEventListener('keydown', e => { if (e.key === 'Enter' && ci.value.trim()) { net.send('chat', { text: ci.value.trim() }); ci.value = ''; } });
   if (!first && $('#champs', view)) $('#champs', view).parentElement.scrollTop = keep.sc;
-  if (me && !me.champ && !picked) { picked = KEYS.filter(k => !pl.some(p => p.champ === k))[0] || KEYS[0]; net.send('pick_champ', { key: picked }); }   // everyone always has a champion
+  if (!picked) picked = KEYS.filter(k => !pl.some(p => p.locked && p.champ === k))[0] || KEYS[0];   // only a local preview: it counts once confirmed (Seleccionar / double click)
 }
 
 
@@ -180,13 +183,16 @@ function practiceScreen() {
       <div class="panel info">${abilityStrip(d)}${altStrip(d)}<button class="btn go" data-a="lock">Seleccionar</button></div>`}</div>
     <div class="col"><div class="panel"><h2>JUGAR</h2><div class="acts">
         <button class="btn big go" data-a="pplay">Jugar partida<small>${prac.mode} vs ${prac.mode} contra la IA, con oleadas, torres y nexos.</small></button>
-        <button class="btn big" data-a="ptrain">Zona de entrenamiento<small>Nivel 12, sin costo de maná y un muñeco para practicar.</small></button></div></div>
+        <button class="btn big" data-a="ptrain">Zona de entrenamiento<small>Nivel 12, sin costo de maná y un muñeco para practicar.</small></button>
+        <button class="btn big" data-a="psurv">Supervivencia<small>Mapa abierto y oleadas de bichos sin fin. Cada nivel eliges una mejora. Récord: oleada ${svBest()}.</small></button></div></div>
       <div class="panel"><h2>CONTROLES</h2><div style="font-size:15px;line-height:1.5;color:var(--tx)">WASD mover · Shift correr · clic o J atacar<br>Q F E R poderes (clic para lanzar) · Ctrl + tecla sube el poder<br>B volver a la base · P tienda · 1-6 usar objetos · Esc menú</div></div></div></div></div>`;
   if (!first && $('#champs', view)) $('#champs', view).parentElement.scrollTop = keep;
 }
-function practiceStart(training) {
+function practiceStart(kind) {   // true = training zone, 'surv' = survival minigame, false = full match vs the AI
   snd('ui_confirm'); stopMusic();
-  scene.scene.start('arena', { training, mode: training ? 1 : prac.mode, player: prac.me, enemies: prac.enemies.slice(0, training ? 1 : 99), allies: training ? [] : prac.allies, team: prac.team, haveSprites: scene.registry.get('sprites') });
+  const training = kind === true, survival = kind === 'surv', solo = training || survival;
+  if (!survival) { const mine = [prac.me, ...(solo ? [] : prac.allies)], foes = prac.enemies.slice(0, training ? 1 : 99), pick = (a, lab) => a.map((k, i) => ({ k, label: lab(i) })); bootScreen.next = prac.team === 0 ? { blue: pick(mine, i => i ? 'Aliado' : 'Tú'), red: pick(foes, () => 'IA') } : { blue: pick(foes, () => 'IA'), red: pick(mine, i => i ? 'Aliado' : 'Tú') }; }   // the VS loading screen
+  scene.scene.start('arena', { training, survival, mode: solo ? 1 : prac.mode, player: prac.me, enemies: survival ? [] : prac.enemies.slice(0, training ? 1 : 99), allies: solo ? [] : prac.allies, team: prac.team, haveSprites: scene.registry.get('sprites') });
 }
 
 function renderChat() {
@@ -197,11 +203,12 @@ function renderChat() {
 
 /* ---------- loading screen + game start ---------- */
 let loadEl = null;
-function loading(players) {
+function loading(players, roster) {
   loadEl?.remove();
-  loadEl = document.createElement('div'); loadEl.id = 'loading';
-  const tm = t => `<div class="tm t${t}"><b>${t === 0 ? 'EQUIPO AZUL' : 'EQUIPO ROJO'}</b>${players.filter(p => p.team === t).map(p => `<div style="display:flex;gap:8px;align-items:center">${face(p.champ)}<span>${esc(p.name)} · ${esc(CHAMPIONS[p.champ]?.name || '')}</span></div>`).join('')}</div>`;
-  loadEl.innerHTML = `<div class="logo">SUIKA <b>FIGTHER</b></div><div class="vs">${tm(0)}${tm(1)}</div><div class="bar"><i></i></div><div class="st"></div><div class="tip"></div>`;
+  loadEl = document.createElement('div'); loadEl.id = 'loading'; loadEl.className = 'vsmode';
+  const who = r => { const p = players.find(q => q.id === r.pid); return { k: r.key, label: p ? p.name : 'IA' }; };
+  const vs = { blue: roster.filter(r => r.team === 0).map(who), red: roster.filter(r => r.team === 1).map(who) };
+  loadEl.innerHTML = `<div class="logo">SUIKA <b>FIGTHER</b></div>${vsHtml(vs)}<div class="bar"><i></i></div><div class="st"></div><div class="tip"></div>`;
   document.body.appendChild(loadEl);
   const TIPS = ['Las torres solo reciben daño de ataques básicos. Los súbditos sirven de escudo.', 'Vuelve a la base para curarte y comprar objetos (tecla B).', 'Mejora tus objetos con oro: gris, verde, azul, morado y rojo.', 'Ctrl + tecla de habilidad sube su rango.', 'Las definitivas se desbloquean en los niveles 4, 8 y 12.'];
   $('.tip', loadEl).textContent = 'CONSEJO: ' + TIPS[Math.random() * TIPS.length | 0];
@@ -223,7 +230,7 @@ function buildCfg(players, seed, host = net.room?.host) {
 
 function beginGame(m) {
   if (m.rejoin && net.user.id === m.host) { net.send('leave_room'); net.room = null; route(); return toast('Tu partida terminó al cerrar la página: el anfitrión no puede reconectarse.'); }   // the host's match lived in the page that closed
-  const players = m.players || net.room?.players || [], prog = loading(players);
+  const players = m.players || net.room?.players || [], cfg0 = buildCfg(players, m.seed ?? 1, m.host ?? net.room?.host), prog = loading(players, cfg0.roster);
   prog(8, 'SINCRONIZANDO SALA...'); snd('ui_start'); stopMusic();
   let sent = false, done = false;
   const off = net.on(x => { if (x.t === 'go') { done = true; prog(100, '¡COMIENZA LA PARTIDA!'); setTimeout(hideLoading, 400); off(); } });
@@ -265,8 +272,12 @@ function onNet(m) {
 const actions = {
   logout() { net.logout(); chat = []; loginScreen(); },
   practice() { snd('ui_confirm'); locked = false; practiceScreen(); },
-  lock() { snd('ui_confirm'); voiceSelect(); locked = true; fxNext = true; refresh(); },
-  unlock() { locked = false; refresh(); },
+  lock() {
+    snd('ui_confirm'); voiceSelect(); fxNext = true;
+    if (screen === 'lobby' && net.room) { net.send('pick_champ', { key: picked || net.me?.champ || KEYS[0] }); return; }   // online: the server confirms it and the room refreshes
+    locked = true; refresh();
+  },
+  unlock() { if (screen === 'lobby' && net.room) { net.send('unlock_champ'); return; } locked = false; refresh(); },
   pback() { snd('ui_back'); route(); },
   pmode(el) { prac.mode = +el.dataset.m; practiceScreen(); },
   pteam(el) { prac.team = +el.dataset.t; practiceScreen(); },
@@ -274,6 +285,7 @@ const actions = {
   pslot(el) { const arr = prac[el.dataset.g], i = +el.dataset.i; arr[i] = KEYS[(KEYS.indexOf(arr[i]) + 1) % KEYS.length]; practiceScreen(); },
   pplay() { practiceStart(false); },
   ptrain() { practiceStart(true); },
+  psurv() { practiceStart('surv'); },
   ntoggle(t) { const ul = t.parentElement.querySelector('ul'); ul.hidden = !ul.hidden; t.textContent = ul.hidden ? 'Ver detalles ▾' : 'Ocultar detalles ▴'; },
   quick() { toast('Buscando partida...', true); send('quick_join'); },
   create() { send('create_room', { public: false }); },
@@ -301,9 +313,10 @@ export class Launcher extends Phaser.Scene {
       const t = e.target.closest('[data-a]'); if (t) { if (!['logout', 'leave', 'practice', 'quick', 'create', 'joinbox'].includes(t.dataset.a)) snd('ui_click'); actions[t.dataset.a]?.(t); return; }
       const ct = e.target.closest('[data-cls]'); if (ct) { clsFilter = ct.dataset.cls; snd('ui_tab'); refresh(); return; }
       const c = e.target.closest('.cc'); if (c && screen === 'practice') { prac.me = c.dataset.k; snd('ui_tab'); practiceScreen(); return; }
-      if (c && net.room) { picked = c.dataset.k; snd('ui_tab'); net.send('pick_champ', { key: picked }); lobbyScreen(); }
+      if (c && net.room) { picked = c.dataset.k; snd('ui_tab'); lobbyScreen(); }   // a click only previews; confirm with 'Seleccionar' or a double click
       else if (e.target.closest('.btn') && !e.target.closest('[data-m],[data-tab]')) snd('ui_click');
     });
+    root.addEventListener('dblclick', e => { const c = e.target.closest('.cc'); if (!c) return; if (screen === 'practice') { prac.me = c.dataset.k; actions.lock(); } else if (screen === 'lobby' && net.room && !net.me?.locked) { picked = c.dataset.k; actions.lock(); } });
     root.addEventListener('input', e => { const k = e.target.dataset?.vol; if (!k) return; vol[k] = e.target.value / 100; saveVol(); e.target.style.setProperty('--v', e.target.value + '%'); const pc = $('#pc-' + k, root); if (pc) pc.textContent = e.target.value + '%'; if (k === 'music' && music) music.volume = Math.min(1, gv(vol.music)); });
     startMusic(); document.addEventListener('pointerdown', () => { if (musicWanted && music?.paused) music.play().catch(() => {}); }, { once: true });
     this.events.once('shutdown', () => { unsub?.(); root.remove(); root = null; stopMusic(); });

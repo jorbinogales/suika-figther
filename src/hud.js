@@ -3,6 +3,7 @@ import { CLASSES, CHAMPIONS, ABILITY_KEYS, MAX_LEVEL, MAX_RANK, ULT_LEVELS, rk }
 import { WORLD_W, WORLD_H, CAMPS } from './fighter.js';
 import { walk, grass, GW, GH, CELL, RIVER, riverOffset, BASE_Y, F } from './mapdata.js';
 import { levelGauge } from './world.js';
+import { BOSS_T, ROBOT_AT } from './bosses.js';
 import { vol, saveVol } from './audio.js';
 import { net } from './net.js';
 import { STAT_STYLE, statCss, scaleRows, rowStat, pct } from './stats.js';
@@ -156,7 +157,7 @@ export class Hud extends Phaser.Scene {
     if (A.control && A.control.mode === 'ctrl') this.T('ctrlT', `CONTROLANDO a ${A.control.target.def.name.toUpperCase()} · ${A.control.t.toFixed(1)}s`, W / 2, 90 * u, { size: 18 * u, bold: true, color: '#33ff88', origin: [0.5, 0], stroke: 4 });
 
     this.drawBanner(A, u, W);
-    {   // scoreboard: the player's K / D / A hangs from the top-centre, team kills + match clock at the top-right
+    if (!A.survival) {   // scoreboard: the player's K / D / A hangs from the top-centre, team kills + match clock at the top-right
       const kd = this.layout.hud_kda, K = this.place('hud_kda', W / 2 - kd.w * u / 2, 0, u), sc = this.layout.hud_score, S = this.place('hud_score', W - sc.w * u - m, m, u);
       // glow pulse when a number goes up: remember the last value of every counter and flash its box for 1.2 s
       const pulse = (id, q, val, col) => {
@@ -179,7 +180,7 @@ export class Hud extends Phaser.Scene {
       this.T('sR', `${tk[1]}`, nr.x + nr.w / 2, nr.y + nr.h / 2, { size: nr.h * 0.7, bold: true, color: '#ff8a8a', origin: [0.5, 0.5], stroke: 4 });
       pulse('sB', nb, tk[0], 0x4aa3ff); pulse('sR', nr, tk[1], 0xff4a4a);
       this.scoreH = sc.h * u + 6 * u;
-    }
+    } else this.scoreH = 0;
     if (A.net && net.online && net.ping != null) {   // live connection quality: ping, its worst recent value, snapshot jitter and the server host's frame time
       const col = v => (v < 80 ? '#7dff9a' : v < 150 ? '#ffd23f' : '#ff6a6a'), ld = net.load;
       this.T('netPing', `PING ${net.ping} ms  pico ${net.pingMax}`, W - 10 * u, (this.scoreH || 0) + 4 * u, { size: 12 * u, bold: true, color: col(net.pingMax), origin: [1, 0], stroke: 3, depth: 25 });
@@ -218,10 +219,10 @@ export class Hud extends Phaser.Scene {
     this.T('heroName', `${p.def.name.toUpperCase()} · Nv${p.level}`, nm.x + nm.w / 2, nm.y + nm.h / 2, { size: nm.h * 0.6, bold: true, origin: [0.5, 0.5], stroke: 2 });
     // level badge on the portrait corner: gold ring fills with XP around the level number (full ring = level up)
     const pq = Rh('portrait'), br = 17 * u, bcx = pq.x + 4 * u, bcy = pq.y + 4 * u;
-    levelGauge(o, bcx, bcy, br, p.level >= MAX_LEVEL ? 1 : p.xp / p.xpNeed, 5 * u);
+    levelGauge(o, bcx, bcy, br, p.level >= p.maxLv ? 1 : p.xp / p.xpNeed, 5 * u);
     this.T('lvlNum', `${p.level}`, bcx, bcy, { size: 15 * u, bold: true, origin: [0.5, 0.5], stroke: 3 });
     const ptrx = this.input.activePointer;
-    if (Math.hypot(ptrx.x - bcx, ptrx.y - bcy) < br * 1.2) this.T('xpTip', p.level >= MAX_LEVEL ? 'Nivel máximo' : `XP ${Math.floor(p.xp)} / ${p.xpNeed}`, bcx + br + 6 * u, bcy, { size: 12 * u, bold: true, origin: [0, 0.5], color: '#ffd23f', depth: 8 });
+    if (Math.hypot(ptrx.x - bcx, ptrx.y - bcy) < br * 1.2) this.T('xpTip', p.level >= p.maxLv ? 'Nivel máximo' : `XP ${Math.floor(p.xp)} / ${p.xpNeed}`, bcx + br + 6 * u, bcy, { size: 12 * u, bold: true, origin: [0, 0.5], color: '#ffd23f', depth: 8 });
     this.helpRect = null;   // no '?' button on the champion in use: its stats are always visible
     const hb = Rh('help');   // that slot now shows the unspent skill points
     this.T('ptsL', 'PUNTOS', hb.x + hb.w / 2, hb.y + hb.h * 0.2, { size: hb.h * 0.2, color: '#8aa0c8', bold: true, origin: [0.5, 0.5], stroke: 2 });
@@ -275,9 +276,7 @@ export class Hud extends Phaser.Scene {
     }
     if (tipSlot >= 0) this.itemTip(p.inv[tipSlot], Ri('item' + tipSlot), u);
     const gx0 = m * 0.6 + this.layout.hud_items.w * u / 2, gy0 = iy + this.layout.hud_items.h * u + 6 * u;
-    this.T('gold', `ORO ${Math.floor(p.gold)}`, gx0, gy0, { size: 15 * u, color: '#ffd23f', bold: true, origin: [0.5, 0] });
-    { const own = Object.keys(p.perm || {}).filter(k => p.perm[k] > 0);   // permanent upgrades you own: small red chips under the gold
-      own.forEach((k, i) => { const x = gx0 - 52 * u + (i % 6) * 18 * u, y = gy0 + 54 * u + Math.floor(i / 6) * 18 * u; g.fillStyle(0x3a0d10, 1).fillRect(x, y, 16 * u, 16 * u).lineStyle(1, 0xff4a4a, 1).strokeRect(x, y, 16 * u, 16 * u); if (this.textures.exists('stat_' + k)) this.iconImg('pmh' + k, 'stat_' + k, x + 8 * u, y + 8 * u, 13 * u, 3.4); this.T('pmc' + k, `${p.perm[k]}`, x + 16 * u, y + 15 * u, { size: 8 * u, bold: true, origin: [1, 1], color: '#ffe27a', depth: 5 }); }); }
+    if (!A.survival) this.T('gold', `ORO ${Math.floor(p.gold)}`, gx0, gy0, { size: 15 * u, color: '#ffd23f', bold: true, origin: [0.5, 0] });
     this.shopPrompt = A.canShop(p) && !this.shopOpen ? { x: gx0 - 58 * u, y: gy0 + 24 * u, w: 116 * u, h: 26 * u } : null;
     if (this.shopPrompt) {
       const sp = this.shopPrompt, ptrS = this.input.activePointer, overS = ptrS.x >= sp.x && ptrS.x <= sp.x + sp.w && ptrS.y >= sp.y && ptrS.y <= sp.y + sp.h;
@@ -313,6 +312,7 @@ export class Hud extends Phaser.Scene {
       this.T('tHp', `${Math.ceil(sel.hp)} / ${Math.ceil(sel.maxHp)}${shd > 0 ? '  +' + Math.ceil(shd) : ''}`, ex + bw / 2, ey + hh / 2, { size: hh * 0.68, bold: true, origin: [0.5, 0.5], stroke: 3, color: '#ffffff', depth: 4 });
       this.T('tMp', cb ? `${Math.floor(sel.charge)}%` : rb ? `${Math.floor(sel.hen ? sel.henHp : sel.rage)}` : `${Math.floor(sel.mana)} / ${Math.floor(sel.maxMana)}`, ex + bw / 2, ey + hh + 4 + mh / 2, { size: mh * 0.7, bold: true, origin: [0.5, 0.5], stroke: 3, color: '#ffffff', depth: 4 });
       this.boxes.push({ x: ex - 2, y: ey - 2, w: bw + 4, h: hh + mh + 8 });
+      this.drawSelEffects(sel, ex + bw, ey + hh + mh + 14 * u, u);   // its active effects (and the boss upgrades it carries)
       const hb = this.enemyHelpRect = E('help');
       g.fillStyle(this.helpHold === 'sel' ? 0x1d6f8f : 0x0f2038).fillRect(hb.x, hb.y, hb.w, hb.h);
       this.T('help2?', '?', hb.x + hb.w / 2, hb.y + hb.h / 2, { size: hb.h * 0.8, bold: true, origin: [0.5, 0.5], color: '#7ee0ff' });
@@ -350,21 +350,30 @@ export class Hud extends Phaser.Scene {
       o.fillStyle(over ? 0x1d7fc4 : 0x0a1a30, 0.95).fillRoundedRect(mb.x, mb.y, mb.w, mb.h, 6 * u).lineStyle(2, over ? 0x8ae2ff : 0x3fd0ff, over ? 1 : 0.8).strokeRoundedRect(mb.x, mb.y, mb.w, mb.h, 6 * u);
       this.T('menuBtn', '☰ MENÚ (Esc)', mb.x + mb.w / 2, mb.y + mb.h / 2, { size: 11 * u, bold: true, origin: [0.5, 0.5], stroke: 2 });
       this.btns.push({ ...mb, fn: () => A.togglePause() });
-      if (A.training && !A.net) { const alive = A.player.alive; btn('die', alive ? '☠ MORIR' : '↺ REVIVIR', mb.x, mb.y + mb.h + 6 * u, mb.w, mb.h, () => A.trainingDie(), alive ? 0x5c1d1d : 0x1d5c2e); this.boxes.push({ x: mb.x, y: mb.y + mb.h + 6 * u, w: mb.w, h: mb.h }); }   // practice only: test the death / respawn
+      if (A.training && !A.net) { const alive = A.player.alive; btn('die', alive ? '☠ MORIR' : '↺ REVIVIR', mb.x, mb.y + mb.h + 6 * u, mb.w, mb.h, () => A.trainingDie(), alive ? 0x5c1d1d : 0x1d5c2e); this.boxes.push({ x: mb.x, y: mb.y + mb.h + 6 * u, w: mb.w, h: mb.h });   // practice only: test the death / respawn
+        [['beast', '🐻 BESTIA'], ['captain', '🎖 CAPITÁN'], ['robot', '🤖 ROBOT']].forEach(([k, l], i) => { const by = mb.y + (mb.h + 6 * u) * (i + 2); btn('boss' + k, l, mb.x, by, mb.w, mb.h, () => A.bossForce?.(k), 0x4a3a12); this.boxes.push({ x: mb.x, y: by, w: mb.w, h: mb.h }); }); }   // practice only: summon a boss
     } else {
       this.boxes.push({ x: 0, y: 0, w: W, h: H });
       ov.fillStyle(0x020812, 0.68).fillRect(0, 0, W, H);
       const pw = 380 * u, px0 = W / 2 - pw / 2, bh = 46 * u;
       // panel de cristal tech oscuro (estilo B) detrás del contenido
-      const pW = Math.min(pw + 52 * u, W - 16 * u), pX = W / 2 - pW / 2, pTop = finished ? H / 2 - 184 * u : H / 2 - 170 * u, pH = finished ? 268 * u : ({ main: 330, options: 330, sound: 430, access: 300 }[this.menuPage || 'main']) * u;
+      const pW = Math.min(pw + 52 * u, W - 16 * u), pX = W / 2 - pW / 2, pTop = finished ? H / 2 - 184 * u : H / 2 - 170 * u, pH = finished ? (A.over.surv ? 330 : 268) * u : ({ main: 330, options: 330, sound: 430, access: 300 }[this.menuPage || 'main']) * u;
       ov.lineStyle(2, 0x3fd0ff, 0.22).strokeRoundedRect(pX - 3 * u, pTop - 3 * u, pW + 6 * u, pH + 6 * u, 14 * u);
       ov.fillStyle(0x0a1a30, 0.94).fillRoundedRect(pX, pTop, pW, pH, 12 * u).lineStyle(2, 0x3fd0ff, 0.65).strokeRoundedRect(pX, pTop, pW, pH, 12 * u);
       ov.lineStyle(1, 0x8ae2ff, 0.35).lineBetween(pX + 14 * u, pTop + 2.5 * u, pX + pW - 14 * u, pTop + 2.5 * u);
       if (finished) {
-        const win = A.over.winner === A.player.baseTeam;
+        const win = A.over.winner === A.player.baseTeam, sv = A.over.surv && A.sv;
+        if (sv) {
+          this.T('ovTitle', 'HAS CAÍDO', W / 2, H / 2 - 128 * u, { size: 56 * u, bold: true, color: '#ff6a6a', origin: [0.5, 0.5], stroke: 8, depth: 22 });
+          this.T('ovSub', `Oleada ${sv.wave}  ·  ${sv.kills} bichos eliminados  ·  nivel ${A.player.level}
+${Math.floor(sv.time / 60)}:${String(Math.floor(sv.time % 60)).padStart(2, '0')} de supervivencia${sv.record ? '   ¡NUEVO RÉCORD!' : ''}`, W / 2, H / 2 - 62 * u, { size: 17 * u, color: sv.record ? '#ffe066' : '#cfe3ff', origin: [0.5, 0.5], stroke: 4, depth: 22 }).setAlign('center');
+          btn('again', 'JUGAR OTRA VEZ', px0, H / 2 - 10 * u, pw, bh, () => { A.scene.restart(A.cfg); });
+          btn('leave', 'VOLVER AL MENÚ', px0, H / 2 + 50 * u, pw, bh, () => this.leave());
+        } else {
         this.T('ovTitle', win ? '¡VICTORIA!' : 'DERROTA', W / 2, H / 2 - 120 * u, { size: 64 * u, bold: true, color: win ? '#7dff9a' : '#ff6a6a', origin: [0.5, 0.5], stroke: 8, depth: 22 });
         this.T('ovSub', win ? 'El nexo enemigo ha caído' : 'Tu nexo ha sido destruido', W / 2, H / 2 - 60 * u, { size: 18 * u, color: '#cfe3ff', origin: [0.5, 0.5], stroke: 4, depth: 22 });
         btn('leave', 'VOLVER AL MENÚ', px0, H / 2 - 10 * u, pw, bh, () => this.leave());
+        }
       } else {
         const pg = this.menuPage || 'main', TITLES = { main: 'PAUSA', options: 'OPCIONES', sound: 'SONIDO', access: 'ACCESIBILIDAD' }, top = H / 2 - 170 * u;
         this.T('ovTitle', TITLES[pg], W / 2, top + 46 * u, { size: 44 * u, bold: true, color: '#eaf7ff', origin: [0.5, 0.5], stroke: 6, depth: 22 });
@@ -423,13 +432,84 @@ export class Hud extends Phaser.Scene {
         this.iconImg('brI' + i, 'icon_' + a.icon, sx + sw / 2, cy0 + 34 * u + sw + 40 * u, 60 * u, 23);
         const tx = sx + sw + 18 * u, tw = cw - (tx - cx) - 16 * u;
         this.T('brN' + i, a.name, tx, cy0 + 50 * u, { size: 19 * u, bold: true, color: '#fff', origin: [0, 0.5], stroke: 4, depth: 22 }).setWordWrapWidth(tw, true);
-        this.T('brK' + i, `ENFR. ${a.cd[0]} s  ·  MANÁ ${a.mana[0]}`, tx, cy0 + 84 * u, { size: 11 * u, color: '#9fe8ff', origin: [0, 0.5], stroke: 3, depth: 22 });
+        this.T('brK' + i, a.passive ? 'PASIVA' : `ENFR. ${a.cd[0]} s  ·  MANÁ ${a.mana[0]}`, tx, cy0 + 84 * u, { size: 11 * u, color: '#9fe8ff', origin: [0, 0.5], stroke: 3, depth: 22 });
         this.T('brD' + i, a.short || a.desc, tx, cy0 + 102 * u, { size: 13 * u, color: '#cfe3ff', stroke: 2, depth: 22 }).setWordWrapWidth(tw, true).setLineSpacing(3 * u);
         btn('brC' + i, 'ELEGIR', cx + 16 * u, cy0 + ch - 54 * u, cw - 32 * u, 40 * u, pick);
         this.btns.push({ x: cx, y: cy0, w: cw, h: ch, fn: pick });
       });
       btn('brX', 'CANCELAR (Esc)', W / 2 - 90 * u, by + bh - 54 * u, 180 * u, 38 * u, () => { this.branchSel = null; }, 0x5c1d1d);
     } else this.branchSel = null;
+
+    // ---- survival: wave counter + level-up card window ----
+    if (A.bosses && !A.survival && !A.training && !A.over) {   // portraits and circular countdowns below KDA
+      const kd = this.layout.hud_kda, cy = kd.h / 2 * u, radius = 25 * u, bx = W / 2 - kd.w * u / 2 - 38 * u;   // left of the KDA counter
+      ['beast', 'captain', 'robot'].forEach((key, i) => {
+        const b = A.bosses[key], x = bx - (2 - i) * 62 * u, up = b.synced ? b.up : !!b.f?.alive, dead = key === 'robot' && b.phase === 'dead';
+        const tex = 'icon_boss_' + key, total = key === 'robot' && b.t > BOSS_T.robot ? ROBOT_AT : BOSS_T[key];
+        if (!up) g.fillStyle(0x080c16, 0.94).fillCircle(x, cy, radius);
+        if (this.textures.exists(tex)) { const im = this.iconImg('bossFace' + key, tex, x, cy, radius * 1.8, 2.9); if (up) im.clearTint().setAlpha(1); else im.setTint(0x5e6672).setAlpha(0.65); }
+        else this.T('bossFaceFallback' + key, key[0].toUpperCase(), x, cy, { size: 22 * u, bold: true, origin: [0.5, 0.5] });
+        if (up) this.T('bossSkull' + key, '☠', x + radius * 0.8, cy + radius * 0.55, { size: 18 * u, color: '#ffffff', origin: [0.5, 0.5], stroke: 3, depth: 4 });
+        else {
+          const fraction = Phaser.Math.Clamp(Math.max(0, b.t) / total, 0, 1);
+          o.lineStyle(3 * u, 0x44505e, 0.9).strokeCircle(x, cy, radius);
+          if (!dead && fraction > 0) o.lineStyle(3 * u, 0xffd23f, 1).beginPath().arc(x, cy, radius, -Math.PI / 2, -Math.PI / 2 + fraction * Math.PI * 2, false).strokePath();
+          this.T('bossSeconds' + key, dead ? '—' : `${Math.max(0, Math.ceil(b.t))}s`, x, cy, { size: 14 * u, bold: true, color: '#ffffff', origin: [0.5, 0.5], stroke: 4 });
+        }
+        this.boxes.push({ x: x - radius, y: cy - radius, w: radius * 2, h: radius * 2 });
+      });
+      if (A.eliteT?.[A.player.team] > 0) this.T('btE', `TROPAS ESPECIALES ${Math.ceil(A.eliteT[A.player.team])}s`, bx - 62 * u, cy + radius + 8 * u, { size: 12 * u, bold: true, color: '#7dff9a', origin: [0.5, 0], stroke: 3, depth: 8 });
+    }
+    if (A.bosses && !A.survival && !A.over) {   // health bars of the bosses in play, under the KDA with their portrait
+      let row = 0; const pl0 = A.player, near = ['beast', 'captain', 'robot'].map(k => A.bosses[k].f).filter(f => f?.alive).sort((a, b) => (b.bs?.aggro?.has(pl0) - a.bs?.aggro?.has(pl0)) || Math.hypot(a.x - pl0.x, a.y - pl0.y) - Math.hypot(b.x - pl0.x, b.y - pl0.y))[0];   // the one attacking you, otherwise the closest
+      const kd2 = this.layout.hud_kda, NAMES = { beast: 'BESTIA PELUDA', captain: 'CAPITÁN', robot: 'ROBOT DE GUERRA' }, COLS = { beast: 0xd9a05a, captain: 0xe8d070, robot: 0xff5a4a };
+      for (const key of ['beast', 'captain', 'robot']) {
+        const f = A.bosses[key].f; if (!f?.alive || f !== near) continue;
+        const bw = 220 * u, bh = 14 * u, rx = W / 2 - bw / 2 + 18 * u, ry = (kd2.h + 10) * u + row * 44 * u, k = Phaser.Math.Clamp(f.hp / f.maxHp, 0, 1);
+        g.fillStyle(0x080c16, 0.88).fillRoundedRect(rx - 52 * u, ry - 6 * u, bw + 62 * u, 40 * u, 8 * u);
+        g.fillStyle(0x2a1a1a, 1).fillRect(rx, ry + 14 * u, bw, bh); g.fillStyle(COLS[key], 1).fillRect(rx, ry + 14 * u, bw * k, bh);
+        o.lineStyle(2, 0x3a4658, 1).strokeRect(rx, ry + 14 * u, bw, bh);
+        if (this.textures.exists('icon_boss_' + key)) this.iconImg('bossHp' + key, 'icon_boss_' + key, rx - 26 * u, ry + 14 * u, 40 * u, 9);
+        this.T('bossHpN' + key, NAMES[key] + (f.bossLvl ? `  ·  NIVEL ${f.bossLvl}` : ''), rx, ry + 3 * u, { size: 11 * u, bold: true, color: '#ffe9a8', origin: [0, 0.5], stroke: 3, depth: 9 });
+        this.T('bossHpV' + key, `${Math.ceil(f.hp)} / ${Math.ceil(f.maxHp)}`, rx + bw, ry + 3 * u, { size: 10 * u, color: '#ffffff', origin: [1, 0.5], stroke: 3, depth: 9 });
+        row++;
+      }
+    }
+    const pk = A.curPick?.();
+    if ((A.survival && A.sv) || pk) {
+      const sv = A.sv;
+      if (A.survival && sv) {
+      const tt = `OLEADA ${sv.wave || 1}${sv.phase === 'rest' && sv.wave ? '  ·  descanso' : ''}`;
+      this.T('svW', tt, W / 2, 14 * u, { size: 22 * u, bold: true, color: '#ffe066', origin: [0.5, 0], stroke: 5, depth: 8 });
+      this.T('svS', sv.phase === 'rest' ? `Siguiente oleada en ${Math.max(0, Math.ceil(sv.t))} s` : `Enemigos: ${sv.alive + sv.queue.length}`, W / 2, 42 * u, { size: 14 * u, color: '#cfe3ff', origin: [0.5, 0], stroke: 4, depth: 8 });
+      this.T('svK', `Bichos eliminados: ${sv.kills}   ·   ${Math.floor(sv.time / 60)}:${String(Math.floor(sv.time % 60)).padStart(2, '0')}`, W / 2, 62 * u, { size: 12 * u, color: '#9fc4e8', origin: [0.5, 0], stroke: 3, depth: 8 });
+      }
+      if (pk) {
+        const cards = pk.cards, n = cards.length, gap = 18 * u, bw = Math.min(W - 24, (n * 280 + (n + 1) * 18) * u), bh = Math.min(H - 16, 470 * u), bx = W / 2 - bw / 2, by = H / 2 - bh / 2, ptr = this.input.activePointer;
+        this.boxes.push({ x: 0, y: 0, w: W, h: H });
+        ov.fillStyle(0x020812, 0.78).fillRect(0, 0, W, H);
+        ov.fillStyle(0x0a1a30, 0.97).fillRoundedRect(bx, by, bw, bh, 12 * u).lineStyle(2, 0x3fd0ff, 0.65).strokeRoundedRect(bx, by, bw, bh, 12 * u);
+        this.T('pkT', pk.title, W / 2, by + 28 * u, { size: 28 * u, bold: true, color: '#ffe066', origin: [0.5, 0.5], stroke: 5, depth: 22 });
+        this.T('pkS', pk.sub, W / 2, by + 56 * u, { size: 12 * u, color: '#9fc4e8', origin: [0.5, 0.5], stroke: 2, depth: 22 });
+        const cw = (bw - (n + 1) * gap) / n, cy0 = by + 80 * u, ch = bh - 80 * u - 18 * u;
+        cards.forEach((c, i) => {
+          const inf = A.survCardInfo(c), cx = bx + gap + i * (cw + gap), over = ptr.x >= cx && ptr.x <= cx + cw && ptr.y >= cy0 && ptr.y <= cy0 + ch, pick = () => { A.audio.play('ui_upgrade', { gap: 0 }); pk.choose(i); };
+          ov.fillStyle(over ? 0x13365a : 0x0c2240, 0.98).fillRoundedRect(cx, cy0, cw, ch, 10 * u).lineStyle(over ? 3 : 2, inf.col, over ? 1 : 0.6).strokeRoundedRect(cx, cy0, cw, ch, 10 * u);
+          this.T('pkG' + i, inf.tag, cx + cw / 2, cy0 + 16 * u, { size: 11 * u, bold: true, color: '#' + inf.col.toString(16).padStart(6, '0'), origin: [0.5, 0.5], stroke: 3, depth: 22 });
+          const isz = 84 * u, iy = cy0 + 34 * u;
+          ov.fillStyle(0x070a12, 1).fillRoundedRect(cx + cw / 2 - isz / 2 - 4 * u, iy - 4 * u, isz + 8 * u, isz + 8 * u, 8 * u).lineStyle(1, inf.col, 0.7).strokeRoundedRect(cx + cw / 2 - isz / 2 - 4 * u, iy - 4 * u, isz + 8 * u, isz + 8 * u, 8 * u);
+          if (this.textures.exists(inf.icon)) this.iconImg('pkI' + i, inf.icon, cx + cw / 2, iy + isz / 2, isz, 23);
+          else { const mx = cx + cw / 2, my = iy + isz / 2, r = isz * 0.36; ov.fillStyle(inf.col, 0.95).fillTriangle(mx - r, my, mx, my - r * 1.3, mx + r, my).fillTriangle(mx - r, my, mx, my + r * 1.3, mx + r, my); ov.fillStyle(0xffffff, 0.45).fillTriangle(mx - r * 0.5, my - r * 0.1, mx, my - r * 1.0, mx + r * 0.1, my - r * 0.1); }
+          this.T('pkN' + i, inf.name, cx + cw / 2, iy + isz + 22 * u, { size: 18 * u, bold: true, color: '#fff', origin: [0.5, 0.5], stroke: 4, depth: 22 }).setWordWrapWidth(cw - 20 * u, true).setAlign('center');
+          this.T('pkB' + i, inf.sub, cx + cw / 2, iy + isz + 48 * u, { size: 12 * u, bold: true, color: '#7dff9a', origin: [0.5, 0.5], stroke: 3, depth: 22 });
+          const st = inf.stats ? Object.keys(inf.stats).map(k => `${fmtStat(k, inf.stats[k])} ${STAT_LABEL[k]}`).join('\n') + '\n' : '';
+          this.T('pkD' + i, st + (inf.desc || ''), cx + 12 * u, iy + isz + 64 * u, { size: 12 * u, color: '#cfe3ff', stroke: 2, depth: 22 }).setWordWrapWidth(cw - 24 * u, true).setLineSpacing(3 * u);
+          this.T('pkK' + i, `[ ${i + 1} ]`, cx + cw / 2, cy0 + ch - 16 * u, { size: 14 * u, bold: true, color: '#8ae2ff', origin: [0.5, 0.5], stroke: 3, depth: 22 });
+          this.btns.push({ x: cx, y: cy0, w: cw, h: ch, fn: pick });
+          if (A.k && Phaser.Input.Keyboard.JustDown([A.k.i1, A.k.i2, A.k.i3][i])) pick();
+        });
+      }
+    }
 
     A.uiRects = this.boxes;
   }
@@ -525,10 +605,11 @@ export class Hud extends Phaser.Scene {
       bev(q.x, q.y, q.w, q.h, 8 * u, 0x0d1830, 1, tg[1], sel ? 1 : 0.65, sel ? 3 : 1.5);
       g.fillStyle(tg[1], 0.92).fillRect(q.x + 3 * u, q.y + 3 * u, q.w - 6 * u, 17 * u);
       this.T('rcT' + i, r.of && ITEM_BY_ID[r.of] ? `${tg[0]} · ${ITEM_BY_ID[r.of].name}` : tg[0], q.x + q.w / 2, q.y + 5 * u, { size: 9.5 * u, bold: true, color: '#04101c', origin: [0.5, 0], depth: D + 1, stroke: 0 }).setWordWrapWidth(q.w - 8 * u, true);
-      const ts = Math.min(76 * u, q.w - 28 * u), tq = { x: q.x + (q.w - ts) / 2, y: q.y + 30 * u, w: ts, h: ts };
+      const ts = Math.min(54 * u, q.w - 28 * u), tq = { x: q.x + (q.w - ts) / 2, y: q.y + 26 * u, w: ts, h: ts };
       this.tile(g, 'rc' + i, r.id, tq, D, afford ? 1 : 0.55);
-      this.T('rcN' + i, it.name.toUpperCase(), q.x + q.w / 2, tq.y + ts + 8 * u, { size: 12 * u, bold: true, color: '#ffffff', origin: [0.5, 0], depth: D + 1, stroke: 2 }).setWordWrapWidth(q.w - 12 * u, true).setAlign('center');
-      this.T('rcP' + i, pl.gold === 0 && !pl.ok ? pl.reason : `${pl.gold} oro`, q.x + q.w / 2, tq.y + ts + 40 * u, { size: 13 * u, bold: true, color: afford ? '#ffd23f' : '#ff6a6a', origin: [0.5, 0], depth: D + 1, stroke: 2 });
+      this.T('rcN' + i, it.name.toUpperCase(), q.x + q.w / 2, tq.y + ts + 4 * u, { size: 11.5 * u, bold: true, color: '#ffffff', origin: [0.5, 0], depth: D + 1, stroke: 2 }).setWordWrapWidth(q.w - 12 * u, true).setAlign('center');
+      this.T('rcP' + i, pl.gold === 0 && !pl.ok ? pl.reason : `${pl.gold} oro`, q.x + q.w / 2, tq.y + ts + 32 * u, { size: 13 * u, bold: true, color: afford ? '#ffd23f' : '#ff6a6a', origin: [0.5, 0], depth: D + 1, stroke: 2 });
+      Object.keys(it.stats).slice(0, 4).forEach((k, j) => this.T(`rcU${i}_${j}`, `${fmtStat(k, it.stats[k])} ${STAT_STYLE[k].label}`, q.x + q.w / 2, tq.y + ts + 52 * u + j * 13 * u, { size: 10.5 * u, bold: true, color: statCss(k), origin: [0.5, 0], depth: D + 1, stroke: 2 }));   // what the item improves
       const sy = q.y + q.h - 78 * u;
       g.fillStyle(tg[1], 0.3).fillRect(q.x + 8 * u, sy, q.w - 16 * u, 1);
       this.T('rcV' + i, 'EFECTIVO CONTRA', q.x + q.w / 2, sy + 6 * u, { size: 9 * u, bold: true, color: '#7a8db3', origin: [0.5, 0], depth: D + 1, stroke: 2 });
@@ -780,7 +861,7 @@ export class Hud extends Phaser.Scene {
       ['ARMADURA', B.armor, f.armor], ['RES. IA', B.mr, f.mr], ['VELOCIDAD', B.speed, f.speed], ['RANGO', f.def.stats.range, f.def.stats.range]];
     const lh = cols === 1 ? q.h / 11 : q.h / 6.4, fs = Math.min(lh * 0.62, q.w / (cols === 1 ? 17 : 22)), pad = q.w * 0.04, colW = (q.w - pad * 2) / cols;
     this.T(id + 'h1', mine ? `${f.def.name.toUpperCase()} · ${(CLASSES[f.def.cls]?.label || f.def.name)}` : (CLASSES[f.def.cls]?.label || f.def.name), q.x + pad, q.y + lh * 0.15, { size: fs * 1.05, bold: true, stroke: 2 });
-    this.T(id + 'h2', mine ? `NIVEL ${f.level}/${MAX_LEVEL} · XP ${f.level >= MAX_LEVEL ? 'MAX' : `${Math.floor(f.xp)}/${f.xpNeed}`}` : `NIVEL ${f.level}/${MAX_LEVEL} · ${Math.ceil(f.hp)}/${Math.ceil(f.maxHp)} HP`,
+    this.T(id + 'h2', mine ? `NIVEL ${f.level}/${f.maxLv} · XP ${f.level >= f.maxLv ? 'MAX' : `${Math.floor(f.xp)}/${f.xpNeed}`}` : `NIVEL ${f.level}/${MAX_LEVEL} · ${Math.ceil(f.hp)}/${Math.ceil(f.maxHp)} HP`,
       q.x + pad, q.y + lh * 1.15, { size: fs, color: mine && f.points > 0 ? '#7dff9a' : '#ffe066', stroke: 2 });
     rows.forEach(([n, base, now], i) => {
       const x = q.x + pad + (cols === 1 ? 0 : (i % 2) * colW), y = q.y + lh * (cols === 1 ? 2.1 + i : 2.2 + (i >> 1)), nx = x + (cols === 1 ? q.w * 0.4 : colW * 0.5), d = now - base;
@@ -801,9 +882,9 @@ export class Hud extends Phaser.Scene {
     this.boxes.push({ x: 0, y: 0, w: W, h: H });
     g.fillStyle(0x000000, 0.5).fillRect(0, 0, W, H);
     g.fillStyle(0x060b16, 0.96).fillRect(x0, y0, pw, ph).lineStyle(3, 0x3fd0ff, 0.95).strokeRect(x0, y0, pw, ph);
-    const cX = { face: x0 + 14 * u, name: x0 + 14 * u + rh + 10 * u, lvl: x0 + pw * 0.36, kda: x0 + pw * 0.43, gold: x0 + pw * 0.56, items: x0 + pw * 0.64 };
+    const cX = { face: x0 + 14 * u, name: x0 + 14 * u + rh + 10 * u, lvl: x0 + pw * 0.36, kda: x0 + pw * 0.43, gold: x0 + pw * 0.55, prompts: x0 + pw * 0.63, items: x0 + pw * 0.72 };
     const hdr = (id, str, x, y, col = '#7ee0ff', al = [0, 0.5]) => this.T('sb' + id, str, x, y, { size: 11 * u, bold: true, color: col, origin: al, depth: D + 1, stroke: 2 });
-    hdr('H0', 'CAMPEÓN', cX.name, y0 + 17 * u); hdr('H1', 'NIV', cX.lvl, y0 + 17 * u); hdr('H2', 'K / D / A', cX.kda, y0 + 17 * u); hdr('H3', 'ORO', cX.gold, y0 + 17 * u); hdr('H4', 'OBJETOS', cX.items, y0 + 17 * u);
+    hdr('H0', 'CAMPEÓN', cX.name, y0 + 17 * u); hdr('H1', 'NIV', cX.lvl, y0 + 17 * u); hdr('H2', 'K / D / A', cX.kda, y0 + 17 * u); hdr('H3', 'ORO', cX.gold, y0 + 17 * u); hdr('H5', 'PROMPTS', cX.prompts, y0 + 17 * u); hdr('H4', 'OBJETOS', cX.items, y0 + 17 * u);
     const tot = [0, 1].map(i => teams[i].reduce((a, c) => a + c.kills, 0));
     let y = y0 + 34 * u, n = 0, ci = 0;
     teams.forEach((list, ti) => {
@@ -830,6 +911,8 @@ export class Hud extends Phaser.Scene {
         this.T('sbL' + ci, `${c.level}`, cX.lvl, my, { size: 16 * u, bold: true, color: '#ffe27a', origin: [0, 0.5], depth: D + 1, stroke: 3 });
         this.T('sbK' + ci, `${c.kills} / ${c.deaths} / ${c.assists}`, cX.kda, my, { size: 16 * u, bold: true, color: '#ffffff', origin: [0, 0.5], depth: D + 1, stroke: 3 });
         this.T('sbG' + ci, `${Math.floor(c.gold)}`, cX.gold, my, { size: 14 * u, bold: true, color: '#ffd23f', origin: [0, 0.5], depth: D + 1, stroke: 3 });
+        const np = Object.values(c.perm || {}).reduce((a, b) => a + b, 0);   // permanent prompts bought / won
+        this.T('sbP' + ci, `${np}`, cX.prompts + 20 * u, my, { size: 15 * u, bold: true, color: np ? '#ffe27a' : '#5a6580', origin: [0.5, 0.5], depth: D + 1, stroke: 3 });
         const sz = Math.min(q.h - 8 * u, (x0 + pw - 14 * u - cX.items - 5 * 4 * u) / 6);
         for (let i = 0; i < 6; i++) {
           const iq = { x: cX.items + i * (sz + 4 * u), y: my - sz / 2, w: sz, h: sz }, sl = c.inv[i];
@@ -919,6 +1002,11 @@ export class Hud extends Phaser.Scene {
     }
     if (noMana && !onCd) o.fillStyle(0x0033ff, 0.35).fillRect(x, y, size, size);
     if (A.aimKey === a) o.lineStyle(4, 0xffd23f).strokeRect(x, y, size, size);
+    if (p.key === 'maduro' && a === 'p2' && d.passive && learned) {   // next bodyguard countdown
+      const iv = rk(d.interval, rank), full = (p.guards?.length || 0) >= rk(d.cap, rank), gt = p.guardT ?? iv;
+      if (!full) o.fillStyle(0x000000, 0.5).fillPoints(sweep(x + size / 2, y + size / 2, size / 2, Math.min(1, gt / iv)), true);
+      this.T('gt' + i, full ? 'MÁX' : `${gt.toFixed(gt < 10 ? 1 : 0)}s`, x + size / 2, y + size * 0.32, { size: size * 0.28, bold: true, origin: [0.5, 0.5], color: full ? '#7dff9a' : '#fff', stroke: 5 });
+    }
     if (d.passive) this.T('pas' + i, learned ? 'PASIVA' : 'PASIVA', x + size / 2, y + size * 0.62, { size: size * 0.16, bold: true, origin: [0.5, 0.5], color: '#ffe066', stroke: 3 });
     if (p.key === 'jorbi' && a === 'p2' && learned) this.T('dashN' + i, `${p.dashCharges}/3`, x + size - size * 0.08, y + size - size * 0.2, { size: size * 0.26, bold: true, origin: [1, 0.5], color: p.dashCharges ? '#ffd23f' : '#ff8a6a', stroke: 4 });
     const kb = size * 0.3;   // key badge on the icon's top-left corner (its own text id: the item slots used 'key0..5' and overwrote it)
@@ -937,11 +1025,24 @@ export class Hud extends Phaser.Scene {
     }
   }
 
+  // the clicked champion's active effects: a right-aligned row of small icons with their seconds
+  drawSelEffects(sel, xr, y, u) {
+    const list = sel.statusList?.() || [], sz = 30 * u, gap = 4 * u, o = this.top;
+    list.slice(0, 10).forEach((e, i) => {
+      const x = xr - (i + 1) * sz - i * gap, col = e.bad ? 0xff5a5a : 0x5dff8a, tex = e.icon && this.textures.exists(e.icon) ? e.icon : null;
+      this.boxes.push({ x, y, w: sz, h: sz }); this.g.fillStyle(0x070b14, 0.92).fillRect(x, y, sz, sz);
+      if (tex) this.iconImg('sef' + i, tex, x + sz / 2, y + sz / 2, sz - 4, 3.2); else { o.fillStyle(e.tint, 0.55).fillRect(x + 3 * u, y + 3 * u, sz - 6 * u, sz - 6 * u); this.T('sefl' + i, e.label[0], x + sz / 2, y + sz / 2, { size: sz * 0.5, bold: true, origin: [0.5, 0.5], depth: 4 }); }
+      o.lineStyle(2, col, 1).strokeRect(x, y, sz, sz);
+      if (e.count) this.T('sefx' + i, `x${e.count}`, x + sz - 1 * u, y + 1 * u, { size: 11 * u, bold: true, color: '#ffe27a', origin: [1, 0], stroke: 3, depth: 4.5 });
+      if (e.t != null) this.T('sefs' + i, `${e.t >= 10 ? Math.ceil(e.t) : e.t.toFixed(1)}`, x + sz / 2, y + sz - 6 * u, { size: 10 * u, bold: true, origin: [0.5, 0.5], stroke: 3, depth: 4 });
+    });
+  }
+
   // status bar above the abilities: each active effect with its source ability, remaining seconds and (hover) description
   drawStatus(A, p, Rc, u, W) {
     const list = p.statusList(), o = this.top, g = this.tipG;
     if (!list.length) return;
-    const q0 = Rc('ability0'), q3 = Rc('ability3'), sz = 46 * u, gap = 8 * u, y = q0.y - 126 * u;
+    const q0 = Rc('ability0'), q3 = Rc('ability3'), sz = 46 * u, gap = 8 * u, y = q0.y - 86 * u;
     const totalW = list.length * sz + (list.length - 1) * gap, cx = (q0.x + q3.x + q3.w) / 2, x0 = cx - totalW / 2, ptr = this.input.activePointer;
     let hv = -1;
     list.forEach((e, i) => {
@@ -952,6 +1053,7 @@ export class Hud extends Phaser.Scene {
       if (tex) { this.stImgs = this.stImgs || {}; let im = this.stImgs[key]; if (!im || im.texture.key !== tex) { im?.destroy(); im = this.stImgs[key] = this.add.image(0, 0, tex).setDepth(3.2); } im.setVisible(true).setPosition(x + sz / 2, y + sz / 2).setDisplaySize(sz - 6 * u, sz - 6 * u).setAlpha(0.35 + 0.65 * pulse); this.stUsed = this.stUsed || new Set(); this.stUsed.add(key); }
       else { o.fillStyle(e.tint, 0.55 * pulse).fillRect(x + 4 * u, y + 4 * u, sz - 8 * u, sz - 8 * u); this.T('stl' + i, e.label[0], x + sz / 2, y + sz / 2, { size: sz * 0.5, bold: true, origin: [0.5, 0.5], depth: 4 }); }
       o.lineStyle(3, col, 1).strokeRect(x, y, sz, sz);
+      if (e.count) this.T('stx' + i, `x${e.count}`, x + sz - 2 * u, y + 2 * u, { size: 14 * u, bold: true, color: '#ffe27a', origin: [1, 0], stroke: 4, depth: 4.5 });   // how many (prompts / boss upgrades) without opening the tooltip
       if (e.t != null) { o.fillStyle(0x000000, 0.7).fillRect(x, y + sz - 15 * u, sz, 15 * u); this.T('sts' + i, `${e.t >= 10 ? Math.ceil(e.t) : e.t.toFixed(1)}s`, x + sz / 2, y + sz - 7.5 * u, { size: 12 * u, bold: true, origin: [0.5, 0.5], depth: 5, stroke: 3 }); }
       if (ptr.x >= x && ptr.x <= x + sz && ptr.y >= y && ptr.y <= y + sz) hv = i;
     });
@@ -1051,12 +1153,12 @@ export class Hud extends Phaser.Scene {
   drawMinimap(A, g, o, q) {
     const fx = q.w / WORLD_W, fy = q.h / WORLD_H;     // stretched to fill the hole
     g.fillStyle(0x7d8226).fillRect(q.x, q.y, q.w, q.h);
-    const dirt = 0x8c6a2c;
-    for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) if (walk[j * GW + i] && !grass[j * GW + i]) g.fillStyle(dirt).fillRect(q.x + i * CELL * fx, q.y + j * CELL * fy, CELL * fx + 0.6, CELL * fy + 0.6);
-    (A.camps?.length ? A.camps : CAMPS.map(([x, y]) => ({ x, y, owner: null, prog: [0, 0] }))).forEach(c => { const col = c.owner === 0 ? 0x4aa3ff : c.owner === 1 ? 0xff4a3a : 0x8a6238; g.fillStyle(col).fillCircle(q.x + c.x * fx, q.y + c.y * fy, 5); g.lineStyle(1, 0xffffff, 0.8).strokeCircle(q.x + c.x * fx, q.y + c.y * fy, 5); });
-    for (let y = RIVER.y0; y < RIVER.y1; y += 15) { g.fillStyle(0x5f9f94).fillRect(q.x + (WORLD_W / 2 + riverOffset(y) - 84 * F) * fx, q.y + y * fy, 168 * F * fx, 15 * fy + 0.6); }   // the river (the lanes cross it on earth)
-    g.fillStyle(0x3b82f6, 0.45).fillRect(q.x, q.y + (BASE_Y - 450 * F) * fy, 510 * F * fx, 900 * F * fy);
-    g.fillStyle(0xef4444, 0.45).fillRect(q.x + q.w - 510 * F * fx, q.y + (BASE_Y - 450 * F) * fy, 510 * F * fx, 900 * F * fy);
+    const dirt = 0x8c6a2c, open = A.survival;   // survival: plain meadow, no lanes / river / bases
+    if (!open) for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) if (walk[j * GW + i] && !grass[j * GW + i]) g.fillStyle(dirt).fillRect(q.x + i * CELL * fx, q.y + j * CELL * fy, CELL * fx + 0.6, CELL * fy + 0.6);
+    if (!open) (A.camps?.length ? A.camps : CAMPS.map(([x, y]) => ({ x, y, owner: null, prog: [0, 0] }))).forEach(c => { const col = c.owner === 0 ? 0x4aa3ff : c.owner === 1 ? 0xff4a3a : 0x8a6238; g.fillStyle(col).fillCircle(q.x + c.x * fx, q.y + c.y * fy, 5); g.lineStyle(1, 0xffffff, 0.8).strokeCircle(q.x + c.x * fx, q.y + c.y * fy, 5); });
+    if (!open) for (let y = RIVER.y0; y < RIVER.y1; y += 15) { g.fillStyle(0x5f9f94).fillRect(q.x + (WORLD_W / 2 + riverOffset(y) - 84 * F) * fx, q.y + y * fy, 168 * F * fx, 15 * fy + 0.6); }   // the river (the lanes cross it on earth)
+    if (!open) g.fillStyle(0x3b82f6, 0.45).fillRect(q.x, q.y + (BASE_Y - 450 * F) * fy, 510 * F * fx, 900 * F * fy);
+    if (!open) g.fillStyle(0xef4444, 0.45).fillRect(q.x + q.w - 510 * F * fx, q.y + (BASE_Y - 450 * F) * fy, 510 * F * fx, 900 * F * fy);
     if (A.fog) { if (!this.fogImg || !this.fogImg.scene) this.fogImg = this.add.image(0, 0, 'fogmask').setOrigin(0, 0).setDepth(1.6); this.fogImg.setPosition(q.x, q.y).setDisplaySize(q.w, q.h).setVisible(true); } else this.fogImg?.setVisible(false);
     A.fighters.forEach(ft => {
       if ((!ft.alive && !ft.isNexus) || ft.hiddenFor(A.player)) return;
@@ -1070,7 +1172,7 @@ export class Hud extends Phaser.Scene {
         return;
       }
       g.fillStyle(tc);
-      if (ft.isNexus) g.fillRect(cx - 6, cy - 6, 12, 12); else if (ft.isTower) g.fillRect(cx - 4, cy - 4, 8, 8); else g.fillCircle(cx, cy, ft.isBot || ft.isMinion ? 2.5 : 5);
+      if (ft.isNexus) g.fillRect(cx - 6, cy - 6, 12, 12); else if (ft.isTower) g.fillRect(cx - 4, cy - 4, 8, 8); else if (ft.isBoss) { g.fillStyle(0x000000).fillCircle(cx, cy, 8.5); g.fillStyle(0xffc83a).fillCircle(cx, cy, 6.5); } else g.fillCircle(cx, cy, ft.isBot || ft.isMinion ? 2.5 : 5);
       if (ft === A.selected) o.lineStyle(2, 0xffffff).strokeCircle(cx, cy, 8);
     });
     const v = A.cameras.main.worldView;

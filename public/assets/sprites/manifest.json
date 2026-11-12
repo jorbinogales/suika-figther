@@ -323,6 +323,10 @@
    "ult": 8,
    "death": 6,
    "attack2": 4,
+   "puddle_in": 6,
+   "puddle_move": 6,
+   "puddle_out": 5,
+   "puddle_cast": 4,
    "idle_s": 6,
    "idle_se": 6,
    "idle_e": 6,
@@ -826,6 +830,40 @@
    "attack3": 8,
    "attack2": 6,
    "lunge": 6
+  },
+  "boss_beast": {
+   "attack": 6,
+   "death": 7,
+   "idle": 4,
+   "roar": 6,
+   "shake": 7,
+   "walk": 6
+  },
+  "boss_captain": {
+   "attack": 5,
+   "death": 6,
+   "heal": 6,
+   "idle": 4,
+   "missiles": 6,
+   "summon": 5,
+   "walk": 6
+  },
+  "boss_robot": {
+   "death": 8,
+   "flame": 6,
+   "idle": 4,
+   "mg": 6,
+   "stomp": 7
+  },
+  "camp_soldier_melee": {
+   "attack": 5,
+   "death": 6,
+   "walk": 6
+  },
+  "camp_soldier_rifle": {
+   "attack": 5,
+   "death": 6,
+   "walk": 6
   }
  },
  "icons": [
@@ -851,9 +889,13 @@
   "jorbi_p3",
   "jorbi_ult",
   "julio_p1",
+  "julio_p1b",
   "julio_p2",
+  "julio_p2b",
   "julio_p3",
+  "julio_p3b",
   "julio_ult",
+  "julio_ultb",
   "junior_p1",
   "junior_p2",
   "junior_p3",
@@ -886,7 +928,14 @@
   "yonaiker_p1",
   "yonaiker_p2",
   "yonaiker_p3",
-  "yonaiker_ult"
+  "yonaiker_ult",
+  "boss_beast",
+  "boss_captain",
+  "boss_robot",
+  "buff_purple",
+  "buff_red",
+  "buff_green",
+  "buff_yellow"
  ],
  "objects": [
   "anchor_chain",
@@ -916,8 +965,12 @@
   "heart",
   "hourglass",
   "ink_blot",
+  "ink_bubble",
+  "ink_chain",
   "ink_drawing",
   "ink_drop",
+  "ink_gold_drop",
+  "ink_shield",
   "iron_fist",
   "kiss_blast",
   "laptop_trojan",
@@ -962,7 +1015,23 @@
   "lego_1",
   "lego_2",
   "lego_3",
-  "lego_4"
+  "lego_4",
+  "boss_plane",
+  "boss_missile",
+  "war_wall",
+  "war_crater",
+  "war_deadtree",
+  "war_barbed",
+  "war_rubble",
+  "lair_nest",
+  "lair_bones",
+  "lair_fur",
+  "camp_tent",
+  "camp_sandbags",
+  "camp_crates",
+  "camp_flag",
+  "camp_soldier_melee",
+  "camp_soldier_rifle"
  ],
  "aim": [
   "aim_band",

@@ -1,0 +1,12 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--enable-unsafe-swiftshader','--use-gl=angle','--mute-audio'], defaultViewport: { width: 1280, height: 720 } });
+const p = await b.newPage(); const errs = []; p.on('pageerror', e => errs.push(e.stack || e.message));
+await p.goto('http://localhost:5199/#char=luis&noai=1&nofog=1&keep=1&boss=robot&bt=1', { waitUntil: 'load' });
+await p.waitForFunction(() => window.__arena?.bosses, { timeout: 90000 });
+const sleep = t => new Promise(r => setTimeout(r, t)); await sleep(9500);
+const st = () => p.evaluate(() => { const r = window.__arena.bosses.robot; return JSON.stringify({ phase: r.phase, t: Math.round(r.t), n: r.n || 0, lvl: r.f?.bossLvl, hp: r.f && Math.round(r.f.maxHp), alive: r.f?.alive }); });
+console.log('1st', await st());
+await p.evaluate(() => { const r = window.__arena.bosses.robot; r.f.hp = 0; r.f.die?.(window.__arena.player); });
+await sleep(800); await p.evaluate(() => window.__arena.curPick()?.choose(0)); await sleep(1000); console.log('after death', await st());
+await p.evaluate(() => { window.__arena.bosses.robot.t = 0.5; }); await sleep(10500); console.log('2nd', await st());
+console.log('errors:', [...new Set(errs)].join('\n') || 'none'); await b.close();

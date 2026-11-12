@@ -4,7 +4,7 @@ import json, pathlib
 from PIL import Image
 from atlas import pack as pack_atlas
 
-FRAMES = dict(idle=4, walk=6, run=6, attack=5, power1=6, power2=6, power3=6, ult=8, death=6, aim=8, destroy=6, rubble=1, attack3=6, dash=4, power1_virus=6, power1_trojan=6, power1_worm=6, attack2=4, transform=8, lunge=6, power1b=8, power2b_pull=6, power2b_push=6, power3b=6, ultb=8)
+FRAMES = dict(shake=7, roar=6, missiles=6, summon=5, heal=6, flame=6, mg=6, stomp=7, idle=4, walk=6, run=6, attack=5, power1=6, power2=6, power3=6, ult=8, death=6, aim=8, destroy=6, rubble=1, attack3=6, dash=4, power1_virus=6, power1_trojan=6, power1_worm=6, attack2=4, transform=8, lunge=6, power1b=8, power2b_pull=6, power2b_push=6, power3b=6, ultb=8, puddle_in=6, puddle_move=6, puddle_out=5, puddle_cast=4, power2b=6)
 CELL = 256
 DIRS = ('s', 'se', 'e', 'ne', 'n')   # drawn directions of the 8-direction sprites (sw/w/nw are mirrored by the engine)
 ROOT = pathlib.Path(__file__).resolve().parent.parent

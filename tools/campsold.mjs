@@ -1,0 +1,13 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--enable-unsafe-swiftshader','--use-gl=angle','--mute-audio'], defaultViewport: { width: 1280, height: 720 } });
+const p = await b.newPage(); const errs = []; p.on('pageerror', e => errs.push(e.stack || e.message));
+await p.goto('http://localhost:5199/#char=luis&noai=1&nofog=1&keep=1&boss=captain&bt=1', { waitUntil: 'load' });
+await p.waitForFunction(() => window.__arena?.player && window.__arena.bosses, { timeout: 90000 });
+const sleep = t => new Promise(r => setTimeout(r, t)); await sleep(2500);
+const st = () => p.evaluate(() => { const w = window.__arena, f = w.player, g = w.fighters.filter(q => q.campGuard && q.alive); return JSON.stringify({ guards: g.length, atk: g.filter(q => q.anim === 'attack' || q.state === 'attack').length, hurt: g.filter(q => q.hp < q.maxHp).length, php: Math.round(f.hp) }); });
+await p.evaluate(() => { const w = window.__arena, f = w.player; f.hp = f.maxHp = 99999; f.x = 4455 - 160; f.y = 1235; });
+await sleep(4000); console.log('idle near camp:', await st());
+await p.evaluate(() => { const w = window.__arena, f = w.player, g = w.fighters.find(q => q.campGuard && q.alive); w.damage(f, g, 5, 'physical'); });
+await sleep(3000); console.log('after hitting one:', await st(), await p.evaluate(() => window.__arena.fighters.filter(q => q.campGuard && q.campAggro?.size).length));
+console.log(await p.evaluate(() => { const w = window.__arena, g = w.fighters.find(q => q.campAggro?.size); return JSON.stringify({ g: [g.x|0, g.y|0, g.curName, g.state, g.in, w.player.x|0, w.player.y|0, w.bossTargets(g, 420).length, w.enemiesOf(g).length, g.team, w.player.team] }); }));
+console.log('errors:', [...new Set(errs)].join('\n') || 'none'); await b.close();

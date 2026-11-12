@@ -1,0 +1,11 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--enable-unsafe-swiftshader','--use-gl=angle','--mute-audio'], defaultViewport: { width: 1280, height: 720 } });
+const p = await b.newPage(); const errs=[]; p.on('pageerror', e => errs.push(e.message));
+await p.goto('http://localhost:5199/#char=leandro&mode=3&noai=1&nofog=1&keep=1&enemies=luis,axel', { waitUntil: 'load' });
+await p.waitForFunction(() => window.__arena?.player && window.__arena.fighters.length > 3, { timeout: 90000 });
+const sleep = t => new Promise(r => setTimeout(r, t)); await sleep(5000); await p.mouse.click(640, 300); await sleep(500);
+await p.evaluate(() => { const w = window.__arena, f = w.player, es = w.fighters.filter(x => x.team !== f.team && x.isChamp); f.x = 3000; f.y = 1300; es[0].x = 3100; es[0].y = 1300; es[1].x = 3500; es[1].y = 1300; w.makeCage(f, es[0], 300, 20); });
+await sleep(1500); await p.screenshot({ path: 'art/review_8dir/_cage_in.png' });
+await p.evaluate(() => { const w = window.__arena, f = w.player; w.cages = []; const es = w.fighters.filter(x => x.team !== f.team && x.isChamp); f.x = 3000; f.y = 1300; es[0].x = 3500; es[0].y = 1300; es[1].x = 3560; es[1].y = 1330; w.makeCage(es[0], es[1], 280, 20); });
+await sleep(600); await p.screenshot({ path: 'art/review_8dir/_cage_out.png' });
+console.log(errs.join('\n') || 'no errors'); await b.close();

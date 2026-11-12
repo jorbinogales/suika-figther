@@ -10,6 +10,9 @@ OUT = ROOT.parent / "resources/sounds/ElevenLabs"
 LINES = {   # event name -> what the announcer says. eleven_v3 audio tags ([shouting], [excited]...) drive the emotion; CAPS + "!" add force
  "v_welcome":     "[dramatic, deep voice] Bienvenidos, campeones, al campo de batalla... [pause] [shouting] ¡QUE COMIENCE EL COMBATE! ¡MUCHO ÉXITO!",
  "v_minions":     "[excited] ¡LOS MINIONS HAN SIDO DESPLEGADOS!",
+ "v_boss_beast":  "[dramatic, intense] ¡La bestia ha despertado!",
+ "v_boss_captain": "[dramatic, intense] ¡El capitán ha llegado!",
+ "v_boss_robot":  "[dramatic, intense] ¡Un robot de guerra se acerca!",
  "v_firstblood":  "[shouting] ¡PRIMERA SANGRE!",
  "v_2":           "[shouting] ¡ASESINATO DOBLE!",
  "v_3":           "[shouting, intense] ¡ASESINATO TRÍPLE!",
