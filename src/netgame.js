@@ -138,7 +138,8 @@ export class NetGame {
     if (f.fist?.owner) o.fs = [f.fist.owner.nid, f.fist.n, r2(f.fist.t)];   // Junior's fist counter over the target
     if (f.key.startsWith('bot_')) { o.lf = [r1(f.life), r1(f.life0)]; if (f.enraged) o.en = 1; }   // Leandro's bots: time left and berserk state
     if (f.def.bot === 'crate') o.cb = [r1(f.life), r1(f.life0), r2(f.spawnT || 0), r2(f.spawnMax || 1), f.bugs?.length >= f.bugCap ? 1 : 0];   // Maduro's box: time left and time until the next bug (bars)
-    if (f.def.bot === 'crate' || f.key === 'roach' || f.def.guard) { o.mh = r1(f.maxHp); if (f.bugK) o.bs = r2(f.bugK); }   // summons with upgraded health / size (Maduro)
+    if (f.def.pal && !f.palDog) o.jf = 1;   // Josué's partner: 1 = it is Josué (the player drives the dog)
+    if (f.def.bot === 'crate' || f.key === 'roach' || f.def.guard || f.def.pal) { o.mh = r1(f.maxHp); if (f.bugK) o.bs = r2(f.bugK); }   // summons with upgraded health / size (Maduro)
     if (f.invis) o.iv = f.invis.t === Infinity ? -1 : r2(f.invis.t); if (f.ink) o.ik = r2(f.ink.t); if (f.away) o.aw = 1;
     if (this.w.control?.mode === 'remote' && this.w.control.target === f) o.ch = r2(this.w.control.t);   // shows 'controlled' on that player's screen
     if (f.recall) o.rc = r2(f.recall.t); if (f.recallFx) o.rf = [f.recallFx.phase === 'out' ? 1 : 2, r2(f.recallFx.t)]; if (f.protein) o.pr = r2(f.protein.t); if (f.key === 'maduro') { o.gt = r1(f.guardT ?? 0); o.gn = f.guards?.length || 0; }
@@ -150,6 +151,7 @@ export class NetGame {
       if (f.potions.length) o.po = f.potions.map(p => r2(p.t));
       if (f.def.charge) o.cg = r1(f.charge); if (f.gun) o.gn = 1; if (f.sb) o.sb = r1(f.sb.t); if (f.bomber && !f.bomber.mirror) o.bm = [Math.max(0, BPH.indexOf(f.bomber.phase)), r1(f.bomber.T), r1(f.bomber.t)];   // Yonaiker: ship bar (only grows with hits) and machine gun switch
       if (f.hen) o.hen = [r1(f.henHp), r1(f.henMax)];
+      if (f.duo) f.josuePack(o);   // Josué: which body is driven, the dog's hunt, bloodthirst, partner down timer
       if (f.def.alt) o.br = ABILITY_KEYS.map(a => f.branch[a] || 0); if (f.comb) o.cb = r1(f.comb.t); if (f.leakRe) o.lk = r1(f.leakRe.t);   // Leandro: branch choices, comb and leak windows
       if (f.skin !== f.key) o.sk = f.skin;
       if (f.buff) o.bf = [f.buff.t === Infinity ? -1 : r1(f.buff.t), f.buff.hpMult, f.buff.atkMult, f.buff.cdSpeed];
@@ -161,7 +163,7 @@ export class NetGame {
     const w = this.w, c = w.control, ts = Math.round(performance.now());
     const l = this.ev.length ? this.ev : undefined; this.ev = [];   // the events since the last snapshot travel in it (one message per tick instead of two); applied before it
     if (!this.ld || ts - this.ldT >= 500) { this.ld = [r1((this.ftSum || 0) / Math.max(1, this.ftN || 1)), r1(this.ftMax || 0)]; this.ldT = ts; this.ftSum = this.ftN = this.ftMax = 0; }   // host frame time, every 0.5 s
-    const top = { m: w.mortars.map(m => [r1(m.x), r1(m.y)]), g: r1(w.gameT), ld: this.ld, ctl: c ? [c.luis.nid, c.target.nid, r2(c.t)] : 0, cp: (w.camps || []).map(k => [k.owner ?? -1, r2(k.prog[0]), r2(k.prog[1]), k.contested ? 1 : 0, r1(k.spawnT)]), wv: r1(w.waveT), tr: (w.traps || []).map(q => [r1(q.x), r1(q.y), q.team, q.r, r1(q.t)]), sn: (w.sentinels || []).map(q => [r1(q.x), r1(q.y), q.team, q.r, r1(q.t)]), bs: w.bosses ? ['beast', 'captain', 'robot'].map(k => { const b = w.bosses[k]; return [Math.max(0, Math.ceil(b.t)), !!b.f?.alive, b.phase || '']; }) : null, wz: w.warZone ? 1 : 0 };   // wz: the war zone is permanent terrain, so it rides every keyframe (rejoins / a missed 'wz' event still get it)
+    const top = { m: w.mortars.map(m => [r1(m.x), r1(m.y)]), g: r1(w.gameT), ld: this.ld, ctl: c ? [c.luis.nid, c.target.nid, r2(c.t)] : 0, cp: (w.camps || []).map(k => [k.owner ?? -1, r2(k.prog[0]), r2(k.prog[1]), k.contested ? 1 : 0, r1(k.spawnT)]), wv: r1(w.waveT), tr: (w.traps || []).map(q => [r1(q.x), r1(q.y), q.team, q.r, r1(q.t), q.kind === 'bear' ? 1 : 0, q.shut != null ? 1 : 0, q.arm > 0 ? 1 : 0]), sn: (w.sentinels || []).map(q => [r1(q.x), r1(q.y), q.team, q.r, r1(q.t)]), bs: w.bosses ? ['beast', 'captain', 'robot'].map(k => { const b = w.bosses[k]; return [Math.max(0, Math.ceil(b.t)), !!b.f?.alive, b.phase || '']; }) : null, wz: w.warZone ? 1 : 0 };   // wz: the war zone is permanent terrain, so it rides every keyframe (rejoins / a missed 'wz' event still get it)
     const fs = w.fighters.map(f => this.packF(f)), P = this.prevF, cur = new Map(), msg = { k: 'snap', n: ++this.sn, ts, l }, tj = {};
     for (const k of TOP) tj[k] = JSON.stringify(top[k]);
     if (!P || this.wantKf || ts - this.kfT >= KF_MS) {   // keyframe: the whole state
@@ -329,7 +331,7 @@ export class NetGame {
     if (s.wv != null) w.waveT = s.wv;
     if (s.wz && !w.warZone) w.bossWarZone?.();
     if (s.bs && w.bosses) s.bs.forEach(([t, up, phase], i) => { const b = w.bosses[['beast', 'captain', 'robot'][i]]; if (b) { b.t = t; b.up = up; b.synced = true; if (phase) b.phase = phase; } });
-    if (s.tr) { w.traps = s.tr.map((q, i) => Object.assign(w.traps?.[i] || {}, { x: q[0], y: q[1], team: q[2], r: q[3], t: q[4] })); }
+    if (s.tr) { const old = w.traps || []; old.slice(s.tr.length).forEach(q => q.img?.destroy()); w.traps = s.tr.map((q, i) => Object.assign(old[i] || {}, { x: q[0], y: q[1], team: q[2], r: q[3], t: q[4], kind: q[5] ? 'bear' : undefined, shut: q[6] ? 1 : null, arm: q[7] ? 1 : 0 })); }   // traps that are gone take their picture with them
     if (s.sn) { w.sentinels = s.sn.map((q, i) => Object.assign(w.sentinels?.[i] || { owner: { alive: true } }, { x: q[0], y: q[1], team: q[2], r: q[3], t: q[4] })); }
     // Luis' mind control: the controller's camera and HUD follow the controlled champion
     if (s.ctl) { const L = w.byNid.get(s.ctl[0]), T = w.byNid.get(s.ctl[1]); if (L && T) { const mine = L === w.player; w.control = { luis: L, target: T, t: s.ctl[2], mode: mine ? 'ctrl' : 'view' }; w.ctrl = mine ? T : null; } }
@@ -343,6 +345,7 @@ export class NetGame {
   unpack(f, o, d) {
     const w = this.w, local = f === w.player, first = !f.netSeen; f.netSeen = true;
     if (first) { f.x = o.x; f.y = o.y; }   // also a corpse seen for the first time (rejoin): where it fell, not at its spawn
+    if (f.def.pal) f.palUnpack(o);   // Josué's partner: dog or archer (before the death animation picks its art)
     if (o.a === 0) { if (f.alive) { f.alive = false; f.state = 'dead'; f.pending = null; f.playAnim('death', 0.9); } }
     else if (!f.alive && f.isChamp) { f.x = o.x; f.y = o.y; f.reset(); f.playAnim('idle'); f.netSeen = true; f.nb = null; if (f === w.pc) this.histFor = null; }   // respawn: no sliding from the corpse
     if (f.alive) {   // position: a sample for the interpolation (remote units) and the reconciliation (ours)
@@ -384,6 +387,7 @@ export class NetGame {
       if (o.hen) { f.hen = true; f.henHp = o.hen[0]; f.henMax = o.hen[1]; } else f.hen = false;
       f.buff = o.bf ? { t: o.bf[0] < 0 ? Infinity : o.bf[0] + 0.5, hpMult: o.bf[1], atkMult: o.bf[2], cdSpeed: o.bf[3] } : null;
       f.pkBuffs = Object.fromEntries((o.pk || []).map(([k, t, m, T]) => [k, { t: t + 0.3, m, T }]));
+      if (f.duo) f.josueUnpack(o);   // Josué: the driven body (a swap is a jump: no sliding)
       const sk = o.sk || f.key; if (f.skin !== sk) f.setSkin(sk);
       f.mana = o.m;
     }

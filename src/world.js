@@ -13,6 +13,7 @@ import { botStart } from './launcher.js';
 import { isWalk, OPEN } from './mapdata.js';
 import { SurvivalMixin } from './survival.js';
 import { BossMixin, laneUnitIgnoresBoss, recordBossAttacker, campCanAttack } from './bosses.js';
+import { JosueWorld } from './josue.js';
 
 
 const ZOOM_MIN = 0.96, ZOOM_MAX = 1.4;   // default / farthest view = 80 % of the first closer view (1.2), closest = 1.4
@@ -115,9 +116,10 @@ export class Arena extends Phaser.Scene {
     // a second match in the same page: whatever is already loaded is not requested again
     const L = { on: (...a) => LD.on(...a), image: (k, u) => { if (!this.textures.exists(k)) LD.image(k, u); }, spritesheet: (k, u, c) => { if (!this.textures.exists(k)) LD.spritesheet(k, u, c); }, multiatlas: (k, j, p) => { if (!this.textures.exists(k)) LD.multiatlas(k, j, p); }, audio: (k, u) => { if (!this.cache.audio.exists(k)) LD.audio(k, u); } };
     const champs = this.matchChamps(), allKeys = Object.keys(CHAMPIONS), mine = k => champs.some(c => k === c || k.startsWith(c + '_')), isChampKey = k => allKeys.some(c => k === c || k.startsWith(c + '_'));
-    const ok = k => all || !isChampKey(k) || mine(k);
+    const noArt = k => !!CHAMPIONS[k].artFallback && !(m.sprites || {})[CHAMPIONS[k].art], fbAll = [...new Set(champs.filter(noArt).map(k => CHAMPIONS[k].artFallback))], fbAtl = new Set(fbAll);   // champion not drawn yet (Josué): load the stand-in's art instead of asking for files that do not exist
+    const ok = k => all || !isChampKey(k) || mine(k) || fbAtl.has(k);
     if (!this.bot) { bootScreen.show(); L.on('progress', v => bootScreen.progress(8 + v * 80)); L.on('filecomplete', k => bootScreen.progress(undefined, /^sfx_/.test(k) ? 'CARGANDO SONIDOS...' : /^(atl_)/.test(k) ? 'CARGANDO CAMPEONES Y UNIDADES...' : /^(item_|icon_|class_)/.test(k) ? 'CARGANDO HABILIDADES Y OBJETOS...' : 'CONSTRUYENDO EL MAPA...')); }
-    champs.forEach(k => { L.image('face_' + k, `assets/concept/${k}_face.webp`); L.image('ref_' + k, `assets/ref_${k}.png`); });
+    [...champs.filter(k => !noArt(k)), ...fbAll].forEach(k => { L.image('face_' + k, `assets/concept/${k}_face.webp`); L.image('ref_' + k, `assets/ref_${k}.png`); });
     if (champs.includes('maduro')) L.image('ref_superbigote', 'assets/ref_superbigote.png');
     L.spritesheet('fist_progress', 'assets/objects/fist_progress_sheet.png', { frameWidth: 128, frameHeight: 128 });
     L.image('shadow', 'assets/map/shadow.png'); L.image('virtual_floor', 'assets/virtual_floor.png');
@@ -163,6 +165,7 @@ export class Arena extends Phaser.Scene {
     ['zap_a', 'zap_b'].forEach(n => { if (this.textures.exists(n) && !A.exists(n)) A.create({ key: n, frames: A.generateFrameNumbers(n), frameRate: 16, repeat: -1 }); });
     for (const fl of (m.flags || [])) if (this.textures.exists('flag_' + fl) && !A.exists('flag_' + fl)) A.create({ key: 'flag_' + fl, frames: A.generateFrameNumbers('flag_' + fl), frameRate: 8, repeat: -1 });
     for (const sheet in CROPS) for (const n in CROPS[sheet]) { const tx = this.textures.get(sheet); if (!tx.has(n)) tx.add(n, 0, ...CROPS[sheet][n]); }
+    for (const k in CHAMPIONS) { const fb = CHAMPIONS[k].artFallback; if (fb) for (const p of ['face_', 'ref_']) if (!this.textures.exists(p + k) && this.textures.exists(p + fb)) this.textures.addImage(p + k, this.textures.get(p + fb).getSourceImage()); }   // portrait / card of a champion without art yet: the stand-in's
   }
 
   get pc() { return this.ctrl && this.ctrl.alive ? this.ctrl : this.player; }
@@ -328,7 +331,7 @@ export class Arena extends Phaser.Scene {
 
   /* ---------- placeholder art (replaced by assets/objects/<name>.png when present) ---------- */
   buildPlaceholderTextures() {
-    if (!this.textures.exists('comb_wave0')) {   // Leandro's comb wave: a detailed animated crescent (glowing body with a white core, inner streaks, speed trail and sparks), blue-green and red versions
+    if (!this.bot && !this.textures.exists('comb_wave0')) {   // (the headless host has no renderer: refresh() on a canvas texture crashed its create(); the comb wave falls back to a plain projectile there)   // Leandro's comb wave: a detailed animated crescent (glowing body with a white core, inner streaks, speed trail and sparks), blue-green and red versions
       const PAL = { n: { core: '#ffffff', mid: '#7fffe6', out: 'rgba(40,200,220,0.25)', glow: '#3ee8d0', streak: 'rgba(255,255,255,0.85)', trail: '90,240,225' }, r: { core: '#fff2e0', mid: '#ff7a55', out: 'rgba(200,30,30,0.3)', glow: '#ff2a2a', streak: 'rgba(255,230,200,0.85)', trail: '255,90,70' } };
       const W = 170, H = 130, A = 1.05, rnd = rng(5);
       for (const k of ['n', 'r']) {
@@ -356,6 +359,11 @@ export class Arena extends Phaser.Scene {
       const g = this.make.graphics({ x: 0, y: 0, add: false });
       draw(g); g.generateTexture(key, w, h); g.destroy();
     };
+    // Josué's objects until art/raw/objects has them: arrow (pointing right), charged arrow, open / closed bear trap
+    mk('arrow', 64, 12, g => { g.fillStyle(0x3a2412).fillRect(6, 5, 50, 3); g.fillStyle(0xc89a5a).fillRect(7, 5, 48, 2); g.fillStyle(0xd8dce2).fillTriangle(54, 1, 64, 6, 54, 11); g.fillStyle(0xd8342a).fillTriangle(0, 1, 12, 6, 0, 6).fillTriangle(0, 11, 12, 6, 0, 6); });
+    mk('arrow_charged', 96, 24, g => { g.fillStyle(0xffb020, 0.35).fillEllipse(50, 12, 96, 20); g.fillStyle(0xffd27a, 0.6).fillEllipse(56, 12, 70, 10); g.fillStyle(0x3a2412).fillRect(10, 10, 70, 4); g.fillStyle(0xffe6a0).fillRect(11, 10, 68, 2); g.fillStyle(0xfff4d0).fillTriangle(78, 4, 96, 12, 78, 20); g.fillStyle(0xd8342a).fillTriangle(0, 4, 18, 12, 0, 12).fillTriangle(0, 20, 18, 12, 0, 12); });
+    mk('bear_trap', 60, 34, g => { g.fillStyle(0x000000, 0.35).fillEllipse(30, 22, 58, 20); g.lineStyle(4, 0x3a3f46).strokeEllipse(30, 18, 52, 26); g.lineStyle(2, 0x9aa3ad).strokeEllipse(30, 18, 50, 24); for (let i = 0; i < 10; i++) { const a = i / 10 * Math.PI * 2, x = 30 + Math.cos(a) * 22, y = 18 + Math.sin(a) * 10; g.fillStyle(0xd8dce2).fillTriangle(x - 3, y, x + 3, y, 30 + Math.cos(a) * 15, 18 + Math.sin(a) * 6); } g.fillStyle(0x6a5030).fillCircle(30, 18, 5); });
+    mk('bear_trap_shut', 50, 30, g => { g.fillStyle(0x000000, 0.35).fillEllipse(25, 22, 48, 14); g.fillStyle(0x3a3f46).fillRoundedRect(4, 8, 42, 14, 6); g.fillStyle(0x9aa3ad).fillRect(6, 13, 38, 3); for (let i = 0; i < 7; i++) g.fillStyle(0xd8dce2).fillTriangle(7 + i * 6, 13, 10 + i * 6, 6, 13 + i * 6, 13); });
     mk('roach', 40, 24, g => {   // Maduro's cockroach: brown oval body, head, legs and antennae, facing right
       g.lineStyle(2, 0x2a1608).beginPath().moveTo(12, 10).lineTo(6, 3).moveTo(18, 10).lineTo(18, 2).moveTo(24, 10).lineTo(30, 3).moveTo(12, 15).lineTo(6, 22).moveTo(18, 16).lineTo(18, 23).moveTo(24, 15).lineTo(30, 22).moveTo(33, 11).lineTo(39, 5).moveTo(33, 13).lineTo(39, 17).strokePath();
       g.fillStyle(0x2a1608).fillEllipse(19, 13, 28, 17).fillCircle(31, 13, 7); g.fillStyle(0x7a3f14).fillEllipse(19, 13, 25, 14).fillCircle(31, 13, 5); g.fillStyle(0xb8742a).fillEllipse(17, 11, 14, 5);
@@ -593,6 +601,7 @@ export class Arena extends Phaser.Scene {
     const ptr = this.input.activePointer, overUi = (this.uiRects || []).some(r => ptr.x >= r.x && ptr.x <= r.x + r.w && ptr.y >= r.y && ptr.y <= r.y + r.h);
     const left = ptr.leftButtonDown(), leftClick = left && !this.prevLeft, right = ptr.rightButtonDown(), rightClick = right && !this.prevRight;
     this.prevLeft = left; this.prevRight = right;
+    if (this.jCharge) this.josueChargeTick(p);   // Josué holding E
     if (p.bomber) { p.in = { mx: 0, my: 0, run: false }; ['p1', 'p2', 'ult'].forEach(a => J(k[a]) && this.beginAim(a)); return; }   // aboard: clicks / E fire missiles in updateBomber; Q (machine gun), F (crates) and R are cast here
     if (leftClick && !overUi && !this.aimKey) {   // click on a champion selects it (info panel, top-right)
       const m = this.cursorWorld(ptr);
@@ -603,7 +612,7 @@ export class Arena extends Phaser.Scene {
     ABILITY_KEYS.forEach(a => J(k[a]) && (k.ctrl.isDown ? this.askSpend(a) : this.aimKey === a ? this.confirmAim() : this.beginAim(a)));
     if (J(k.esc) || rightClick) this.cancelAim();
     if (this.aimKey) { if (leftClick && !overUi) this.confirmAim(); }
-    else {
+    else if (!this.jCharge) {
       if (this.clickQ > 0 && this.time.now - this.clickQT >= 600) this.clickQ = 0;   // clicks not used within 0.6 s are forgotten
       const queued = this.clickQ > 0;   // every click is remembered (even a tap shorter than one frame) and each one throws exactly one hit as soon as the previous hit allows it
       if ((queued && !overUi) || (left && !overUi) || k.basic.isDown || k.basic2.isDown || J(k.basic) || J(k.basic2)) { if (p.tryBasic() && this.clickQ > 0) this.clickQ--; }
@@ -642,6 +651,7 @@ export class Arena extends Phaser.Scene {
     if (p.silenceT > 0) { this.float(p.x, p.y - p.def.height - 30, 'SILENCIADO', '#c77dff'); this.audio.play('glitch', { gap: 250 }); return; }
     if (p.key === 'yonaiker' && p.abilityLocked(a)) { this.float(p.x, p.y - p.def.height - 30, a === 'p3' ? 'La nave llega al llenar la barra (dispara y acierta)' : 'Solo disponible a bordo de la nave', '#9fe8ff'); return; }   // Q gun on foot, F both, E / R aboard
     if ((p.key === 'luis' && a !== 'ult') || (p.key === 'hector' && a !== 'p2') || (p.key === 'yonaiker' && (a !== 'p2' || p.bomber)) || (p.key === 'maduro' && (a === 'p2' || a === 'ult')) || (p.key === 'diosa' && (a === 'p2' || a === 'ult' || (a === 'p1' && p.qRe))) || (p.key === 'julio' && ((a === 'ult' && d.v === 'puddle') || (a === 'p2' && !d.v && rank >= 3))) || (p.key === 'leandro' && (d.v === 'comb' || (d.v === 'leak' && !p.leakRe)))) { p.tryCast(a); return; }   // instant casts: no aiming step
+    if (p.duo && a !== 'p1') { if (a === 'p3' && !p.dogForm) return this.josueChargeStart(); if (a === 'p2' && !p.dogForm) p.castPoint = this.josueDashDir(); p.tryCast(a); return; }   // Josué: R / dog F / dog E instant, F jumps, E is held (josue.js)
     if (p.key === 'junior' && a === 'p2') { const m = this.mouseGround(); if (!this.hoverKey) p.setAim(m.x - p.x, m.y - p.y); p.tryCast(a); return; }   // somersault is instant; the flamethrower is aimed (the triangle preview) and then locks that direction
     if (p.key === 'jorbi' && a === 'p2') {   // instant dash toward the cursor (no aim step)
       const m = this.mouseGround(); if (!this.hoverKey) p.setAim(m.x - p.x, m.y - p.y);
@@ -1087,6 +1097,7 @@ export class Arena extends Phaser.Scene {
     if (f.bossKind) return this.runBoss(f, dt);
     if (f.campGuard) return this.runCamp(f);
     if (f.antivirus) return this.runAntivirus(f);
+    if (f.def.pal) return this.runPal(f);   // Josué's partner (josue.js)
     if (f.def.bot === 'wall') return;
     if (f.def.guard && f.owner) {   // bodyguards never leave their formation around Maduro: they only strike what is already inside their reach
       this.escort(f); const t = this.nearestEnemy(f, f.def.stats.range + 40);
@@ -1525,6 +1536,7 @@ export class Arena extends Phaser.Scene {
     if (this.net?.role === 'client') return;
     for (const f of this.champs) if (f.barr) { const b = f.barr; b.t += dt; if (!f.alive || b.t > b.maxT || b.segs.every(s => !s.alive)) this.endBarricade(f); }
     this.traps = (this.traps || []).filter(tr => {
+      if (tr.kind === 'bear') return this.bearTrapTick(tr, dt);   // Josué's Trampa
       if ((tr.t -= dt) <= 0 || !tr.owner.alive && false) return false;
       const hit = this.fighters.find(e => e.alive && !e.away && !e.drop && !e.isTower && e.team !== tr.team && eDist(e.x, e.y, tr.x, tr.y) <= tr.r * 0.8);
       if (!hit) return true;
@@ -1569,6 +1581,7 @@ export class Arena extends Phaser.Scene {
   drawYonaiker() {
     const g = (this.yonG ||= this.add.graphics().setDepth(-855)); g.clear(); const mine = this.player.baseTeam, t = this.time.now / 1000;
     for (const tr of this.traps || []) {   // only the owner's team sees the trap
+      if (tr.kind === 'bear') { this.drawBearTrap(g, tr, mine, t); continue; }
       if (tr.team !== mine || !this.inView(tr.x, tr.y, 120)) continue;
       g.lineStyle(2, 0xffd23f, 0.5 + 0.25 * Math.sin(t * 4)).strokeEllipse(tr.x, tr.y, tr.r * 2, tr.r * 2 * YR); g.fillStyle(0xffd23f, 0.1).fillEllipse(tr.x, tr.y, tr.r * 2, tr.r * 2 * YR);
       if (this.textures.exists('trap_plate')) { tr.img ||= this.add.image(tr.x, tr.y, 'trap_plate').setDisplaySize(46, 24).setAlpha(0.6).setDepth(tr.y - 4); }
@@ -2361,7 +2374,7 @@ export class Arena extends Phaser.Scene {
     if (src?.isBoss && !this.bossCanAttack(src, target)) return 0;
     if (src?.bossDmg) raw *= src.bossDmg;   // boss level: more damage in every attack
     if (laneUnitIgnoresBoss(src, target)) return 0;
-    if (target.invulT > 0 || target.puddle) return 0;   // Show principal: invulnerable / Julio as an ink puddle: untargetable
+    if (target.invulT > 0 || target.puddle || (target.away && target.def.pal)) return 0;   // ... / Josué hidden during the dog's hunt   // Show principal: invulnerable / Julio as an ink puddle: untargetable
     recordBossAttacker(target, src);
     if (!dot && src && src.team !== target.team && target.key === 'xeviche' && target.arepaBlocks()) return 0;   // Arepa reina pepiada: the shield swallows this hit
     if (target.isTower && target.wallRef?.alive) return 0;   // the outer tower protects the inner one
@@ -2369,7 +2382,7 @@ export class Arena extends Phaser.Scene {
     if (target.isTower && !this.basicDmg) return 0;   // towers and nexus only take basic attacks
     if (!dot) this.audio.play(target.isNexus ? 'hit_heavy' : target.isTower ? 'hit_metal' : type === 'physical' ? 'hit_flesh' : 'debuff', { at: target, vol: target.isTower ? 0.5 : 0.55, gap: 90 });
     const resist = type === 'physical' ? target.armor : type === 'magic' ? target.mr : 0;
-    if (src?.key === 'luis' && target !== src) src.lastTarget = target;
+    if ((src?.key === 'luis' || src?.duo) && target !== src) { src.lastTarget = target; src.lastTargetT = this.gameT; }   // Luis' drones / Josué's partner attack it too
     if (target.isRage && !dot && target.alive) target.addRage(Math.min(10, raw * 100 / (100 + resist) / target.maxHp * 100 * target.def.hen.rageTaken));
     { const atk = src?.owner || src; if (target.isChamp && atk?.isChamp && atk.team !== target.team) { atk.hunted = { team: target.team, t: 3 }; target.lastChampHit = { champ: atk, t: this.gameT }; (target.hitBy ||= new Map()).set(atk, this.gameT); } }   // allied minions/towers retaliate
     if (target.key === 'luis' && src?.isChamp) { const hz = this.zones.find(z => z.kind === 'hack' && z.owner === target); if (hz && !hz.free.has(src)) { hz.free.add(src); src.silenceT = 0; this.float(src.x, src.y - src.def.height - 30, 'LIBRE', '#ffffff'); } }
@@ -2393,6 +2406,7 @@ export class Arena extends Phaser.Scene {
       if (dmg <= 0) return 0;
     }
     target.hp -= dmg;
+    if (src?.bloodT > 0 && !dot && src !== target && src.team !== target.team && src.alive) src.heal(dmg * (src.bloodPct || 0));   // Josué's dog: Sed de sangre
     if (target.isChamp && dmg > 0) this.logDamage(src, target, dmg, type, dot);
     if (target.recall && dmg > 0) { target.recall = null; this.float(target.x, target.y - target.def.height - 30, 'Teletransporte cancelado', '#ff9a7a'); }
     { const o = src?.owner || src; if (o?.isChamp && o.it?.lifesteal && type === 'physical' && !dot && o !== target) o.hp = Math.min(o.maxHp, o.hp + o.healMult * dmg * o.it.lifesteal * (o.pas.has('garras_vampiricas') && o.hp < o.maxHp * 0.4 ? 1 + o.pas.get('garras_vampiricas') : 1)); }
@@ -2719,7 +2733,7 @@ export class Arena extends Phaser.Scene {
     if (this.banner && (this.banner.t -= dt) <= 0) this.banner = null;
     if (this.over) this.over.t += dt;
     const bm = this.pc.bomber, aboard = bm && (bm.phase === 'fly' || bm.phase === 'land');
-    const zn = Phaser.Math.Clamp(this.scale.height / VIEW_H, 0.6, 4), ab = this.aimKey && this.pc.def.abilities[this.aimKey], far = ab?.wide && (ab.v !== 'leak' || this.pc.leakRe), z = aboard ? zn / 1.5 : far ? zn * 0.5 : zn * this.zoomK;   // aboard the ship: 50 % farther than the normal view
+    const zn = Phaser.Math.Clamp(this.scale.height / VIEW_H, 0.6, 4), ab = this.aimKey && this.pc.def.abilities[this.aimKey], far = ab?.wide && (ab.v !== 'leak' || this.pc.leakRe), z = aboard ? zn / 1.5 : far ? zn * 0.5 : zn * this.zoomK * (1 - 0.4 * this.josueChargeK());   // aboard the ship: 50 % farther than the normal view
     if (!this.zoom || this.snapZoom || Math.abs(z - this.zoom) < 0.002) this.zoom = z; else this.zoom += (z - this.zoom) * Math.min(1, dt * 4);
     this.cameras.main.setZoom(this.zoom);
     if (aboard) { this.camTarget.x = bm.pt.x; this.camTarget.y = bm.pt.y; this.cameras.main.centerOn(bm.pt.x, bm.pt.y); } else { this.camTarget.x = this.pc.x; this.camTarget.y = this.pc.y - 30; }
@@ -2761,6 +2775,7 @@ export class Arena extends Phaser.Scene {
       this.drawTowerRanges();
       this.drawAim();
       this.drawRangeHint();
+      this.drawJosue();
       this.drawRewind(dt);
     }
     this.drawCamps(dt);
@@ -2943,7 +2958,7 @@ export class Arena extends Phaser.Scene {
       }
       if (!f.alive) { f.bt && Object.values(f.bt).forEach(t => t.setVisible(false)); f.invIc?.setVisible(false); f.poisIc?.setVisible(false); f.burnIc?.setVisible(false); f.lureIc?.setVisible(false); f.blindIc?.setVisible(false); f.blindEye?.setVisible(false); continue; }
       const hx = f.x, hy = f.y - f.def.height;
-      const w = champ ? 96 : f.isNexus ? 160 : f.isTower ? 90 : 36, h = champ ? 12 : f.isNexus ? 14 : f.isTower ? 9 : 6, x = hx - w / 2, mh = 8, xh = 4;
+      const w = champ ? 96 : f.def.pal ? 64 : f.isNexus ? 160 : f.isTower ? 90 : 36, h = champ ? 12 : f.def.pal ? 8 : f.isNexus ? 14 : f.isTower ? 9 : 6, x = hx - w / 2, mh = 8, xh = 4;
       const y = hy - (champ ? 38 : 14);
       g.fillStyle(0x000000, 0.75).fillRect(x - 2, y - 2, w + 4, h + 4 + (champ ? mh + 2 : 0));
       const sh = f.shieldHp > 0 ? f.shieldHp : 0, tot = Math.max(f.maxHp, f.hp + sh);
@@ -3011,4 +3026,4 @@ export class Arena extends Phaser.Scene {
   }
 }
 
-Object.assign(Arena.prototype, SurvivalMixin, BossMixin);
+Object.assign(Arena.prototype, SurvivalMixin, BossMixin, JosueWorld);

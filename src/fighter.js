@@ -1,5 +1,6 @@
 import { maduroSB, SV_MAX_LEVEL, COMBOS, LUNGES, COMBO_WINDOW, CHAMPIONS, ABILITY_KEYS, MAX_LEVEL, MAX_RANK, ULT_LEVELS, rk } from './data.js';
 import { JulioMixin } from './julio.js';
+import { JosueMixin, PAL_DOG } from './josue.js';
 import { fmtStat, STAT_LABEL as STAT_LABEL_B, ITEM_BY_ID, MINI_OF, SLOTS, sellValue, buyPlan, PERM_KEYS, PERM_BY_ID, PERM_COST, STAT_CAP } from './items.js';
 
 // World geometry: top-down map, one horizontal lane.
@@ -20,6 +21,7 @@ export const BOT_DEFS = {
   bodyguard: { name: 'Guardaespaldas', isBot: true, bot: 'melee', guard: true, phys: true, ref: 'bodyguard', stats: { hp: 260, mana: 0, atk: 0, ap: 0, armor: 25, mr: 15, speed: 175, run: 215, range: 70, atkCd: 0.9 }, height: 100 },   // Maduro's permanent escorts
   crate: { name: 'Cesta', isBot: true, bot: 'crate', phys: true, ref: 'empty_box', radius: 34, stats: { hp: 220, mana: 0, atk: 0, ap: 0, armor: 10, mr: 0, speed: 0, run: 0, range: 0, atkCd: 9 }, height: 60 },   // Maduro's box: lasts a minute, spawns bugs and poisons the area
   roach: { name: 'Cucaracha', isBot: true, bot: 'melee', phys: true, ref: 'roach', stats: { hp: 60, mana: 0, atk: 0, ap: 0, armor: 5, mr: 0, speed: 190, run: 190, range: 46, atkCd: 0.7 }, height: 62 },
+  josue_dog: PAL_DOG,   // Josué's partner (dog or archer, see josue.js)
   bot_melee:  { name: 'Bot', isBot: true, bot: 'melee',  stats: { hp: 140, mana: 0, atk: 0, ap: 0, armor: 10, mr: 10, speed: 170, run: 170, range: 70,  atkCd: 0.8 }, height: 100 },
   bot_ranged: { name: 'Bot', isBot: true, bot: 'ranged', stats: { hp: 90,  mana: 0, atk: 0, ap: 0, armor: 5,  mr: 5,  speed: 150, run: 150, range: 340, atkCd: 1.0 }, height: 100 },
 };
@@ -88,6 +90,7 @@ export class Fighter {
     this.points = this.isChamp ? 1 : 0;
     this.ranks = { p1: 0, p2: 0, p3: 0, ult: 0 };
     this.branch = {};   // ability slot -> 1 when the second branch (def.alt) was chosen
+    if (this.def.duo) this.duoInit();   // Josué: two bodies (josue.js)
     this.comb = null; this.leakRe = null; this.revealT = 0;
     this.setupStacks = 0;
     this.basicCount = 0;
@@ -196,7 +199,7 @@ export class Fighter {
     return !this.w.fighters.some(e => e.alive && !e.away && e.baseTeam === viewerTeam && Math.hypot(e.x - this.x, e.y - this.y) < 200);
   }
   hiddenFor(me) { return this.away || this.w.cages?.some(c => c.inside.has(me) !== c.inside.has(this)) || this.fogHidden || (this.baseTeam !== me.baseTeam && this.hiddenInBush(me.baseTeam)) || ((this.invis || (this.antivirus && this.owner?.invis)) && this.baseTeam !== me.baseTeam); }
-  breakInvis() { if (this.invis) { this.invis = null; if (this.isBot) { this.w.vfx('run_dust', this.x, this.y - 6, { scale: 3, alpha: 0.9, below: true }); this.w.vfx('summon', this.x, this.y - 10, { scale: 2 }); return; } if (this.key === 'luis') this.stab = 2.5; this.w.float(this.x, this.y - this.def.height - 30, 'visible', '#9be37a'); } }
+  breakInvis() { if (this.invis) { this.invis = null; if (this.isBot) { this.w.vfx('run_dust', this.x, this.y - 6, { scale: 3, alpha: 0.9, below: true }); this.w.vfx('summon', this.x, this.y - 10, { scale: 2 }); return; } if (this.hunt) this.josueHuntEnd(); if (this.key === 'luis') this.stab = 2.5; this.w.float(this.x, this.y - this.def.height - 30, 'visible', '#9be37a'); } }
   tryMove(nx, ny) {   // forest (trees / bushes) is impassable: slide along walls
     if (isWalk(nx, this.y)) this.x = nx;
     if (isWalk(this.x, ny)) this.y = ny;
@@ -275,6 +278,7 @@ export class Fighter {
     this.hen = false; this.rage = 0; this.pkBuffs = {}; this.protein = null; this.pullTo = null; this.bike = null; this.ride = null;
     this.qRe = null; this.cdrT = 0; this.invulT = 0; this.drT = 0; this.sShield = null; this.atkSlowT = 0; this.armorShredT = 0; this.devalT = 0; this.shove = null; this.pullMe = null; this.comb = null; this.leakRe = null; this.revealT = 0; if (this.sb) this.setSB(0);
     if (this.skin !== this.art) this.setSkin(this.art);
+    if (this.duo) this.josueReset();
   }
 
   // sprite set in use ('jorbi' or 'jorbi_buff' while transformed)
@@ -406,6 +410,7 @@ export class Fighter {
     if (!(this.free || this.chaining()) || this.cds.basic > 0 || this.flame || this.ride || this.lure || this.bomber || this.burst || this.inkFree) {   // no basic attacks while the flamethrower / Julio's golden burst / ink glide is active
       return false;
     }
+    if (this.hunt) return this.josuePounce();   // Josué's dog hunting: the attack is a leap on the prey
     this.cancelRecall(); this.bufferT = 0; this.fIdle = 0; this.brRevealT = 1.6;   // attacking pauses the Farándula recharge; attacking from a bush gives away the position
     this.cds.basic = (this.comb?.atkCd || this.def.stats.atkCd) * (this.enraged ? 0.6 : 1) / (1 + this.pk('aspd') + this.it.aspd) / (this.atkSlowT > 0 ? 1 - this.atkSlow : 1);
     if (this.invis) this.breakInvis();
@@ -442,6 +447,7 @@ export class Fighter {
     if (!a || !rank || a.passive || this.silenceT > 0 || this.charmT > 0) return false;
     if (this.burst || this.inkFree) return false;   // Julio: golden burst and the ink glide lock every other ability
     if (this.flame || this.ride || this.lure || (this.bomber && this.key !== 'yonaiker') || this.abilityLocked(k)) return false;   // while the flamethrower burns / the bike runs / lured by a heart: no other ability and no recast
+    if (this.duo && k === 'ult' && !(this.pal?.alive && !this.pal.away)) return false;   // Fiel compañero needs the partner at hand
     if (this.key === 'jorbi' && k === 'p2') {   // instant dash, uses one charge
       if (!this.free || this.dashCharges <= 0) return false;
       const cost = rk(a.mana, rank);
@@ -495,7 +501,7 @@ export class Fighter {
     const shoot = (ang) => {
       if (b.obj || !b.every3) {   // generic ranged physical attack (axel's laptop, yonaiker's bolts, julio's drawings, eliud's eggs)
         const jb = this.key === 'julio' ? this.inkBounces() : null, jd = (b.base + this.ap * b.apScale) * cs.dmg;   // Tinta rebotona (passive): golden ink that bounces to the nearest enemy
-        w.projectile(this, { ang, range: this.def.stats.range, onHit: jb ? t => w.inkBounce(this, t, rk(jb.bounces, this.ranks.p3), jd * jb.keep, jb, new Set([t])) : this.key === 'eliud' ? () => this.addRage(this.def.hen.rageHit) : null, speed: jb ? 900 : (this.basicSpeed || b.speed) * (cs.speed || 1), dmg: (b.alt || (b.apScale != null && b.atkScale == null) ? b.base + this.ap * b.apScale : b.base + this.atk * b.atkScale) * cs.dmg, type: b.type, obj: this.puddle && w.textures.exists('ink_bubble') ? 'ink_bubble' : jb && w.textures.exists('ink_gold_drop') ? 'ink_gold_drop' : cs.obj || b.obj, tint: jb && !this.puddle ? 0xffd23f : null, ...(this.puddle ? { lift: 12 } : {}), vfx: b.vfx, spin: !!b.obj && !b.alt, scale: this.puddle || jb ? 0.05 : (b.scale ? b.scale : b.alt ? 0.2 : this.key === 'eliud' ? 0.12 : 0.17) * (cs.scale || 1), r: 14 * (cs.scale > 1 ? 1.3 : 1) });
+        w.projectile(this, { ang, range: this.def.stats.range, onHit: jb ? t => w.inkBounce(this, t, rk(jb.bounces, this.ranks.p3), jd * jb.keep, jb, new Set([t])) : this.key === 'eliud' ? () => this.addRage(this.def.hen.rageHit) : null, speed: jb ? 900 : (this.basicSpeed || b.speed) * (cs.speed || 1), dmg: (b.alt || (b.apScale != null && b.atkScale == null) ? b.base + this.ap * b.apScale : b.base + this.atk * b.atkScale) * cs.dmg, type: b.type, obj: this.puddle && w.textures.exists('ink_bubble') ? 'ink_bubble' : jb && w.textures.exists('ink_gold_drop') ? 'ink_gold_drop' : cs.obj || b.obj, tint: jb && !this.puddle ? 0xffd23f : null, ...(this.puddle ? { lift: 12 } : {}), vfx: b.vfx, spin: !!b.obj && !b.alt && !b.face, face: b.face, scale: this.puddle || jb ? 0.05 : (b.fit ? w.objFit(cs.obj || b.obj, b.fit) : b.scale ? b.scale : b.alt ? 0.2 : this.key === 'eliud' ? 0.12 : 0.17) * (cs.scale || 1), r: 14 * (cs.scale > 1 ? 1.3 : 1) });
         return;
       }
       const big = !!cs.fin;   // leandro / xeviche: the finisher is their big magic missile
@@ -699,6 +705,7 @@ export class Fighter {
   fireAbility(k, a, rank) {
     const w = this.w;
     w.audio.ability(this, k);
+    if (this.duo) return this.fireJosue(k, a, rank);   // josue.js
     if (this.key === 'leandro' && a.v) return this.fireLeandroB(k, a, rank);
     if (this.key === 'julio' && (k !== 'ult' || a.v)) return this.fireJulio(k, a, rank);   // julio.js
     switch (this.key + ':' + k) {
@@ -924,6 +931,7 @@ export class Fighter {
 
   botAttack() {
     this.w.audio.attack(this);
+    if (this.def.pal) return this.palAttack();   // Josué's partner
     if (this.antivirus) { if (this.owner?.invis) return; const lt = this.owner?.lastTarget, t = lt?.alive && !lt.away && Math.hypot(lt.x - this.x, lt.y - this.y) < 750 ? lt : this.w.nearestEnemy(this, 400); if (t?.alive && !t.away) { this.setAim(t.x - this.x, t.y - this.y); this.w.laser(this, t, this.botAp); } return; }
     const t = this.w.nearestEnemy(this, this.def.stats.range + 40);
     if (!t) return;
@@ -1057,6 +1065,7 @@ export class Fighter {
     if (this.recall) add('recall', 'Teletransporte', this.recall.t, false, 'Volverás a tu base. Se cancela si recibes daño.', { icon: 'item_teleport_base', name: 'Teleport a la base' });
     if (this.potions.length) add('potion', 'Poción', Math.max(...this.potions.map(p => p.t)), false, 'Recuperas vida y maná con el tiempo.', { icon: 'item_pocion_vida_peq', name: 'Poción' });
     if (this.protein) add('protein', 'Curación (proteína)', this.protein.t, false, 'Te curas con el tiempo hasta recibir daño.');
+    if (this.duo) this.josueStatus(add);
     if (this.invis) add('invis', 'Invisible', null, false, 'Los enemigos no te ven (solo las torretas).');
     if (this.hen) add('hen', `Gallina ${Math.ceil(this.henHp)}`, null, false, 'Montas una gallina gigante: más ataque, defensa y velocidad. Absorbe daño hasta agotarse.', { icon: 'icon_eliud_p1', name: 'Gallina gigante', by: this.def.name });
     if (this.buff && !this.hen) add('buff', 'Transformación', this.buff.t, false, 'Más vida y ataque, poderes más rápidos.');
@@ -1079,6 +1088,7 @@ export class Fighter {
   }
 
   die(killer) {
+    if (this.duo && this.w.net?.role !== 'client' && this.josueSave(killer)) return;   // Josué: the partner takes over, nobody died yet
     if (this.isChamp) this.deaths++;
     this.alive = false; this.state = 'dead';
     this.stateT = 0; this.deadT = 0; this.pending = null; this.stunT = 0;
@@ -1131,7 +1141,7 @@ export class Fighter {
       if (this.isBot || this.isMinion) { if (this.deadT > 2.6) this.dispose = true; }   // corpse stays ~2s, then fades
       else if (!this.isTower && !this.w.survival && this.deadT > this.respawnTime && this.w.net?.role !== 'client') {
         const keep = { ...this.cds };   // cooldowns freeze while dead and resume where they were
-        this.x = this.spawn.x; this.y = this.spawn.y; this.reset(); this.cds = keep; this.playAnim('idle');
+        this.x = this.spawn.x; this.y = this.spawn.y; this.reset(); this.cds = keep; if (this.duo) this.josueRespawn(); this.playAnim('idle');
       }
       return;
     }
@@ -1201,6 +1211,7 @@ export class Fighter {
     if (this.key === 'leandro') { const want = this.comb ? 'leandro_comb' : 'leandro'; if (this.skin !== want) this.setSkin(want); }   // comb in hand while the power lasts
     if (this.comb && (this.comb.t -= dt) <= 0) { this.comb = null; this.w.float(this.x, this.y - this.def.height - 30, 'Peine guardado', '#9fffd8'); }
     if (this.key === 'maduro' && this.alive && this.ranks.p2 > 0) this.guardTick(dt);
+    if (this.duo) this.josueTick(dt);
     if (this.revealT > 0) this.revealT -= dt; if (this.brRevealT > 0) this.brRevealT -= dt;
     if (this.leakRe && (this.leakRe.t -= dt) <= 0) { this.leakRe = null; this.cds.ult = rk(this.def.abilities.ult.cd, this.ranks.ult || 1); }   // the 2nd activation window closed: the full cooldown starts
     if (this.qRe && (this.qRe.t -= dt) <= 0) { this.qRe = null; this.cds.p1 = Math.max(this.cds.p1, rk(this.def.abilities.p1.cd, this.ranks.p1 || 1)); }   // the recast window closed: the full cooldown starts
@@ -1367,13 +1378,17 @@ export class Fighter {
     const held = this.flame && (name === 'idle' || name === 'walk' || name === 'run');   // flamethrower stays in his hands while it is active
     if (held) name = 'power3';
     const d = this.curDir(), [sfx, mir] = DIR_SRC[d];
-    let key = null;
-    for (const b of [this.skin, this.key]) { const k = `${b}_${name}_${sfx}`; if (this.w.anims.exists(k)) { key = k; break; } }
+    let key = null; const own = this.duo || this.def.pal;   // Josué's two bodies only use their own skin (never the other body's art)
+    for (const b of own ? [this.skin] : [this.skin, this.key]) { const k = `${b}_${name}_${sfx}`; if (this.w.anims.exists(k)) { key = k; break; } }
     this.dirArt = !!key; this.dirMirror = mir;
     if (!key) {   // no directional art for this animation yet: the single east-facing sheet (mirrored by facing, as before)
       key = `${this.skin}_${name}`;
-      if (!this.w.anims.exists(key)) key = `${this.key}_${name}`;
-      if (!this.w.anims.exists(key)) { if (/^attack\d$/.test(name) || name === 'lunge') return this.playAnim('attack', dur, reverse, keep); return; }   // combo hits without their own art yet reuse the basic attack
+      if (!own && !this.w.anims.exists(key)) key = `${this.key}_${name}`;
+      if (!this.w.anims.exists(key)) {
+        if (/^attack\d$/.test(name) || name === 'lunge' || (own && /^(power|ult)/.test(name))) return this.playAnim('attack', dur, reverse, keep);   // combo hits without their own art yet reuse the basic attack
+        if (own && name === 'run') return this.playAnim('walk', dur, reverse, keep);   // stand-in art (the cockroach) has no run cycle
+        return;
+      }
     }
     const anim = this.w.anims.get(key);
     if (this.art === 'boss_beast') this.spr.setScale(this.baseScale * (name === 'idle' ? 0.86 : name === 'walk' ? 0.81 : 1));
@@ -1430,7 +1445,7 @@ export class Fighter {
     const face = this.turn && (this.state === 'walk' || this.state === 'run') ? this.turn : this.facing;   // while walking away from the aim the sprite faces its walking direction
     spr.setFlipX(this.isTower ? false : this.hasAnims && this.dirArt ? this.dirMirror : face < 0);
     if (this.key === 'junior' && this.dashV && this.dashShield && this.state === 'cast') spr.setAngle((this.stateT / (this.stateDur || 0.38)) * 360 * (face < 0 ? -1 : 1)); else if (this.key === 'junior' && spr.angle) spr.setAngle(0);
-    if (this.isChamp && this.alive && this.state !== 'dead') { if (this.charmT > 0) spr.setTint(0xffe9a0); else if (this.silenceT > 0) spr.setTint(0xd9b0ff); else if (this.lure) spr.setTint(0xff9ccb); else if (this.poisoned) spr.setTint(0x9dffa0); else if (!this.flashing) spr.clearTint(); }   // poisoned: green filter
+    if (this.isChamp && this.alive && this.state !== 'dead') { if (this.charmT > 0) spr.setTint(0xffe9a0); else if (this.silenceT > 0) spr.setTint(0xd9b0ff); else if (this.lure) spr.setTint(0xff9ccb); else if (this.poisoned) spr.setTint(0x9dffa0); else if (this.bloodT > 0) spr.setTint(0xff9a9a); else if (!this.flashing) spr.clearTint(); }   // poisoned: green filter
     this.drawPoison(); this.drawShield(); this.drawStun();
     spr.setDepth(this.y).setAlpha(this.alive ? 1 : this.isTower && !this.dirFrames ? 0.35 : 0.92);
     if (this.enraged && this.alive) spr.setTint(0xff4a4a);
@@ -1501,4 +1516,4 @@ export class Fighter {
 
 export { ABILITY_KEYS };
 
-Object.assign(Fighter.prototype, JulioMixin);
+Object.assign(Fighter.prototype, JulioMixin, JosueMixin);

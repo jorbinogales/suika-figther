@@ -12,7 +12,7 @@ const inTowerRange = (w, x, y, team, margin = 40) => w.fighters.some(t => t.isTo
 
 // abilities that are not "aim at the enemy": [champion:key] -> (f, ctx) => boolean
 // gap closers drag/dash the caster toward the target: never use them to dive under an enemy tower
-const MOVERS = new Set(['hector:p2', 'hector:ult', 'julio:p2', 'junior:p2']);
+const MOVERS = new Set(['hector:p2', 'hector:ult', 'julio:p2', 'junior:p2', 'josue:p1:dog']);
 const RULES = {
   'xeviche:p1': (f, c) => c.target && c.d < 560,
   'xeviche:p3': (f, c) => c.target && c.d < 440 && c.target.isChamp,
@@ -52,7 +52,22 @@ const RULES = {
   'leandro:p3:throw': (f, c) => c.target && c.d > 300 && c.d < 1300,
   'leandro:ult:leak': (f, c) => f.leakRe ? !!c.target || c.anyChampAlive : c.anyChampAlive && c.hpR > 0.4,
   'eliud:ult': (f, c) => c.champNear(520) >= 1,
+  // Josué: trap on the target (it arms in 0.6 s), jump back shooting when they get close, charged arrow on champions; the dog leaps, hunts and drinks blood
+  'josue:p1': (f, c) => c.target && c.d < 330,
+  'josue:p2': (f, c) => c.target && c.d < 240,
+  'josue:p3': (f, c) => c.target && c.target.isChamp && c.d < 760,
+  'josue:p1:dog': (f, c) => c.target && c.d > 90 && c.d < 340,
+  'josue:p2:dog': (f, c) => c.target && c.target.isChamp && c.d > 250 && c.d < 800 && c.hpR > 0.45,
+  'josue:p3:dog': (f, c) => c.target && c.d < 160,
+  'josue:ult': (f, c) => josueSwapAi(f, c),
 };
+// Fiel compañero: hand a hurt body over to the healthy one; the dog to brawl up close, Josué again to shoot from afar
+function josueSwapAi(f, c) {
+  const p = f.pal; if (!p?.alive || p.away) return false;
+  if (c.hpR < 0.3 && p.hp / p.maxHp > 0.55) return true;
+  if (f.dogForm) return !c.target || c.d > 520 || (c.hpR < 0.45 && Math.random() < 0.02);
+  return !!c.target && c.target.isChamp && c.d < 260 && c.hpR > 0.5 && Math.random() < 0.05;
+}
 
 function tryAbilities(w, f, c) {
   const order = ['ult', 'p3', 'p1', 'p2'];

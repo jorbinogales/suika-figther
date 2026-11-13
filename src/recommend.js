@@ -16,6 +16,7 @@ export const PROFILE = {
   jorbi:    { role: 'Luchador',  dmg: 'ad',  melee: true,  cc: ['ralentización'] },
   junior:   { role: 'Luchador',  dmg: 'ad',  melee: true,  cc: ['aturdimiento'] },
   hector:   { role: 'Tanque',    dmg: 'ad',  melee: true,  cc: ['aturdimiento'] },
+  josue:    { role: 'Tirador',   dmg: 'ad',  melee: false, cc: ['aturdimiento'] },
 };
 const ROLE_DEF = { Tanque: 0.65, Luchador: 0.4, Soporte: 0.3, Asesino: 0.2, Mago: 0.2, Tirador: 0.2 };   // how much a role cares about surviving
 const ROLE_OFF = { Tanque: 0.5, Luchador: 0.9, Soporte: 0.8, Asesino: 1, Mago: 1, Tirador: 1 };          // ... and about its own damage
@@ -34,6 +35,7 @@ export const PRESETS = {   // level-3 (purple) items only
   jorbi:    ['punio_acero', 'garras_vampiricas', 'chaleco_antibalas', 'servidor_redundante', 'botas_hipersonicas', 'firewall_magico'],
   junior:   ['bate_servidor', 'chaleco_antibalas', 'corazon_silicio', 'garras_vampiricas', 'botas_hipersonicas', 'armadura_rack'],
   hector:   ['servidor_redundante', 'chaleco_antibalas', 'armadura_rack', 'firewall_magico', 'botas_hipersonicas', 'filtro_spam'],
+  josue:    ['bate_servidor', 'punio_acero', 'garras_vampiricas', 'botas_hipersonicas', 'chaleco_antibalas', 'servidor_redundante'],
 };
 export const presetOf = key => PRESETS[key] || PRESETS.jorbi;
 

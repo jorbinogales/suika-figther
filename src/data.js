@@ -346,6 +346,50 @@ CHAMPIONS.junior = {
   },
 };
 
+// Josué — two units always together: Josué (archer) and his Rottweiler. The player drives one, the other follows with AI (src/josue.js).
+// R swaps which one you control (learned from level 1). `dog` = the kit while you control the dog (Q / F / E share the ranks of Josué's Q / F / E),
+// `pal` = the partner's automatic attacks. Each body has its own health: if one falls the other carries on and the fallen one comes back
+// after the respawn time; the champion only dies when both are down. Art: art/JOSUE_SPEC.md (until it exists: Eliud + a tinted cockroach).
+CHAMPIONS.josue = {
+  name: 'Josué', cls: 'programador', ref: 'ref_josue', art: 'josue', artFallback: 'eliud', height: 122, duo: true,
+  stats: { hp: 560, mana: 300, atk: 42, ap: 15, armor: 20, mr: 18, speed: 140, run: 226, range: 460, atkCd: 0.85 },
+  grow: { hp: 0.065, atk: 0.05, ap: 0.03 },
+  basic: { kind: 'projectile', obj: 'arrow', face: true, fit: 56, base: 11, atkScale: 0.85, type: 'physical', speed: 780, vfx: 'bullet_tracer', windup: 0.22, dur: 0.42 },
+  abilities: {
+    p1: { name: 'Trampa', icon: 'josue_p1', cd: [12, 11, 10], mana: [40, 45, 50], windup: 0.3, dur: 0.55,
+          desc: 'Josué coloca una trampa de cepo en el punto elegido (dentro de su alcance). Es INVISIBLE para el enemigo: solo tu equipo la ve. Se arma en medio segundo y el primer enemigo que la pisa queda ATURDIDO y recibe daño físico. Puedes tener varias trampas a la vez (al poner una de más desaparece la más antigua). Más nivel: más aturdimiento, más daño y más trampas activas.',
+          range: 320, radius: 46, arm: 0.6, life: 45, stun: [1.0, 1.3, 1.6], dmg: [40, 65, 90], atkScale: 0.5, max: [2, 3, 4] },
+    p2: { name: 'Desplazamiento', icon: 'josue_p2', cd: [10, 9, 8], mana: [35, 40, 45], windup: 0, dur: 0.32,
+          desc: 'Josué da un salto rápido y, mientras se desplaza, dispara flechas a los enemigos cercanos (una por enemigo, primero a los campeones), con daño físico. Salta hacia donde te mueves; quieto, salta HACIA ATRÁS (alejándose del cursor); mantén Mayús para saltar HACIA DELANTE (hacia el cursor). Más nivel: salto más largo, más flechas y más daño.',
+          dist: [220, 250, 280], arrows: [3, 4, 5], range: 480, dmg: [40, 60, 80], atkScale: 0.45 },
+    p3: { name: 'Flecha cargada', icon: 'josue_p3', cd: [9, 8, 7], mana: [45, 50, 55], windup: 0.12, dur: 0.4,
+          desc: 'MANTÉN E para tensar el arco: la cámara se aleja y la flecha se carga (hasta 1.5 s). Al SOLTAR dispara hacia el cursor: cuanto más cargada, más lejos llega, más rápida va y más daño físico causa (hasta el doble). Cargada al máximo atraviesa a todos los enemigos de la línea.',
+          maxT: 1.5, dmg: [50, 80, 110], atkScale: 0.8, full: 2.0, range: [520, 1100], speed: [900, 1500] },
+    ult: { name: 'Fiel compañero', icon: 'josue_ult', cd: [3, 2.5, 2], mana: [0, 0, 0], windup: 0, dur: 0.25,
+           desc: 'Activa desde el nivel 1. Cambia el control entre Josué y su perro: la cámara pasa a la unidad que controlas y la otra la sigue de cerca y ataca sola lo que tú atacas (o lo más cercano). Cada uno tiene su propia vida: si cae uno, el otro sigue luchando y el caído vuelve tras el tiempo de reaparición; solo mueres cuando caen los dos. Mejorarla (niveles 8 y 12) hace más fuerte al compañero y acorta el cambio.',
+           palDmg: [1, 1.25, 1.5] },
+  },
+  // while the player drives the dog (Fiel compañero): his own body, basic bite and Q / F / E
+  dog: {
+    height: 108, stats: { speed: 158, run: 252, range: 85, armor: 30, mr: 22, atkCd: 0.7 },
+    basic: { kind: 'melee', base: 13, atkScale: 1.0, type: 'physical', reach: 90, windup: 0.16, dur: 0.36, vfx: 'punch' },
+    abilities: {
+      p1: { name: 'Mordida', icon: 'josue_dog_p1', v: 'dog', cd: [10, 9, 8], mana: [40, 45, 50], windup: 0.05, dur: 0.5,
+            desc: 'El perro da un GRAN SALTO hacia delante hasta el primer enemigo de la línea y lo muerde: daño físico, y se cura una parte del daño que causa. Más nivel: más daño y más curación.',
+            dist: 330, width: 70, dmg: [60, 95, 130], atkScale: 0.9, heal: [0.35, 0.45, 0.55] },
+      p2: { name: 'Cacería', icon: 'josue_dog_p2', v: 'dog', cd: [18, 16, 14], mana: [50, 50, 50], windup: 0, dur: 0.3,
+            desc: 'El perro entra en modo furtivo: se vuelve INVISIBLE, corre más y Josué DESAPARECE (deja libre al perro). Al atacar a un enemigo el perro se lanza sobre él con un mordisco fuerte, pierde la invisibilidad y Josué reaparece a su lado. Más nivel: dura más, más velocidad y más daño.',
+            time: [6, 7, 8], speed: [0.2, 0.25, 0.3], dmg: [50, 80, 110], atkScale: 0.6, pounce: 380 },
+      p3: { name: 'Sed de sangre', icon: 'josue_dog_p3', v: 'dog', cd: [16, 15, 14], mana: [50, 55, 60], windup: 0.1, dur: 0.4,
+            desc: 'Durante unos segundos cada golpe del perro (ataques y habilidades) le ROBA VIDA: se cura una parte del daño que causa. Más nivel: dura más y roba más vida.',
+            time: [5, 6, 7], steal: [0.25, 0.32, 0.4] },
+    },
+  },
+  // the partner's automatic attacks (the unit you are NOT driving); multiplied by Fiel compañero's palDmg
+  palAtk: { arrow: { base: 8, atkScale: 0.55, atkCd: 1.0, range: 440 }, bite: { base: 8, atkScale: 0.5, atkCd: 0.8, range: 70 } },
+};
+export const josueDog = def => ({ ...def, height: def.dog.height, stats: { ...def.stats, ...def.dog.stats }, basic: def.dog.basic, abilities: { ...def.abilities, ...def.dog.abilities } });
+
 // Targeting preview shown while aiming a power (first press/click), cast on the second click.
 //  line: projectile trajectory | circle: area/range | wall: row of objects placed at the cursor
 export function aimSpec(champ, key, rank, f) {
@@ -388,7 +432,10 @@ export function aimSpec(champ, key, rank, f) {
     case 'diosa:p1': return { type: 'line', range: a.dist, width: a.width, color: 0xff4fa3 };
     case 'diosa:p3': return { type: 'line', range: a.reach, width: a.width, color: 0xff9ad0 };
     case 'maduro:p1': return f?.sb ? { type: 'line', range: a.dist + 60, width: 70, color: 0xff4a3a } : { type: 'line', range: a.length, width: a.width, color: 0xffd23f };
-    case 'maduro:p3': return f?.sb ? { type: 'line', range: a.range, width: a.width, color: 0xc0c8d8 } : { type: 'zone', max: a.range, radius: a.radius, color: 0xffd23f };
+    case 'josue:p1': return f?.dogForm ? { type: 'line', range: a.dist, width: a.width, color: 0xff5a3a } : { type: 'zone', max: a.range, radius: a.radius, color: 0xc9a14a };
+    case 'josue:p2': return f?.dogForm ? { type: 'circle', radius: 60, color: 0x7a6aff } : { type: 'line', range: rk(a.dist, rank), width: 56, color: 0x7ee0ff };
+    case 'josue:p3': return f?.dogForm ? { type: 'circle', radius: 70, color: 0xff3a3a } : { type: 'line', range: a.range[0], width: 36, color: 0xffb020 };
+    case 'maduro:p3': return f?.sb ?{ type: 'line', range: a.range, width: a.width, color: 0xc0c8d8 } : { type: 'zone', max: a.range, radius: a.radius, color: 0xffd23f };
   }
   return { type: 'circle', radius: 80, color: 0xffffff };
 }
