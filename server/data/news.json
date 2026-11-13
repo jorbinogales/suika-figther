@@ -7,6 +7,7 @@
     "tag": "MEJORA",
     "changes": [],
     "items": [
+      "PARTIDAS CONTRA LA IA EN EL SERVIDOR. \"Jugar partida\" contra la IA ya no la simula tu computadora: el servidor la aloja igual que las partidas online, con los aliados y enemigos que elijas. Solo si no hay conexión con el servidor se juega en local. La zona de entrenamiento y Supervivencia siguen siendo locales.",
       "ZONA DE GUERRA DEL ROBOT EN ONLINE. El cambio de terreno al aterrizar el robot de guerra (suelo agrietado, muros y árboles secos) ahora viaja en el estado de la partida: quien recarga la página, vuelve a entrar o se perdió el aviso lo ve igual que los demás.",
       "PARTIDAS ONLINE SIEMPRE EN EL SERVIDOR. Las partidas de 2 o más jugadores ya no pasan en silencio al navegador del anfitrión de la sala cuando el servidor no puede alojarlas: ahora la partida no arranca, la sala vuelve al lobby y se muestra un aviso para reintentar. Así la simulación y la red siempre son las del servidor.",
       "CARGA MÁS RÁPIDA Y VIDEOS PRECARGADOS. Los videos de los campeones se descargan durante la pantalla de carga de la interfaz (\"CARGANDO VIDEOS...\") para que aparezcan al instante en la tarjeta y en el VS. Todo el juego (imágenes, sonidos, sprites, videos y scripts) se guarda en una caché del navegador ligada a la versión: las siguientes visitas cargan desde el disco y cada versión nueva borra la caché anterior y crea la suya.",

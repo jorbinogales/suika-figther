@@ -191,6 +191,8 @@ function practiceScreen() {
 function practiceStart(kind) {   // true = training zone, 'surv' = survival minigame, false = full match vs the AI
   snd('ui_confirm'); stopMusic();
   const training = kind === true, survival = kind === 'surv', solo = training || survival;
+  // full match vs the AI: the server simulates it (like online); only without a connection does it stay on this computer
+  if (!solo && net.online && net.user) return net.send('practice', { mode: prac.mode, team: prac.team, champ: prac.me, allies: prac.allies, enemies: prac.enemies });
   if (!survival) { const mine = [prac.me, ...(solo ? [] : prac.allies)], foes = prac.enemies.slice(0, training ? 1 : 99), pick = (a, lab) => a.map((k, i) => ({ k, label: lab(i) })); bootScreen.next = prac.team === 0 ? { blue: pick(mine, i => i ? 'Aliado' : 'Tú'), red: pick(foes, () => 'IA') } : { blue: pick(foes, () => 'IA'), red: pick(mine, i => i ? 'Aliado' : 'Tú') }; }   // the VS loading screen
   scene.scene.start('arena', { training, survival, mode: solo ? 1 : prac.mode, player: prac.me, enemies: survival ? [] : prac.enemies.slice(0, training ? 1 : 99), allies: solo ? [] : prac.allies, team: prac.team, haveSprites: scene.registry.get('sprites') });
 }
@@ -218,11 +220,13 @@ function hideLoading() { const e = loadEl; if (!e) return; loadEl = null; e.styl
 
 function rng(seed) { let a = seed | 0; return () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 // canonical roster (identical on every client: same players, same seed): humans by id, then bots for the empty seats so both sides are even
-function buildCfg(players, seed, host = net.room?.host) {
-  const rnd = rng(seed), H = t => players.filter(p => p.team === t).sort((a, b) => a.id - b.id), n = Math.max(H(0).length, H(1).length, 1), roster = [];
+// bots: solo match vs the AI ({ mode, allies, enemies } chosen by the player): those champions fill the empty seats first
+function buildCfg(players, seed, host = net.room?.host, bots = null) {
+  const rnd = rng(seed), H = t => players.filter(p => p.team === t).sort((a, b) => a.id - b.id), n = bots ? bots.mode : Math.max(H(0).length, H(1).length, 1), roster = [];
+  const humanTeam = players[0]?.team ?? 0;
   for (const t of [0, 1]) {
-    const used = []; H(t).forEach(p => { roster.push({ key: p.champ, team: t, pid: p.id }); used.push(p.champ); });
-    for (let i = H(t).length; i < n; i++) { const l = KEYS.filter(c => !used.includes(c)), c = (l.length ? l : KEYS)[Math.floor(rnd() * (l.length || KEYS.length))]; used.push(c); roster.push({ key: c, team: t, pid: null }); }
+    const used = [], pref = bots ? [...(t === humanTeam ? bots.allies : bots.enemies)] : []; H(t).forEach(p => { roster.push({ key: p.champ, team: t, pid: p.id }); used.push(p.champ); });
+    for (let i = H(t).length; i < n; i++) { if (pref.length) { const c = pref.shift(); used.push(c); roster.push({ key: c, team: t, pid: null }); continue; } const l = KEYS.filter(c => !used.includes(c)), c = (l.length ? l : KEYS)[Math.floor(rnd() * (l.length || KEYS.length))]; used.push(c); roster.push({ key: c, team: t, pid: null }); }
   }
   const me = players.find(p => p.id === net.user.id) || players[0];
   return { roster, me: me.id, hostId: host, team: me.team, player: me.champ, mode: n, haveSprites: scene.registry.get('sprites') };
@@ -230,7 +234,7 @@ function buildCfg(players, seed, host = net.room?.host) {
 
 function beginGame(m) {
   if (m.rejoin && net.user.id === m.host) { net.send('leave_room'); net.room = null; route(); return toast('Tu partida terminó al cerrar la página: el anfitrión no puede reconectarse.'); }   // the host's match lived in the page that closed
-  const players = m.players || net.room?.players || [], cfg0 = buildCfg(players, m.seed ?? 1, m.host ?? net.room?.host), prog = loading(players, cfg0.roster);
+  const players = m.players || net.room?.players || [], cfg0 = buildCfg(players, m.seed ?? 1, m.host ?? net.room?.host, m.bots), prog = loading(players, cfg0.roster);
   prog(8, 'SINCRONIZANDO SALA...'); snd('ui_start'); stopMusic();
   let sent = false, done = false;
   const off = net.on(x => { if (x.t === 'go') { done = true; prog(100, '¡COMIENZA LA PARTIDA!'); setTimeout(hideLoading, 400); off(); } });
@@ -238,7 +242,7 @@ function beginGame(m) {
   const ready = () => { if (sent) return; sent = true; prog(88, 'ESPERANDO A LOS DEMÁS JUGADORES...'); net.send('loaded'); };
   scene.game.events.once('arena-ready', ready);
   setTimeout(() => prog(30, 'CARGANDO CAMPEONES, MAPA Y OBJETOS...'), 300);
-  setTimeout(() => { prog(55, 'CONSTRUYENDO EL MAPA...'); scene.scene.start('arena', { ...buildCfg(players, m.seed ?? 1, m.host ?? net.room?.host), rejoin: !!m.rejoin && m.state === 'playing' }); if (m.rejoin && m.state === 'playing') { done = true; setTimeout(hideLoading, 1800); off(); } }, 900);
+  setTimeout(() => { prog(55, 'CONSTRUYENDO EL MAPA...'); scene.scene.start('arena', { ...buildCfg(players, m.seed ?? 1, m.host ?? net.room?.host, m.bots), rejoin: !!m.rejoin && m.state === 'playing' }); if (m.rejoin && m.state === 'playing') { done = true; setTimeout(hideLoading, 1800); off(); } }, 900);
 }
 
 // server-side match host (?bot=<secret>, see server/host.js): no launcher UI; it connects with its secret, builds the same roster as
@@ -250,7 +254,7 @@ export function botStart(s) {
     else if (m.t === 'start' && !started && net.user) {
       started = true;
       s.game.events.once('arena-ready', () => net.send('loaded'));
-      s.scene.start('arena', { ...buildCfg(m.players, m.seed ?? 1, m.host), me: net.user.id, bot: true, rejoin: m.state === 'playing' });   // me = the host itself: no champion of its own
+      s.scene.start('arena', { ...buildCfg(m.players, m.seed ?? 1, m.host, m.bots), me: net.user.id, bot: true, rejoin: m.state === 'playing' });   // me = the host itself: no champion of its own
     }
   });
   net.connect();

@@ -315,6 +315,17 @@ const handlers = {
     if (userRoom.has(user.id)) return err(ws, 'Ya estás en una sala');
     pushRoom(createRoom(user, !!m.public));
   },
+  // solo match vs the AI: a private one-player room whose empty seats are the bots the player chose; the server hosts it like any match
+  practice(ws, user, m) {
+    if (userRoom.has(user.id)) return err(ws, 'Ya estás en una sala');
+    const champ = (k) => typeof k === 'string' && k && k.length <= 40, list = (a) => (Array.isArray(a) ? a : []).filter(champ).slice(0, MAX_TEAM);
+    const mode = Math.max(1, Math.min(MAX_TEAM, m.mode | 0)), team = m.team === 1 ? 1 : 0;
+    if (!champ(m.champ)) return err(ws, 'Campeón no válido');
+    const room = createRoom(user, false), p = room.players.get(user.id);
+    Object.assign(p, { team, champ: m.champ, locked: true });
+    room.bots = { mode, allies: list(m.allies).slice(0, mode - 1), enemies: list(m.enemies).slice(0, mode) };
+    handlers.start_game(ws, user);
+  },
   join_room(ws, user, m) {
     if (userRoom.has(user.id)) return err(ws, 'Ya estás en una sala');
     const room = rooms.get(str(m.code).trim().toUpperCase());
@@ -368,13 +379,12 @@ const handlers = {
     const begin = () => {
       if (room.state !== 'loading' || rooms.get(room.code) !== room) return;
       room.loadTimer = setTimeout(() => go(room), LOAD_MS);
-      toRoom(room, { t: 'start', seed: room.seed, players: room.startPlayers, host: room.host });
+      toRoom(room, { t: 'start', seed: room.seed, players: room.startPlayers, host: room.host, bots: room.bots });
       pushRoom(room);
     };
     // 2+ players: the server hosts the match (headless Chromium) and nobody's browser simulates it; solo games stay local as always
-    if (room.players.size < 2) return begin();
     // never fall back to a player's browser: the server hosts or the match does not start
-    const abort = (why) => { console.error(`[host ${room.code}] could not start:`, why); endBot(room); if (room.state === 'loading') { room.state = 'lobby'; pushRoom(room); } err(ws, 'El servidor no pudo alojar la partida, inténtalo de nuevo'); };
+    const abort = (why) => { console.error(`[host ${room.code}] could not start:`, why); endBot(room); if (room.bots) removePlayer(room, user.id); else if (room.state === 'loading') { room.state = 'lobby'; pushRoom(room); } err(ws, 'El servidor no pudo alojar la partida, inténtalo de nuevo'); };
     if (!hostEnabled) return abort('no Chromium (set CHROME_PATH or install chromium)');
     startBot(room).then(() => { if (room.bot) { room.host = room.bot.id; begin(); } }, (e) => abort(e.message));
   },
@@ -442,14 +452,14 @@ function connect(ws, user) {
   if (user.bot) {   // the match host: it gets the start data (it builds the same roster as every player) and is shown as connected
     if (room?.bot?.id !== user.id) { ws.close(4001, 'gone'); return; }
     room.bot.connected = true;
-    send(ws, { t: 'start', seed: room.seed, players: room.startPlayers, host: user.id, state: room.state });
+    send(ws, { t: 'start', seed: room.seed, players: room.startPlayers, host: user.id, state: room.state, bots: room.bots });
     pushRoom(room);
   } else if (p && room.state === 'over') {   // came back after the end of the match: out of the room, to the menu
     removePlayer(room, user.id); send(ws, { t: 'left' });
   } else if (p) {
     p.connected = true; clearTimeout(p.timer); pushRoom(room);
     // match in progress: hand the player the start data again so a fresh page (refresh / closed tab / new device) drops straight back into the game
-    if (room.seed != null && (room.state === 'loading' || room.state === 'playing')) send(ws, { t: 'start', seed: room.seed, players: room.startPlayers, rejoin: true, state: room.state, host: room.host });
+    if (room.seed != null && (room.state === 'loading' || room.state === 'playing')) send(ws, { t: 'start', seed: room.seed, players: room.startPlayers, rejoin: true, state: room.state, host: room.host, bots: room.bots });
   }
 
   ws.on('message', (buf) => {
